@@ -1,0 +1,126 @@
+/**
+ * Button Component Styles
+ * Supports variants: primary, danger, ghost, default
+ */
+
+.base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-light);
+  color: var(--btn-text);
+  background: var(--panel);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  outline: none;
+  user-select: none;
+}
+
+.base:hover {
+  border-color: var(--btn-hover-border);
+  background: var(--panel-strong);
+}
+
+.base:active {
+  transform: scale(0.98);
+}
+
+.base:disabled,
+.base.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.base:focus-visible {
+  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 4px var(--accent);
+}
+
+/* Primary variant */
+.primary {
+  font-weight: var(--font-weight-medium);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.primary:hover {
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
+}
+
+.primary:focus-visible {
+  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 4px var(--accent);
+}
+
+/* Danger variant */
+.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: white;
+}
+
+.danger:hover {
+  filter: brightness(1.1);
+}
+
+.danger:focus-visible {
+  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 4px var(--danger);
+}
+
+/* Ghost variant */
+.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--btn-text);
+}
+
+.ghost:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.ghost:focus-visible {
+  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 2px var(--accent);
+}
+
+/* Icon styling */
+.icon {
+  flex-shrink: 0;
+  width: var(--space-4);
+  height: var(--space-4);
+}
+
+.iconLeft {
+  margin-right: calc(-1 * var(--space-1));
+}
+
+.iconRight {
+  margin-left: calc(-1 * var(--space-1));
+}
+
+/* Size variants */
+.small {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.large {
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--font-size-lg);
+}
+
+/* Full width */
+.fullWidth {
+  width: 100%;
+}
+
+/* Dark theme ghost variant hover */
+[data-theme='dark'] .ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
