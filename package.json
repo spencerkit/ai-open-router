@@ -1,19 +1,23 @@
 {
   "name": "oa-proxy-electron",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Electron-based OpenAI <-> Claude protocol proxy",
-  "main": "src/main/main.js",
+  "main": "out/main/index.js",
   "type": "commonjs",
   "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
     "start": "electron .",
-    "dev": "electron .",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "electron-builder",
     "test": "node --test"
   },
   "build": {
     "appId": "com.local.oaproxy",
     "productName": "OA Proxy",
     "files": [
-      "src/**/*",
+      "out/**/*",
       "package.json"
     ],
     "mac": {
@@ -28,9 +32,25 @@
     }
   },
   "dependencies": {
-    "electron": "^31.7.7"
+    "electron": "^31.7.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "zustand": "^4.5.0",
+    "i18next": "^23.10.0",
+    "react-i18next": "^14.0.0",
+    "lucide-react": "^0.344.0"
   },
   "devDependencies": {
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@types/node": "^20.11.20",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.0",
+    "vite-plugin-electron": "^0.28.1",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0"
   }
 }
