@@ -1,0 +1,124 @@
+/**
+ * CSS Custom Properties (Variables)
+ * Theme variables for light and dark themes
+ */
+
+:root {
+  /* Colors - Light Theme */
+  --bg-a: #f4f9ff;
+  --bg-b: #fff7ee;
+  --bg-c: #f8fffa;
+  --text: #142033;
+  --muted: #5f6f8a;
+  --accent: #0c8b73;
+  --accent-ink: #0b6c59;
+  --danger: #c14a4a;
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-strong: #ffffff;
+  --line: #d9e5f4;
+  --line-strong: #b8cce4;
+  --shadow: 0 14px 44px rgba(30, 52, 84, 0.12);
+
+  /* Derived colors - Light Theme */
+  --switch-bg: #d3dce9;
+  --switch-active-bg: rgba(12, 139, 115, 0.48);
+  --switch-active-border: rgba(12, 139, 115, 0.7);
+  --entry-bg: #f8fcff;
+  --entry-border: #dce8f7;
+  --entry-text: #314866;
+  --btn-text: #32435e;
+  --btn-hover-border: #99b0cd;
+  --icon-stroke: #446184;
+  --modal-backdrop: rgba(19, 31, 52, 0.46);
+  --toast-bg: #17334d;
+  --toast-text: #ffffff;
+  --logs-bg: #ffffff;
+  --logs-text: #1f3552;
+  --tab-text: #3a4b66;
+  --tab-active-bg-1: #dbf6f0;
+  --tab-active-bg-2: #effaf7;
+  --tab-active-border: rgba(12, 139, 115, 0.45);
+
+  /* Font Family */
+  --font-sans: "Avenir Next", "SF Pro Display", "Noto Sans SC", "PingFang SC", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "Consolas", monospace;
+
+  /* Font Weights */
+  --font-weight-light: 300;
+  --font-weight-normal: 300;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 500;
+  --font-weight-bold: 500;
+
+  /* Font Sizes - 10-15% smaller than current */
+  --font-size-xs: 10px;   /* was 12px */
+  --font-size-sm: 11px;   /* was 13px */
+  --font-size-md: 12px;   /* was 14px */
+  --font-size-lg: 14px;   /* was 16px */
+  --font-size-xl: 18px;   /* was 20px */
+  --font-size-2xl: 20.4px;  /* was 24px */
+  --font-size-3xl: 24px;  /* was 28px */
+
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-full: 999px;
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.18s ease;
+  --transition-slow: 0.2s ease;
+}
+
+/* Dark Theme */
+[data-theme='dark'] {
+  /* Colors - Dark Theme */
+  --bg-a: #0d121a;
+  --bg-b: #151a24;
+  --bg-c: #0f1420;
+  --text: #e6e8eb;
+  --muted: #8b9bb5;
+  --accent: #1ab394;
+  --accent-ink: #2bc9a8;
+  --danger: #e65c5c;
+  --panel: rgba(22, 33, 48, 0.86);
+  --panel-strong: #1a2332;
+  --line: #2a3a52;
+  --line-strong: #3a4a62;
+  --shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+
+  /* Derived colors - Dark Theme */
+  --switch-bg: #3a4a62;
+  --switch-active-bg: rgba(26, 179, 148, 0.4);
+  --switch-active-border: rgba(26, 179, 148, 0.6);
+  --entry-bg: #1a2332;
+  --entry-border: #2a3a52;
+  --entry-text: #a8c8e8;
+  --btn-text: #c8d8e8;
+  --btn-hover-border: #4a6a8a;
+  --icon-stroke: #8bb0d0;
+  --modal-backdrop: rgba(0, 0, 0, 0.65);
+  --toast-bg: #0d121a;
+  --toast-text: #ffffff;
+  --logs-bg: #121824;
+  --logs-text: #c8d8e8;
+  --tab-text: #9ab0c8;
+  --tab-active-bg-1: rgba(26, 179, 148, 0.15);
+  --tab-active-bg-2: rgba(26, 179, 148, 0.08);
+  --tab-active-border: rgba(26, 179, 148, 0.4);
+}
