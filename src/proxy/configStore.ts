@@ -2,8 +2,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
-const { getDefaultConfig } = require("./defaultConfig.ts");
-const { validateConfig } = require("./schema.ts");
+const { getDefaultConfig } = require("./defaultConfig");
+const { validateConfig } = require("./schema");
 
 class ConfigStore extends EventEmitter {
   constructor(filePath) {
@@ -83,7 +83,10 @@ class ConfigStore extends EventEmitter {
       ui: {
         ...defaults.ui,
         ...(source.ui || {}),
-        launchOnStartup: !!(source.ui && source.ui.launchOnStartup)
+        launchOnStartup: !!(source.ui && source.ui.launchOnStartup),
+        closeToTray: source.ui && Object.prototype.hasOwnProperty.call(source.ui, "closeToTray")
+          ? !!source.ui.closeToTray
+          : defaults.ui.closeToTray
       },
       logging: {
         ...defaults.logging,

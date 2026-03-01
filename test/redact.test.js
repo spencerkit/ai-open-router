@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { redactPayload } = require("../src/proxy/redact.ts");
+const { redactPayload } = require("../src/proxy/redact");
 
 test("redactPayload masks sensitive keys recursively", () => {
   const input = {

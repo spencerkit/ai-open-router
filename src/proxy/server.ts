@@ -1,19 +1,19 @@
 // @ts-nocheck
 const http = require("node:http");
 const { randomUUID } = require("node:crypto");
-const { redactPayload } = require("./redact.ts");
-const { toProxyError } = require("./errors.ts");
+const { redactPayload } = require("./redact");
+const { toProxyError } = require("./errors");
 const {
   normalizeOpenAIRequest,
   mapOpenAIToAnthropicRequest,
   mapAnthropicToOpenAIResponse,
   mapOpenAIChatToResponses
-} = require("./mappers/openaiToAnthropic.ts");
+} = require("./mappers/openaiToAnthropic");
 const {
   mapAnthropicToOpenAIRequest,
   mapOpenAIToAnthropicResponse
-} = require("./mappers/anthropicToOpenai.ts");
-const { createSSEParser, beginSSE, writeSSE } = require("./sse.ts");
+} = require("./mappers/anthropicToOpenai");
+const { createSSEParser, beginSSE, writeSSE } = require("./sse");
 
 const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024;
 
@@ -333,6 +333,13 @@ function toOpenAIResponsesUsage(anthropicUsage) {
   };
 }
 
+function isServerNotRunningError(err) {
+  if (!err) return false;
+  if (err.code === "ERR_SERVER_NOT_RUNNING") return true;
+  const message = String(err.message || "");
+  return /server is not running/i.test(message);
+}
+
 class ProxyServer {
   constructor(configStore, logStore) {
     this.configStore = configStore;
@@ -419,8 +426,16 @@ class ProxyServer {
       return this.getStatus();
     }
 
+    const currentServer = this.server;
+
     await new Promise((resolve, reject) => {
-      this.server.close((err) => (err ? reject(err) : resolve()));
+      currentServer.close((err) => {
+        if (!err || isServerNotRunningError(err)) {
+          resolve();
+          return;
+        }
+        reject(err);
+      });
     });
 
     this.server = null;

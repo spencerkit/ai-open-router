@@ -1,8 +1,8 @@
 // @ts-nocheck
 const path = require("node:path");
 const fs = require("node:fs");
-const { app, BrowserWindow, ipcMain, Menu, dialog, clipboard } = require("electron");
-const { LogStore } = require("./logStore.ts");
+const { app, BrowserWindow, ipcMain, Menu, dialog, clipboard, Tray, nativeImage } = require("electron");
+const { LogStore } = require("./logStore");
 
 if (!require.extensions[".ts"]) {
   require.extensions[".ts"] = require.extensions[".js"];
@@ -12,6 +12,9 @@ let mainWindow = null;
 let configStore = null;
 let proxyServer = null;
 let logStore = null;
+let tray = null;
+let isQuitting = false;
+const SHUTDOWN_TIMEOUT_MS = 2500;
 
 // 检查是否为开发模式
 // 开发模式：从 out 目录运行，但源代码在 src/main 目录
@@ -28,18 +31,7 @@ function loadProxyModules() {
   const secondDir = preferSrc ? outProxyDir : srcProxyDir;
 
   function loadModuleFromDir(dir, baseName) {
-    const candidates = [`${baseName}.ts`, `${baseName}.js`];
-
-    let lastError = null;
-    for (const fileName of candidates) {
-      try {
-        return require(path.join(dir, fileName));
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    throw lastError;
+    return require(path.join(dir, baseName));
   }
 
   try {
@@ -145,8 +137,38 @@ function createWindow() {
     console.log('[Main] Page finished loading');
   });
 
-  // 自动打开开发者工具
-  mainWindow.webContents.openDevTools();
+  // 仅在开发环境打开开发者工具
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
+
+  mainWindow.on("close", (event) => {
+    const closeToTrayEnabled = !!configStore?.get?.()?.ui?.closeToTray;
+    if (!isQuitting && closeToTrayEnabled && tray) {
+      event.preventDefault();
+      mainWindow.hide();
+      if (process.platform === "darwin" && app.dock && typeof app.dock.hide === "function") {
+        app.dock.hide();
+      }
+      refreshTrayMenu();
+    }
+  });
+
+  mainWindow.on("show", () => {
+    if (process.platform === "darwin" && app.dock && typeof app.dock.show === "function") {
+      app.dock.show();
+    }
+    refreshTrayMenu();
+  });
+
+  mainWindow.on("hide", () => {
+    refreshTrayMenu();
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+    refreshTrayMenu();
+  });
 }
 
 function hasServerSettingChanged(prev, next) {
@@ -183,6 +205,116 @@ function buildGroupsBackupContent() {
     backupPayload,
     jsonText
   };
+}
+
+async function stopProxyServerWithTimeout(timeoutMs = SHUTDOWN_TIMEOUT_MS) {
+  if (!proxyServer || !proxyServer.isRunning()) {
+    return;
+  }
+
+  await Promise.race([
+    proxyServer.stop().catch((error) => {
+      console.error("Failed to stop proxy server during shutdown:", error);
+    }),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs))
+  ]);
+}
+
+function resolveTrayIconPath() {
+  const isWin = process.platform === "win32";
+  const candidates = isWin
+    ? ["icon.ico", "icon.png", "icon.jpg"]
+    : ["icon.png", "icon.jpg", "icon.ico"];
+
+  for (const fileName of candidates) {
+    const srcPath = path.join(__dirname, "../../assets", fileName);
+    const outPath = path.join(__dirname, "../assets", fileName);
+    if (fs.existsSync(srcPath)) return srcPath;
+    if (fs.existsSync(outPath)) return outPath;
+  }
+
+  return null;
+}
+
+function showMainWindow() {
+  if (!mainWindow) {
+    createWindow();
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+  refreshTrayMenu();
+}
+
+function hideMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+    refreshTrayMenu();
+  }
+}
+
+function requestAppQuit() {
+  if (isQuitting) return;
+  isQuitting = true;
+  app.quit();
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
+
+  const visible = !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: visible ? "Hide OA Proxy" : "Show OA Proxy",
+      click: () => (visible ? hideMainWindow() : showMainWindow())
+    },
+    { type: "separator" },
+    {
+      label: "Exit",
+      click: () => requestAppQuit()
+    }
+  ]));
+}
+
+function createTray() {
+  if (tray) return;
+
+  const trayIconPath = resolveTrayIconPath();
+  if (!trayIconPath) return;
+
+  const image = nativeImage.createFromPath(trayIconPath);
+  if (image.isEmpty()) return;
+
+  tray = new Tray(image);
+  tray.setToolTip("OA Proxy");
+  tray.on("click", () => {
+    const visible = !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
+    if (visible) {
+      hideMainWindow();
+    } else {
+      showMainWindow();
+    }
+  });
+  refreshTrayMenu();
+}
+
+function destroyTray() {
+  if (!tray) return;
+  tray.destroy();
+  tray = null;
+}
+
+function syncTrayByConfig(config) {
+  const closeToTrayEnabled = !!config?.ui?.closeToTray;
+  if (closeToTrayEnabled) {
+    createTray();
+    refreshTrayMenu();
+  } else {
+    destroyTray();
+  }
 }
 
 async function importGroupsAndSave(parsedInput, meta = {}) {
@@ -233,6 +365,7 @@ function setupIpc() {
     const prevConfig = configStore.get();
     const saved = configStore.save(nextConfig);
     applyLaunchOnStartupSetting(saved);
+    syncTrayByConfig(saved);
 
     let restarted = false;
     if (proxyServer.isRunning() && hasServerSettingChanged(prevConfig, saved)) {
@@ -390,6 +523,10 @@ app.whenReady().then(async () => {
     console.error("Failed to auto-start proxy service:", err);
   }
   createWindow();
+  syncTrayByConfig(configStore.get());
+  configStore.on("updated", (nextConfig) => {
+    syncTrayByConfig(nextConfig);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -400,9 +537,20 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", async () => {
   if (process.platform !== "darwin") {
-    if (proxyServer && proxyServer.isRunning()) {
-      await proxyServer.stop();
-    }
+    await stopProxyServerWithTimeout();
+    const forceExitTimer = setTimeout(() => {
+      app.exit(0);
+    }, SHUTDOWN_TIMEOUT_MS);
+
+    app.once("will-quit", () => {
+      clearTimeout(forceExitTimer);
+    });
+
     app.quit();
   }
+});
+
+app.on("before-quit", async () => {
+  isQuitting = true;
+  destroyTray();
 });

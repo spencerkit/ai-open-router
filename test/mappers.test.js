@@ -5,11 +5,11 @@ const {
   mapAnthropicToOpenAIResponse,
   normalizeOpenAIRequest,
   mapOpenAIChatToResponses
-} = require("../src/proxy/mappers/openaiToAnthropic.ts");
+} = require("../src/proxy/mappers/openaiToAnthropic");
 const {
   mapAnthropicToOpenAIRequest,
   mapOpenAIToAnthropicResponse
-} = require("../src/proxy/mappers/anthropicToOpenai.ts");
+} = require("../src/proxy/mappers/anthropicToOpenai");
 
 test("openai request maps to anthropic request", () => {
   const input = {

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { ProxyServer, __test__ } = require("../src/proxy/server.ts");
+const { ProxyServer, __test__ } = require("../src/proxy/server");
 
 const { readRequestBody, buildUpstreamError } = __test__;
 
@@ -52,6 +52,24 @@ function createProxyForStreamTest() {
     }
   );
 }
+
+test("stop ignores ERR_SERVER_NOT_RUNNING and returns stopped status", async () => {
+  const proxy = createProxyForStreamTest();
+  const err = new Error("Server is not running.");
+  err.code = "ERR_SERVER_NOT_RUNNING";
+
+  proxy.server = {
+    close(cb) {
+      cb(err);
+    }
+  };
+  proxy.address = "http://127.0.0.1:8899";
+  proxy.metrics.uptimeStartedAt = new Date().toISOString();
+
+  const status = await proxy.stop();
+  assert.equal(status.running, false);
+  assert.equal(status.address, null);
+});
 
 test("buildUpstreamError keeps upstream HTTP status", () => {
   const err = buildUpstreamError(429, "rate limited");
