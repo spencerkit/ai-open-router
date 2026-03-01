@@ -1,100 +1,87 @@
-/**
- * Input Component Styles
- * Supports sizes: small, medium, large
- * Includes label, hint, and error states
- */
+/* Input — Copper & Slate */
 
-/* Wrapper for label + input + hint/error */
- wrapper {
+.wrapper {
   display: flex;
   flex-direction: column;
-;
 }
 
-/* Label styling */
 .label {
   display: block;
-  margin-bottom: var(--space-1);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text);
+  margin-bottom: var(--sp-1);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
 }
 
-/* Base input styling */
 .base {
   display: block;
   width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line-strong);
+  height: 36px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-normal);
-  color: var(--text);
-  background: var(--panel-strong);
-  transition: all var(--transition-base);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: var(--weight-normal);
+  color: var(--text-primary);
+  background: var(--surface);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
   outline: none;
 }
 
 .base::placeholder {
-  color: var(--muted);
+  color: var(--text-tertiary);
 }
 
 .base:hover:not(:disabled) {
-  border-color: var(--line-strong);
+  border-color: var(--border-strong);
 }
 
 .base:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(12, 139, 115, 0.15);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
 }
 
 .base:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
-  background: var(--entry-bg);
 }
 
-/* Error state */
+/* Error */
 .error {
   border-color: var(--danger);
 }
 
 .error:focus {
-  box-shadow: 0 0 0 3px rgba(193, 74, 74, 0.15);
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.12);
 }
 
-/* Error text */
 .errorText {
-  margin-top: var(--space-1);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
+  margin-top: var(--sp-1);
+  font-size: var(--text-xs);
   color: var(--danger);
 }
 
-/* Hint text */
 .hintText {
-  margin-top: var(--space-1);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  color: var(--muted);
+  margin-top: var(--sp-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
 }
 
-/* Size variants */
+/* Sizes */
 .small {
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--font-size-sm);
+  height: 28px;
+  padding: 0 var(--sp-2);
+  font-size: var(--text-sm);
 }
 
 .large {
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--font-size-lg);
+  height: 44px;
+  padding: 0 var(--sp-4);
+  font-size: var(--text-lg);
 }
 
-/* Full width */
 .fullWidth {
   width: 100%;
 }

@@ -1,115 +1,53 @@
-/**
- * Switch Component Styles
- * Toggle switch for boolean values
- */
+/* Switch — Copper & Slate */
 
-/* Wrapper for label + switch */
 .wrapper {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  user-select: none;
+  gap: var(--sp-3);
 }
 
-/* Label styling */
-.label {
-  font-family: var(--font-sans);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-normal);
-  color: var(--text);
-  line-height: 1.4;
+.fullWidth {
+  width: 100%;
+  justify-content: space-between;
 }
 
-/* Base switch container */
 .switch {
   position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  width: 44px;
-  height: 24px;
+  width: 40px;
+  height: 22px;
+  background: var(--border);
   border-radius: var(--radius-full);
-  background: var(--switch-bg);
-  border: 1px solid transparent;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: background var(--transition-fast);
   flex-shrink: 0;
-  outline: none;
 }
 
-.switch:hover:not(.disabled) {
-  background: var(--line-strong);
-}
-
-.switch:focus-visible {
-  box-shadow: 0 0 0 2px var(--entry-bg), 0 0 0 4px var(--accent);
-}
-
-/* Disabled state */
-.switch.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-/* Active/checked state */
 .switch.checked {
-  background: var(--switch-active-bg);
-  border-color: var(--switch-active-border);
+  background: var(--accent);
 }
 
-.switch.checked:hover:not(.disabled) {
-  background: var(--switch-active-bg);
-  filter: brightness(1.1);
+.switch.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
-/* Toggle knob/thumb */
 .knob {
   position: absolute;
   left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-full);
-  background: white;
-  box: 0 2px 4px rgba(0, 0, 0, 0.15);
-  transition: transform var(--transition-base);
-  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+  box-shadow: var(--shadow-sm);
 }
 
 .knob.checked {
-  transform: translateX(20px);
+  transform: translateX(18px);
 }
 
-/* Size variants */
-.small {
-  width: 36px;
-  height: 20px;
-}
-
-.small .knob {
-  width: 16px;
-  height: 16px;
-}
-
-.small .knob.checked {
-  transform: translateX(16px);
-}
-
-.large {
-  width: 52px;
-  height: 28px;
-}
-
-.large .knob {
-  width: 24px;
-  height: 24px;
-}
-
-.large .knob.checked {
-  transform: translateX(24px);
-}
-
-/* Hidden checkbox input */
 .input {
   position: absolute;
   opacity: 0;
@@ -117,18 +55,30 @@
   height: 0;
 }
 
-/* Description/hint text */
-.description {
-  display: block;
-  margin-top: var(--space-1);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  color: var(--muted);
-  line-height: 1.4;
+.label {
+  font-size: var(--text-base);
+  font-weight: var(--weight-normal);
+  color: var(--text-primary);
 }
 
-/* Full width */
-.fullWidth {
-  width: 100%;
+.description {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+/* Sizes */
+.small {
+  width: 32px;
+  height: 18px;
+}
+
+.small .knob {
+  width: 14px;
+  height: 14px;
+}
+
+.small .knob.checked {
+  transform: translateX(14px);
 }

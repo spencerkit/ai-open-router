@@ -1,128 +1,121 @@
-/**
- * Button Component Styles
- * Supports variants: primary, danger, ghost, default
- */
+/* Button — Copper & Slate */
 
 .base {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--line);
+  gap: var(--sp-2);
+  height: 36px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-light);
-  color: var(--btn-text);
-  background: var(--panel);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  background: var(--surface);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all var(--transition-fast);
   outline: none;
   user-select: none;
   white-space: nowrap;
 }
 
 .base:hover {
-  border-color: var(--btn-hover-border);
-  background: var(--panel-strong);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 .base:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
+  background: var(--surface-active);
 }
 
 .base:disabled,
 .base.disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
 }
 
 .base:focus-visible {
-  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 4px var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent);
 }
 
-/* Primary variant */
+/* Primary */
 .primary {
-  font-weight: var(--font-weight-medium);
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--accent-text);
+  font-weight: var(--weight-medium);
 }
 
 .primary:hover {
-  background: var(--accent-ink);
-  border-color: var(--accent-ink);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .primary:focus-visible {
-  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 4px var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent);
 }
 
-/* Danger variant */
+/* Danger */
 .danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: white;
+  color: #fff;
 }
 
-.danger:hover:not(:disabled) {
-  background: #a33a3a;
-  border-color: #a33a3a;
+.danger:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
 }
 
 .danger:focus-visible {
-  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 4px var(--danger);
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--danger);
 }
 
-/* Ghost variant */
+/* Ghost */
 .ghost {
   background: transparent;
   border-color: transparent;
-  color: var(--btn-text);
+  color: var(--text-secondary);
 }
 
 .ghost:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
-.ghost:focus-visible {
-  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 2px var(--accent);
-}
-
-/* Icon styling */
+/* Icon */
 .icon {
   flex-shrink: 0;
-  width: var(--space-4);
-  height: var(--space-4);
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .iconLeft {
-  margin-right: calc(-1 * var(--space-1));
+  margin-right: -2px;
 }
 
 .iconRight {
-  margin-left: calc(-1 * var(--space-1));
+  margin-left: -2px;
 }
 
-/* Size variants */
+/* Sizes */
 .small {
   height: 28px;
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--font-size-sm);
-}
-
-.medium {
-  height: 36px;
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-size-md);
+  padding: 0 var(--sp-3);
+  font-size: var(--text-xs);
 }
 
 .large {
   height: 44px;
-  padding: var(--space-3) var(--space-5);
-  font-size: var(--font-size-lg);
+  padding: 0 var(--sp-6);
+  font-size: var(--text-lg);
 }
 
 /* Full width */
@@ -130,26 +123,15 @@
   width: 100%;
 }
 
-/* Loading state */
+/* Loading */
 .loading {
   cursor: wait;
 }
 
-/* Spinner animation */
 .spinner {
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Dark theme ghost variant hover */
-[data-theme='dark'] .ghost:hover {
-  background: rgba(255, 255, 255, 0.08);
+  to { transform: rotate(360deg); }
 }

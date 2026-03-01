@@ -78,7 +78,16 @@ export const Header: React.FC<HeaderProps> = ({
   const location = useLocation();
   const { t, i18n } = useTranslation();
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const stored = document.documentElement.getAttribute('data-theme');
+    if (stored === 'dark' || stored === 'light') return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  // Apply theme on mount
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, []);
 
   const currentLocale = i18n.language as 'en-US' | 'zh-CN';
   const supportedLocales = ['en-US', 'zh-CN'] as const;

@@ -1,59 +1,62 @@
-/* SettingsPage Component Styles */
+/* SettingsPage — Copper & Slate */
 
 .settingsPage {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 2rem;
+  max-width: 560px;
 }
 
 .settingsPage h2 {
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
   color: var(--text-primary);
-  margin-bottom: 2rem;
+  margin-bottom: var(--sp-6);
 }
 
 .form {
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  padding: 1.5rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
 }
 
 .formGroup {
-  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
 }
 
 .formGroup label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
-  margin-bottom: 0.5rem;
 }
 
 .formGroupSwitch {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1rem 0;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 1.5rem;
+  justify-content: space-between;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .switchLabel label {
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   color: var(--text-primary);
 }
 
 .error {
-  font-size: 0.75rem;
-  color: var(--error-color);
-  margin-top: 0.5rem;
+  font-size: var(--text-xs);
+  color: var(--danger);
+  margin-top: var(--sp-1);
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
+  padding-top: var(--sp-2);
 }
