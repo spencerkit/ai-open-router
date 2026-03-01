@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useProxyStore } from '@/store';
-import { Button, Input, Switch } from '@/components';
+import { Button, Input, Modal, Switch } from '@/components';
 import { useTranslation, useLogs } from '@/hooks';
 import type { CompatConfig, LocaleCode, ProxyConfig, ServerConfig, ThemeMode, UIConfig } from '@/types';
 import styles from './SettingsPage.module.css';
+
+type ImportSource = 'file' | 'clipboard';
+type ExportTarget = 'folder' | 'clipboard';
 
 /**
  * SettingsPage Component
@@ -11,7 +14,16 @@ import styles from './SettingsPage.module.css';
  */
 export const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
-  const { config, saveConfig, loading } = useProxyStore();
+  const {
+    config,
+    saveConfig,
+    exportGroupsToFolder,
+    exportGroupsToClipboard,
+    importGroupsBackup,
+    importGroupsFromJson,
+    readClipboardText,
+    loading
+  } = useProxyStore();
   const { showToast } = useLogs();
 
   const [host, setHost] = useState('');
@@ -21,6 +33,13 @@ export const SettingsPage: React.FC = () => {
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [locale, setLocale] = useState<LocaleCode>('en-US');
   const [portError, setPortError] = useState('');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [importSource, setImportSource] = useState<ImportSource>('file');
+  const [exportTarget, setExportTarget] = useState<ExportTarget>('folder');
+  const [importJsonText, setImportJsonText] = useState('');
+  const [readingClipboard, setReadingClipboard] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Load initial values from config
   useEffect(() => {
@@ -116,6 +135,77 @@ export const SettingsPage: React.FC = () => {
       showToast(t('errors.saveFailed', { message: String(error) }), 'error');
     }
   };
+
+  const handleExportGroups = async () => {
+    setExportTarget('folder');
+    setShowExportModal(true);
+  };
+
+  const closeExportModal = () => {
+    if (exporting) return;
+    setShowExportModal(false);
+  };
+
+  const handleConfirmExport = async () => {
+    try {
+      setExporting(true);
+      if (exportTarget === 'folder') {
+        const result = await exportGroupsToFolder();
+        if (!result.canceled) {
+          showToast(t('settings.backupExportFolderSuccess', { count: result.groupCount }), 'success');
+        }
+      } else {
+        const result = await exportGroupsToClipboard();
+        if (!result.canceled) {
+          showToast(t('settings.backupExportClipboardSuccess', { count: result.groupCount }), 'success');
+        }
+      }
+
+      setShowExportModal(false);
+    } catch (error) {
+      showToast(t('errors.operationFailed', { message: String(error) }), 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImportGroups = async () => {
+    setImportSource('file');
+    setShowImportModal(true);
+  };
+
+  const closeImportModal = () => {
+    setShowImportModal(false);
+  };
+
+  const handleReadClipboard = async () => {
+    try {
+      setReadingClipboard(true);
+      const result = await readClipboardText();
+      setImportJsonText(result.text || '');
+    } catch (error) {
+      showToast(t('errors.operationFailed', { message: String(error) }), 'error');
+    } finally {
+      setReadingClipboard(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    try {
+      const result = importSource === 'file'
+        ? await importGroupsBackup()
+        : await importGroupsFromJson(importJsonText);
+
+      if (!result.canceled) {
+        showToast(t('settings.backupImportSuccess', { count: result.importedGroupCount || 0 }), 'success');
+      }
+      closeImportModal();
+    } catch (error) {
+      showToast(t('errors.operationFailed', { message: String(error) }), 'error');
+    }
+  };
+
+  const canConfirmImport = importSource === 'file' || importJsonText.trim().length > 0;
 
   return (
     <div className={styles.settingsPage}>
@@ -242,6 +332,31 @@ export const SettingsPage: React.FC = () => {
             </div>
           </div>
 
+          <div className={styles.section}>
+            <h3 className={styles.sectionTitle}>{t('settings.backupSection')}</h3>
+
+            <div className={styles.formGroup}>
+              <label>{t('settings.backupTitle')}</label>
+              <div className={styles.backupActions}>
+                <Button
+                  variant="default"
+                  onClick={handleExportGroups}
+                  disabled={loading || exporting}
+                >
+                  {t('settings.backupExport')}
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={handleImportGroups}
+                  disabled={loading || exporting}
+                >
+                  {t('settings.backupImport')}
+                </Button>
+              </div>
+              <p className={styles.fieldHint}>{t('settings.backupHint')}</p>
+            </div>
+          </div>
+
           <div className={styles.actions}>
             <span className={styles.changeHint}>
               {hasChanges ? t('settings.unsavedChanges') : t('settings.noChanges')}
@@ -257,6 +372,125 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={showExportModal}
+        onClose={closeExportModal}
+        title={t('settings.exportModalTitle')}
+      >
+        <div className={styles.importModalContent}>
+          <p className={styles.importWarning}>{t('settings.exportModalHint')}</p>
+
+          <div className={styles.formGroup}>
+            <label>{t('settings.exportTargetLabel')}</label>
+            <div className={styles.importSourceGroup} role="radiogroup" aria-label={t('settings.exportTargetLabel')}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={exportTarget === 'folder'}
+                className={`${styles.choiceButton} ${exportTarget === 'folder' ? styles.choiceButtonActive : ''}`}
+                onClick={() => setExportTarget('folder')}
+              >
+                <span className={styles.choiceTitle}>{t('settings.exportTargetFolder')}</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={exportTarget === 'clipboard'}
+                className={`${styles.choiceButton} ${exportTarget === 'clipboard' ? styles.choiceButtonActive : ''}`}
+                onClick={() => setExportTarget('clipboard')}
+              >
+                <span className={styles.choiceTitle}>{t('settings.exportTargetClipboard')}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.importModalActions}>
+            <Button variant="default" onClick={closeExportModal} disabled={exporting}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleConfirmExport}
+              loading={exporting}
+              disabled={loading}
+            >
+              {t('settings.exportConfirm')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showImportModal}
+        onClose={closeImportModal}
+        title={t('settings.importModalTitle')}
+      >
+        <div className={styles.importModalContent}>
+          <p className={styles.importWarning}>{t('settings.importModalWarning')}</p>
+
+          <div className={styles.formGroup}>
+            <label>{t('settings.importSourceLabel')}</label>
+            <div className={styles.importSourceGroup} role="radiogroup" aria-label={t('settings.importSourceLabel')}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={importSource === 'file'}
+                className={`${styles.choiceButton} ${importSource === 'file' ? styles.choiceButtonActive : ''}`}
+                onClick={() => setImportSource('file')}
+              >
+                <span className={styles.choiceTitle}>{t('settings.importSourceFile')}</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={importSource === 'clipboard'}
+                className={`${styles.choiceButton} ${importSource === 'clipboard' ? styles.choiceButtonActive : ''}`}
+                onClick={() => setImportSource('clipboard')}
+              >
+                <span className={styles.choiceTitle}>{t('settings.importSourceClipboard')}</span>
+              </button>
+            </div>
+          </div>
+
+          {importSource === 'clipboard' && (
+            <div className={styles.formGroup}>
+              <label htmlFor="import-json">{t('settings.importClipboardLabel')}</label>
+              <textarea
+                id="import-json"
+                className={styles.importTextarea}
+                value={importJsonText}
+                onChange={(e) => setImportJsonText(e.target.value)}
+                placeholder={t('settings.importClipboardPlaceholder')}
+              />
+              <div className={styles.importAuxActions}>
+                <Button
+                  variant="default"
+                  onClick={handleReadClipboard}
+                  loading={readingClipboard}
+                  disabled={loading}
+                >
+                  {t('settings.readClipboard')}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className={styles.importModalActions}>
+            <Button variant="default" onClick={closeImportModal}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmImport}
+              disabled={!canConfirmImport}
+              loading={loading}
+            >
+              {t('settings.importConfirm')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

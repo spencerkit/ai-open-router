@@ -10,6 +10,9 @@ import type {
   ProxyStatus,
   LogEntry,
   SaveConfigResult,
+  GroupBackupExportResult,
+  GroupBackupImportResult,
+  ClipboardTextResult,
 } from '@/types';
 
 /**
@@ -23,6 +26,11 @@ export const ipc = {
   getStatus(): Promise<ProxyStatus> {
     console.log('[IPC] getStatus called');
     return window.proxyApp.getStatus();
+  },
+
+  readClipboardText(): Promise<ClipboardTextResult> {
+    console.log('[IPC] readClipboardText called');
+    return window.proxyApp.readClipboardText();
   },
 
   /**
@@ -60,6 +68,31 @@ export const ipc = {
   saveConfig(config: ProxyConfig): Promise<SaveConfigResult> {
     console.log('[IPC] saveConfig called');
     return window.proxyApp.saveConfig(config);
+  },
+
+  exportGroupsBackup(): Promise<GroupBackupExportResult> {
+    console.log('[IPC] exportGroupsBackup called');
+    return window.proxyApp.exportGroupsBackup();
+  },
+
+  exportGroupsToFolder(): Promise<GroupBackupExportResult> {
+    console.log('[IPC] exportGroupsToFolder called');
+    return window.proxyApp.exportGroupsToFolder();
+  },
+
+  exportGroupsToClipboard(): Promise<GroupBackupExportResult> {
+    console.log('[IPC] exportGroupsToClipboard called');
+    return window.proxyApp.exportGroupsToClipboard();
+  },
+
+  importGroupsBackup(): Promise<GroupBackupImportResult> {
+    console.log('[IPC] importGroupsBackup called');
+    return window.proxyApp.importGroupsBackup();
+  },
+
+  importGroupsFromJson(jsonText: string): Promise<GroupBackupImportResult> {
+    console.log('[IPC] importGroupsFromJson called');
+    return window.proxyApp.importGroupsFromJson(jsonText);
   },
 
   /**

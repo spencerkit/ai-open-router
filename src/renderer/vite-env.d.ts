@@ -5,6 +5,9 @@ import type {
   ProxyStatus,
   LogEntry,
   SaveConfigResult,
+  GroupBackupExportResult,
+  GroupBackupImportResult,
+  ClipboardTextResult,
 } from '@/types';
 
 interface ImportMetaEnv {
@@ -20,12 +23,18 @@ interface ImportMeta {
 interface ProxyApp {
   // App status operations
   getStatus: () => Promise<ProxyStatus>;
+  readClipboardText: () => Promise<ClipboardTextResult>;
   startServer: () => Promise<ProxyStatus>;
   stopServer: () => Promise<ProxyStatus>;
 
   // Config operations
   getConfig: () => Promise<ProxyConfig>;
   saveConfig: (config: ProxyConfig) => Promise<SaveConfigResult>;
+  exportGroupsBackup: () => Promise<GroupBackupExportResult>;
+  exportGroupsToFolder: () => Promise<GroupBackupExportResult>;
+  exportGroupsToClipboard: () => Promise<GroupBackupExportResult>;
+  importGroupsBackup: () => Promise<GroupBackupImportResult>;
+  importGroupsFromJson: (jsonText: string) => Promise<GroupBackupImportResult>;
 
   // Logs operations
   listLogs: (max?: number) => Promise<LogEntry[]>;

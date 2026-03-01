@@ -1,55 +1,86 @@
 # OA Proxy (Electron)
 
-一个 Electron 桌面中转服务，支持按分组路径做 OpenAI 与 Claude 协议双向转发。
+Desktop proxy service built with Electron for bidirectional protocol forwarding between OpenAI-compatible APIs and Anthropic APIs.
 
-## 交互模型
-- 顶部状态栏：显示服务运行状态 + 服务开关 + 添加分组 + 设置 + 日志页面切换
-- 分组 Tab：每个分组对应一个 path（如 `claude`、`codex`）
-- 分组规则：每个分组可配置多条规则，但同一时刻只能有一条生效
-- 规则字段：`模型名称`、`token`、`api地址`、`方向（OpenAI -> Anthropic / Anthropic -> OpenAI）`
-- 设置页：可修改服务 host/port（保存后若服务在运行中会自动重启，并提示“重启完成”）
-- 日志页：单独页面展示完整请求链路（请求地址、转发地址、请求报文、转发报文、响应报文、错误信息）
+中文文档: [docs/zh/README.md](docs/zh/README.md)
 
-## 转发入口
-服务默认监听 `0.0.0.0:8899`，按分组 path 转发：
-- `POST /oc/:groupPath`：统一入口，具体转发方向由该分组当前生效规则决定
+## Overview
 
-例如分组 path 为 `claude`：
-- `http://localhost:8899/oc/claude`
+OA Proxy provides:
+- Group-based routing (`/oc/:groupId/...`)
+- Rule-based upstream selection (`activeRuleId`)
+- Bidirectional protocol translation:
+  - OpenAI-compatible -> Anthropic
+  - Anthropic -> OpenAI-compatible
+- Streaming bridge (SSE) and basic tool call mapping
+- Local request chain logs with redaction support
 
-## 规则生效逻辑
-1. 通过 URL path 命中分组
-2. 读取该分组 `activeRuleId`
-3. 仅使用该生效规则进行转发
-4. 按生效规则的 `direction` 自动决定协议转换方向
+## Use Cases
 
-## 启动
+- Use OpenAI-compatible APIs from Claude-style clients:
+  Configure a group's active rule with downstream protocol `openai`, then call `POST /oc/:groupId/messages` from Anthropic/Claude-style clients.
+- Use Anthropic models from OpenAI-compatible clients:
+  Configure downstream protocol `anthropic`, then call `POST /oc/:groupId/chat/completions` or `POST /oc/:groupId/responses`.
+- Unify mixed client protocols behind one local endpoint:
+  Route by group ID and keep each group's model/token/upstream config isolated.
+- Local team/dev gateway:
+  Keep upstream tokens in local config while exposing one stable local API surface to tools and scripts.
+
+## Supported Entry Endpoints
+
+The server listens on `0.0.0.0:8899` by default.
+
+For each group:
+- `POST /oc/:groupId/chat/completions`
+- `POST /oc/:groupId/responses`
+- `POST /oc/:groupId/messages`
+
+If no suffix is provided, `/oc/:groupId` defaults to chat-completions behavior.
+
+Example:
+- `http://localhost:8899/oc/claude/chat/completions`
+- `http://localhost:8899/oc/claude/responses`
+
+## Rule Resolution
+
+For each request:
+1. Match `:groupId` from path
+2. Load that group's `activeRuleId`
+3. Use only the active rule for forwarding
+4. Translate request/response based on entry protocol + downstream rule protocol
+
+## Start
+
 ```bash
 npm install
 npm start
 ```
 
-## 测试
+## Test
+
 ```bash
 npm test
 ```
 
-## 配置文件
-首次启动会在 Electron `userData/config.json` 生成配置。
+## Configuration
 
-核心结构：
+On first launch, config is created under Electron `userData/config.json`.
+
+Core sections:
 - `server`: host/port/auth
-- `compat`: strictMode
-- `logging`: 是否记录 body + 脱敏规则
+- `compat`: strict mode
+- `ui`: theme/locale/startup behavior
+- `logging`: body capture + redaction rules
 - `groups[]`:
-  - `name`, `path`
-  - `rules[]` (model/token/apiAddress/direction)
+  - `id`, `name`, `models[]`
+  - `rules[]` (`protocol`, `token`, `apiAddress`, `defaultModel`, `modelMappings`)
   - `activeRuleId`
 
-默认不会创建任何分组，需要在界面里手动添加分组和规则。
+Notes:
+- No groups are created by default.
+- Logs are kept in-memory with a default limit of 100 entries.
 
-日志默认仅保留最近 `100` 条请求链路记录。
+## Security Notes
 
-## 说明
-- 当前版本已支持流式桥接（SSE）与工具调用基础映射。
-- token 当前按本地配置文件保存（明文），适合开发与内网场景。
+- Upstream tokens are currently stored in local config (plain text).
+- Use minimum-scope upstream credentials in production-like environments.

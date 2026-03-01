@@ -14,6 +14,9 @@ import type {
   ProxyStatus,
   LogEntry,
   Group,
+  GroupBackupExportResult,
+  GroupBackupImportResult,
+  ClipboardTextResult,
 } from '@/types';
 import { ipc } from '@/utils/ipc';
 
@@ -38,6 +41,12 @@ interface ProxyState {
   refreshStatus: () => Promise<void>;
   refreshLogs: () => Promise<void>;
   saveConfig: (config: ProxyConfig) => Promise<void>;
+  exportGroupsBackup: () => Promise<GroupBackupExportResult>;
+  exportGroupsToFolder: () => Promise<GroupBackupExportResult>;
+  exportGroupsToClipboard: () => Promise<GroupBackupExportResult>;
+  importGroupsBackup: () => Promise<GroupBackupImportResult>;
+  importGroupsFromJson: (jsonText: string) => Promise<GroupBackupImportResult>;
+  readClipboardText: () => Promise<ClipboardTextResult>;
   setActiveGroupId: (groupId: string | null) => void;
   clearLogs: () => Promise<void>;
   startPolling: () => void;
@@ -153,6 +162,120 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
         error: errorMessage,
         loading: false,
       });
+    }
+  },
+
+  /**
+   * Export all groups (including nested rules) to a JSON backup file
+   */
+  exportGroupsBackup: async () => {
+    try {
+      set({ error: null });
+      return await ipc.exportGroupsBackup();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export group backup';
+      set({ error: errorMessage });
+      throw error;
+    }
+  },
+
+  /**
+   * Export all groups/rules to a JSON file under a selected folder
+   */
+  exportGroupsToFolder: async () => {
+    try {
+      set({ error: null });
+      return await ipc.exportGroupsToFolder();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export group backup';
+      set({ error: errorMessage });
+      throw error;
+    }
+  },
+
+  /**
+   * Export all groups/rules JSON content directly to clipboard
+   */
+  exportGroupsToClipboard: async () => {
+    try {
+      set({ error: null });
+      return await ipc.exportGroupsToClipboard();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export group backup';
+      set({ error: errorMessage });
+      throw error;
+    }
+  },
+
+  /**
+   * Import groups backup JSON and replace current groups
+   */
+  importGroupsBackup: async () => {
+    try {
+      set({ loading: true, error: null });
+      const result = await ipc.importGroupsBackup();
+
+      if (!result.canceled && result.config && result.status) {
+        set({
+          config: result.config,
+          status: result.status,
+          loading: false,
+        });
+      } else {
+        set({ loading: false });
+      }
+
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import group backup';
+      set({
+        error: errorMessage,
+        loading: false,
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Import groups from a JSON text payload and replace current groups
+   */
+  importGroupsFromJson: async (jsonText: string) => {
+    try {
+      set({ loading: true, error: null });
+      const result = await ipc.importGroupsFromJson(jsonText);
+
+      if (!result.canceled && result.config && result.status) {
+        set({
+          config: result.config,
+          status: result.status,
+          loading: false,
+        });
+      } else {
+        set({ loading: false });
+      }
+
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import group backup';
+      set({
+        error: errorMessage,
+        loading: false,
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Read plain text from system clipboard via main process
+   */
+  readClipboardText: async () => {
+    try {
+      set({ error: null });
+      return await ipc.readClipboardText();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to read clipboard';
+      set({ error: errorMessage });
+      throw error;
     }
   },
 

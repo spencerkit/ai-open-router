@@ -30,7 +30,7 @@ export type {
 } from './proxy';
 
 import type { ServerConfig, CompatConfig, LoggingConfig, UIConfig } from './config';
-import type { Group } from './proxy';
+import type { Group, ProxyStatus } from './proxy';
 
 /**
  * Complete proxy configuration interface
@@ -54,4 +54,26 @@ export interface SaveConfigResult {
   status: ProxyStatus;
 }
 
-import type { ProxyStatus } from './proxy';
+export interface GroupBackupExportResult {
+  ok: boolean;
+  canceled: boolean;
+  source?: 'file' | 'folder' | 'clipboard';
+  filePath?: string | null;
+  groupCount: number;
+  charCount?: number;
+}
+
+export interface GroupBackupImportResult {
+  ok: boolean;
+  canceled: boolean;
+  source?: 'file' | 'json';
+  filePath?: string;
+  importedGroupCount?: number;
+  config?: ProxyConfig;
+  restarted?: boolean;
+  status?: ProxyStatus;
+}
+
+export interface ClipboardTextResult {
+  text: string;
+}

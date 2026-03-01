@@ -1,6 +1,6 @@
 const path = require("node:path");
 const fs = require("node:fs");
-const { app, BrowserWindow, ipcMain, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, dialog, clipboard } = require("electron");
 const { LogStore } = require("./logStore");
 
 let mainWindow = null;
@@ -25,15 +25,32 @@ function loadProxyModules() {
   try {
     const { ConfigStore } = require(path.join(firstDir, "configStore.js"));
     const { ProxyServer } = require(path.join(firstDir, "server.js"));
-    return { ConfigStore, ProxyServer };
+    const { createGroupsBackupPayload, extractGroupsFromImportPayload } = require(path.join(firstDir, "groupBackup.js"));
+    return {
+      ConfigStore,
+      ProxyServer,
+      createGroupsBackupPayload,
+      extractGroupsFromImportPayload
+    };
   } catch (error) {
     const { ConfigStore } = require(path.join(secondDir, "configStore.js"));
     const { ProxyServer } = require(path.join(secondDir, "server.js"));
-    return { ConfigStore, ProxyServer };
+    const { createGroupsBackupPayload, extractGroupsFromImportPayload } = require(path.join(secondDir, "groupBackup.js"));
+    return {
+      ConfigStore,
+      ProxyServer,
+      createGroupsBackupPayload,
+      extractGroupsFromImportPayload
+    };
   }
 }
 
-const { ConfigStore, ProxyServer } = loadProxyModules();
+const {
+  ConfigStore,
+  ProxyServer,
+  createGroupsBackupPayload,
+  extractGroupsFromImportPayload
+} = loadProxyModules();
 
 // 获取开发服务器URL
 function getDevServerUrl() {
@@ -111,6 +128,50 @@ function applyLaunchOnStartupSetting(config) {
   }
 }
 
+function getBackupDefaultFileName() {
+  const now = new Date();
+  const iso = now.toISOString().replace(/[-:]/g, "").replace(/\..+$/, "");
+  return `oa-proxy-groups-backup-${iso}.json`;
+}
+
+function buildGroupsBackupContent() {
+  const current = configStore.get();
+  const backupPayload = createGroupsBackupPayload(current.groups);
+  const jsonText = JSON.stringify(backupPayload, null, 2);
+  return {
+    current,
+    backupPayload,
+    jsonText
+  };
+}
+
+async function importGroupsAndSave(parsedInput, meta = {}) {
+  const importedGroups = extractGroupsFromImportPayload(parsedInput);
+  const prevConfig = configStore.get();
+  const nextConfig = {
+    ...prevConfig,
+    groups: importedGroups
+  };
+  const saved = configStore.save(nextConfig);
+
+  let restarted = false;
+  if (proxyServer.isRunning() && hasServerSettingChanged(prevConfig, saved)) {
+    await proxyServer.stop();
+    await proxyServer.start();
+    restarted = true;
+  }
+
+  return {
+    ok: true,
+    canceled: false,
+    importedGroupCount: importedGroups.length,
+    config: saved,
+    restarted,
+    status: proxyServer.getStatus(),
+    ...meta
+  };
+}
+
 function setupIpc() {
   ipcMain.handle("app:get-status", async () => {
     return proxyServer.getStatus();
@@ -145,6 +206,121 @@ function setupIpc() {
       config: saved,
       restarted,
       status: proxyServer.getStatus()
+    };
+  });
+
+  ipcMain.handle("config:export-groups", async () => {
+    const { current, backupPayload } = buildGroupsBackupContent();
+    const defaultPath = path.join(app.getPath("documents"), getBackupDefaultFileName());
+    const saveResult = await dialog.showSaveDialog(mainWindow || undefined, {
+      title: "Export Group Rules Backup",
+      defaultPath,
+      filters: [{ name: "JSON", extensions: ["json"] }]
+    });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { ok: true, canceled: true, filePath: null, groupCount: current.groups.length };
+    }
+
+    fs.writeFileSync(saveResult.filePath, JSON.stringify(backupPayload, null, 2), "utf-8");
+    return {
+      ok: true,
+      canceled: false,
+      filePath: saveResult.filePath,
+      groupCount: current.groups.length,
+      source: "file"
+    };
+  });
+
+  ipcMain.handle("config:export-groups-folder", async () => {
+    const { current, jsonText } = buildGroupsBackupContent();
+    const openResult = await dialog.showOpenDialog(mainWindow || undefined, {
+      title: "Choose Backup Folder",
+      properties: ["openDirectory", "createDirectory"]
+    });
+
+    if (openResult.canceled || openResult.filePaths.length === 0) {
+      return { ok: true, canceled: true, filePath: null, groupCount: current.groups.length, source: "folder" };
+    }
+
+    const folderPath = openResult.filePaths[0];
+    const backupPath = path.join(folderPath, getBackupDefaultFileName());
+    fs.writeFileSync(backupPath, jsonText, "utf-8");
+
+    return {
+      ok: true,
+      canceled: false,
+      filePath: backupPath,
+      groupCount: current.groups.length,
+      source: "folder"
+    };
+  });
+
+  ipcMain.handle("config:export-groups-clipboard", async () => {
+    const { current, jsonText } = buildGroupsBackupContent();
+    clipboard.writeText(jsonText);
+    return {
+      ok: true,
+      canceled: false,
+      groupCount: current.groups.length,
+      charCount: jsonText.length,
+      source: "clipboard"
+    };
+  });
+
+  ipcMain.handle("config:import-groups", async () => {
+    const openResult = await dialog.showOpenDialog(mainWindow || undefined, {
+      title: "Import Group Rules Backup",
+      properties: ["openFile"],
+      filters: [{ name: "JSON", extensions: ["json"] }]
+    });
+
+    if (openResult.canceled || openResult.filePaths.length === 0) {
+      return { ok: true, canceled: true };
+    }
+
+    const importPath = openResult.filePaths[0];
+    const raw = fs.readFileSync(importPath, "utf-8");
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      const err = new Error("Invalid JSON file");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    return importGroupsAndSave(parsed, {
+      filePath: importPath,
+      source: "file"
+    });
+  });
+
+  ipcMain.handle("config:import-groups-json", async (_event, jsonText) => {
+    if (typeof jsonText !== "string" || jsonText.trim().length === 0) {
+      const err = new Error("Invalid JSON text");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (error) {
+      const err = new Error("Invalid JSON text");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    return importGroupsAndSave(parsed, {
+      source: "json"
+    });
+  });
+
+  ipcMain.handle("app:read-clipboard-text", async () => {
+    return {
+      text: clipboard.readText() || ""
     };
   });
 
