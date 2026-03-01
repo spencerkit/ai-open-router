@@ -96,6 +96,7 @@ export interface LogEntry {
   entryProtocol?: RuleProtocol | null;
   downstreamProtocol?: RuleProtocol | null;
   model: string | null;
+  forwardedModel?: string | null;
   forwardingAddress: string | null;
   requestHeaders?: Record<string, string>;
   requestBody: unknown;

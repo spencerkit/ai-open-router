@@ -144,6 +144,9 @@ export const enUS = {
     requestBody: 'Request Body',
     group: 'Group',
     model: 'Model',
+    entryProtocol: 'Upstream Protocol',
+    downstreamProtocol: 'Downstream Protocol',
+    forwardedModel: 'Forwarded Model',
     duration: 'Duration',
     state: {
       ok: 'OK',

@@ -116,6 +116,24 @@ export const LogsPage: React.FC = () => {
               <span>{log.model}</span>
             </div>
           )}
+          {log.entryProtocol && (
+            <div className={styles.logDetail}>
+              <span className={styles.label}>{t('logs.entryProtocol')}:</span>
+              <span>{t(`ruleProtocol.${log.entryProtocol}`)}</span>
+            </div>
+          )}
+          {log.downstreamProtocol && (
+            <div className={styles.logDetail}>
+              <span className={styles.label}>{t('logs.downstreamProtocol')}:</span>
+              <span>{t(`ruleProtocol.${log.downstreamProtocol}`)}</span>
+            </div>
+          )}
+          {log.forwardedModel && (
+            <div className={styles.logDetail}>
+              <span className={styles.label}>{t('logs.forwardedModel')}:</span>
+              <span>{log.forwardedModel}</span>
+            </div>
+          )}
           {log.forwardingAddress ? (
             <div className={styles.logDetail}>
               <span className={styles.label}>{t('logs.forwardingTo')}:</span>

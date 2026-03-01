@@ -349,6 +349,7 @@ class ProxyServer {
       entryProtocol: null,
       downstreamProtocol: null,
       model: null,
+      forwardedModel: null,
       forwardingAddress: null,
       requestHeaders: toRedactedHeaders(headers, config),
       requestBody: null,
@@ -461,6 +462,8 @@ class ProxyServer {
 
       const targetModel = resolveTargetModel(rule, group, requestBody);
       const requestedModel = typeof requestBody?.model === "string" ? requestBody.model : rule.defaultModel;
+      chain.model = requestedModel;
+      chain.forwardedModel = targetModel;
       const upstreamPath = resolveUpstreamPath(downstreamProtocol, entry.endpoint);
       const upstreamUrl = resolveUpstreamUrl(rule.apiAddress, upstreamPath);
       chain.forwardingAddress = upstreamUrl;

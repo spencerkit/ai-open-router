@@ -144,6 +144,9 @@ export const zhCN = {
     requestBody: '请求体',
     group: '分组',
     model: '模型',
+    entryProtocol: '上游协议',
+    downstreamProtocol: '下游协议',
+    forwardedModel: '转发模型',
     duration: '耗时',
     state: {
       ok: '成功',
