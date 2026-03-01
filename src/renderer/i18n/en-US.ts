@@ -17,6 +17,10 @@ export const enUS = {
     settings: 'Settings',
     logs: 'Logs',
     backToService: 'Back to Service',
+    serviceRunning: 'Running',
+    serviceStopped: 'Stopped',
+    start: 'Start',
+    stop: 'Stop',
   },
 
   // Service Status

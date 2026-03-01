@@ -1,0 +1,264 @@
+/**
+ * Header Component Styles
+ * Application header with navigation and controls
+ */
+
+/* Header container */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  min-height: 56px;
+}
+
+/* Left section - title and service switch */
+.left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: 1;
+}
+
+/* App title */
+.title {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.subtitle {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Center section - navigation */
+.center {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Right section - theme toggle and language */
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Navigation button */
+.navButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--tab-text);
+  transition: all var(--transition-base);
+  outline: none;
+}
+
+.navButton:hover {
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--text);
+}
+
+.navButton.active {
+  background: var(--tab-active-bg-1);
+  border-color: var(--tab-active-border);
+  color: var(--accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+[data-theme='dark'] .navButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.navButton:focus-visible {
+  box-shadow: 0 0 0 2px var(--entry-bg), 0 0 0 3px var(--accent);
+}
+
+.navButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Nav button icon */
+.navIcon {
+  width: var(--space-4);
+  height: var(--space-4);
+  flex-shrink: 0;
+}
+
+/* Theme toggle button */
+.themeToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-strong);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  padding: 0;
+  color: var(--icon-stroke);
+}
+
+.themeToggle:hover {
+  border-color: var(--line-strong);
+  background: var(--panel);
+}
+
+.themeToggle:focus-visible {
+  box-shadow: 0 0 0 2px var(--entry-bg), 0 0 0 3px var(--accent);
+}
+
+/* Language selector */
+.languageSelector {
+  position: relative;
+}
+
+.languageButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-strong);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--text);
+  transition: all var(--transition-base);
+  outline: none;
+}
+
+.languageButton:hover {
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+}
+
+.languageButton:focus-visible {
+  box-shadow: 0 0 0 2px var(--entry-bg), 0 0 0 3px var(--accent);
+}
+
+/* Language dropdown */
+.languageDropdown {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  min-width: 120px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.languageOption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--text);
+  width: 100%;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.languageOption:hover {
+  background: var(--tab-active-bg-2);
+}
+
+.languageOptionari-selected {
+  background: var(--tab-active-bg-1);
+  color: var(--accent);
+}
+
+/* Divider */
+.divider {
+  width: 1px;
+  height: var(--space-5);
+  background: var(--line);
+  margin: 0 var(--space-2);
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-1);
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  color: white;
+  margin-left: var(--space-1);
+}
+
+/* Service Status */
+.serviceStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--line);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.statusDot.running {
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.statusDot.stopped {
+  background: #94a3b8;
+}
+
+.statusText {
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  font-weight: var(--font-weight-medium);
+}
+
+.serverAddress {
+  font-size: var(--font-size-xs);
+  color: var(--muted);
+  font-family: var(--font-mono);
+}

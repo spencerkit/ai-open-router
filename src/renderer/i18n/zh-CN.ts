@@ -17,6 +17,10 @@ export const zhCN = {
     settings: '设置',
     logs: '日志',
     backToService: '返回服务',
+    serviceRunning: '运行中',
+    serviceStopped: '已停止',
+    start: '启动',
+    stop: '停止',
   },
 
   // Service Status
