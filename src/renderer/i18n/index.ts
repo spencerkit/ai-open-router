@@ -1,5 +1,5 @@
 /**
- * i18n Configuration for OA Proxy
+ * i18n Configuration for AI Open Router
  *
  * This module initializes i18next with react-i18next integration
  * and provides translation support for the application.

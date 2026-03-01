@@ -37,6 +37,11 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
    * Whether the input should take full width
    */
   fullWidth?: boolean;
+
+  /**
+   * Optional trailing content rendered inside the input row
+   */
+  endAdornment?: React.ReactNode;
 }
 
 /**
@@ -49,6 +54,7 @@ export const Input: React.FC<InputProps> = ({
   hint,
   error,
   fullWidth = false,
+  endAdornment,
   disabled,
   className,
   id,
@@ -60,6 +66,7 @@ export const Input: React.FC<InputProps> = ({
 
   const inputClasses = [
     styles.base,
+    endAdornment && styles.withEndAdornment,
     size !== 'medium' && styles[size],
     error && styles.error,
     fullWidth && styles.fullWidth,
@@ -74,15 +81,22 @@ export const Input: React.FC<InputProps> = ({
         </label>
       )}
 
-      <input
-        id={inputId}
-        type={type}
-        className={inputClasses}
-        disabled={disabled}
-        aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
-        aria-invalid={error ? true : undefined}
-        {...props}
-      />
+      <div className={styles.inputRow}>
+        <input
+          id={inputId}
+          type={type}
+          className={inputClasses}
+          disabled={disabled}
+          aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
+          aria-invalid={error ? true : undefined}
+          {...props}
+        />
+        {endAdornment && (
+          <div className={styles.endAdornment}>
+            {endAdornment}
+          </div>
+        )}
+      </div>
 
       {error && (
         <p id={errorId} className={styles.errorText} role="alert">

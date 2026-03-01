@@ -30,6 +30,7 @@ export const SettingsPage: React.FC = () => {
   const [portText, setPortText] = useState('8080');
   const [strictMode, setStrictMode] = useState(false);
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
+  const [closeToTray, setCloseToTray] = useState(true);
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [locale, setLocale] = useState<LocaleCode>('en-US');
   const [portError, setPortError] = useState('');
@@ -48,6 +49,7 @@ export const SettingsPage: React.FC = () => {
       setPortText(String(config.server.port));
       setStrictMode(config.compat.strictMode);
       setLaunchOnStartup(config.ui.launchOnStartup);
+      setCloseToTray(config.ui.closeToTray ?? true);
       setTheme(config.ui.theme);
       setLocale(config.ui.locale);
     }
@@ -89,6 +91,7 @@ export const SettingsPage: React.FC = () => {
       || String(config.server.port) !== portText
       || strictMode !== config.compat.strictMode
       || launchOnStartup !== config.ui.launchOnStartup
+      || closeToTray !== (config.ui.closeToTray ?? true)
       || theme !== config.ui.theme
       || locale !== config.ui.locale
     )
@@ -117,6 +120,7 @@ export const SettingsPage: React.FC = () => {
 
     const newUIConfig: UIConfig = {
       launchOnStartup,
+      closeToTray,
       theme,
       locale,
     };
@@ -270,6 +274,18 @@ export const SettingsPage: React.FC = () => {
                 id="launchOnStartup"
                 checked={launchOnStartup}
                 onChange={setLaunchOnStartup}
+              />
+            </div>
+
+            <div className={styles.formGroupSwitch}>
+              <div className={styles.switchLabel}>
+                <label htmlFor="closeToTray">{t('settings.closeToTray')}</label>
+                <p>{t('settings.closeToTrayHint')}</p>
+              </div>
+              <Switch
+                id="closeToTray"
+                checked={closeToTray}
+                onChange={setCloseToTray}
               />
             </div>
           </div>

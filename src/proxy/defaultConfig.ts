@@ -12,7 +12,8 @@ const DEFAULT_CONFIG = {
   ui: {
     theme: "light",
     locale: "en-US",
-    launchOnStartup: false
+    launchOnStartup: false,
+    closeToTray: true
   },
   logging: {
     level: "info",

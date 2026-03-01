@@ -1,7 +1,7 @@
 /**
- * OA Proxy Type Definitions
+ * AI Open Router Type Definitions
  *
- * This file exports all type definitions for the OA Proxy application.
+ * This file exports all type definitions for the AI Open Router application.
  * These types are used across the renderer process to ensure type safety.
  */
 

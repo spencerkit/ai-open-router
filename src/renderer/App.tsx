@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from '@/components';
 import { ServicePage, SettingsPage, LogsPage, LogDetailPage, RuleEditPage, RuleCreatePage, GroupEditPage } from '@/pages';
 import { useProxyStore } from '@/store';
-import { useTranslation } from '@/hooks';
+import { useLogs, useTranslation } from '@/hooks';
 
 /**
  * Main App Component
@@ -21,7 +21,7 @@ const App: React.FC = () => {
     console.error('[App] useProxyStore error:', e);
   }
 
-  let t: ((key: string) => string) | undefined;
+  let t: ((key: string, options?: Record<string, string | number>) => string) | undefined;
   try {
     console.log('[App] Calling useTranslation...');
     const result = useTranslation();
@@ -30,18 +30,24 @@ const App: React.FC = () => {
   } catch (e) {
     console.error('[App] useTranslation error:', e);
   }
+  const { showToast } = useLogs();
 
   // Fallback translation function
-  const translate = (key: string) => {
+  const translate = useCallback((key: string, options?: Record<string, string | number>) => {
     if (typeof t === 'function') {
       try {
-        return t(key);
+        return t(key, options);
       } catch {
         return key;
       }
     }
     return key;
-  };
+  }, [t]);
+
+  const isPortInUseError = useCallback((message: string) => {
+    const normalized = String(message || '').toLowerCase();
+    return normalized.includes('eaddrinuse') || normalized.includes('address already in use');
+  }, []);
 
   const { init, loading, error, status, startServer, stopServer, config } = store || {
     init: () => {},
@@ -57,6 +63,30 @@ const App: React.FC = () => {
   const serverAddress = status?.address && config?.server.port
     ? `http://${status.address}:${config.server.port}`
     : undefined;
+
+  const handleStartServer = useCallback(async () => {
+    try {
+      await Promise.resolve(startServer());
+      showToast(translate('toast.serviceStarted'), 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isPortInUseError(message)) {
+        showToast(translate('toast.serviceStartPortInUse'), 'error');
+        return;
+      }
+      showToast(translate('errors.operationFailed', { message }), 'error');
+    }
+  }, [isPortInUseError, showToast, startServer, translate]);
+
+  const handleStopServer = useCallback(async () => {
+    try {
+      await Promise.resolve(stopServer());
+      showToast(translate('toast.serviceStopped'), 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showToast(translate('errors.operationFailed', { message }), 'error');
+    }
+  }, [showToast, stopServer, translate]);
 
   console.log('[App] loading:', loading, 'error:', error, 'status:', status);
 
@@ -90,8 +120,8 @@ const App: React.FC = () => {
     <Layout
       isRunning={isRunning}
       serverAddress={serverAddress}
-      onStartServer={startServer}
-      onStopServer={stopServer}
+      onStartServer={handleStartServer}
+      onStopServer={handleStopServer}
     >
       <Routes>
         <Route path="/" element={<ServicePage />} />

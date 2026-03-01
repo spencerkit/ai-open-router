@@ -34,4 +34,5 @@ export interface UIConfig {
   theme: ThemeMode;
   locale: LocaleCode;
   launchOnStartup: boolean;
+  closeToTray: boolean;
 }

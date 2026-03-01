@@ -30,6 +30,24 @@
   outline: none;
 }
 
+.inputRow {
+  position: relative;
+}
+
+.withEndAdornment {
+  padding-right: 44px;
+}
+
+.endAdornment {
+  position: absolute;
+  top: 50%;
+  right: var(--sp-2);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .base::placeholder {
   color: var(--text-tertiary);
 }

@@ -9,7 +9,7 @@ function clone(value) {
 
 function createGroupsBackupPayload(groups) {
   return {
-    format: "oa-proxy-groups-backup",
+    format: "ai-open-router-groups-backup",
     version: 1,
     exportedAt: new Date().toISOString(),
     groups: clone(Array.isArray(groups) ? groups : [])

@@ -47,6 +47,9 @@ function validateConfig(config) {
     if (typeof config.ui.launchOnStartup !== "boolean") {
       errors.push("ui.launchOnStartup must be boolean");
     }
+    if (typeof config.ui.closeToTray !== "boolean") {
+      errors.push("ui.closeToTray must be boolean");
+    }
   }
 
   if (!isObject(config.logging)) {

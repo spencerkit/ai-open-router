@@ -193,7 +193,7 @@ function applyLaunchOnStartupSetting(config) {
 function getBackupDefaultFileName() {
   const now = new Date();
   const iso = now.toISOString().replace(/[-:]/g, "").replace(/\..+$/, "");
-  return `oa-proxy-groups-backup-${iso}.json`;
+  return `ai-open-router-groups-backup-${iso}.json`;
 }
 
 function buildGroupsBackupContent() {
@@ -268,7 +268,7 @@ function refreshTrayMenu() {
   const visible = !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
   tray.setContextMenu(Menu.buildFromTemplate([
     {
-      label: visible ? "Hide OA Proxy" : "Show OA Proxy",
+      label: visible ? "Hide AI Open Router" : "Show AI Open Router",
       click: () => (visible ? hideMainWindow() : showMainWindow())
     },
     { type: "separator" },
@@ -289,7 +289,7 @@ function createTray() {
   if (image.isEmpty()) return;
 
   tray = new Tray(image);
-  tray.setToolTip("OA Proxy");
+  tray.setToolTip("AI Open Router");
   tray.on("click", () => {
     const visible = !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
     if (visible) {

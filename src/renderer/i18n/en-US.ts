@@ -1,11 +1,11 @@
 /**
- * English Translations for OA Proxy
+ * English Translations for AI Open Router
  */
 
 export const enUS = {
   // App
   app: {
-    title: 'OA Proxy',
+    title: 'AI Open Router',
     protocolForwardingService: 'Protocol Forwarding Service',
     statusLoading: 'Loading status...',
   },
@@ -93,7 +93,9 @@ export const enUS = {
     strictMode: 'Strict Mode (fail fast on incompatible fields)',
     strictModeHint: 'When enabled, incompatible protocol fields fail immediately.',
     launchOnStartup: 'Launch at Startup',
-    launchOnStartupHint: 'Auto-launch OA Proxy after system sign-in.',
+    launchOnStartupHint: 'Auto-launch AI Open Router (AOR) after system sign-in.',
+    closeToTray: 'Close to Tray',
+    closeToTrayHint: 'When closing the window, keep app running in system tray.',
     theme: 'Theme',
     themeHint: 'Controls app appearance in all pages.',
     themeLight: 'Light',
@@ -238,6 +240,7 @@ export const enUS = {
   toast: {
     serviceStarted: 'Service started',
     serviceStopped: 'Service stopped',
+    serviceStartPortInUse: 'Start failed: port is already in use. Change the port and try again.',
     restartComplete: 'Restart complete',
     groupCreated: 'Group created',
     groupUpdated: 'Group updated',
@@ -280,6 +283,8 @@ export const enUS = {
     noGroupModels: 'No group models yet. Add models in "Edit Group" first.',
     mappingPlaceholder: 'Target model name',
     tokenHint: 'Stored locally. Use an upstream token with only required scope.',
+    showToken: 'Show Token',
+    hideToken: 'Hide Token',
     endpointHint: 'Include protocol, e.g. https://api.anthropic.com',
     previewTitle: 'Rule Preview',
     previewPath: 'Entry Path',

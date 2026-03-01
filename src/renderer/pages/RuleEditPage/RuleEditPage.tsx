@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useProxyStore } from '@/store';
 import { Button, Input } from '@/components';
 import { useTranslation, useLogs } from '@/hooks';
@@ -20,6 +21,7 @@ export const RuleEditPage: React.FC = () => {
   const [name, setName] = useState('');
   const [protocol, setProtocol] = useState<Rule['protocol']>('anthropic');
   const [token, setToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
   const [apiAddress, setApiAddress] = useState('');
   const [defaultModel, setDefaultModel] = useState('');
   const [modelMappings, setModelMappings] = useState<Record<string, string>>({});
@@ -256,7 +258,7 @@ export const RuleEditPage: React.FC = () => {
                 <label htmlFor="token">{t('servicePage.token')}</label>
                 <Input
                   id="token"
-                  type="password"
+                  type={showToken ? 'text' : 'password'}
                   value={token}
                   onChange={(e) => {
                     setToken(e.target.value);
@@ -268,6 +270,17 @@ export const RuleEditPage: React.FC = () => {
                   className={styles.input}
                   error={errors.token}
                   hint={t('ruleForm.tokenHint')}
+                  endAdornment={(
+                    <button
+                      type="button"
+                      className={styles.tokenVisibilityButton}
+                      onClick={() => setShowToken((prev) => !prev)}
+                      aria-label={showToken ? t('ruleForm.hideToken') : t('ruleForm.showToken')}
+                      title={showToken ? t('ruleForm.hideToken') : t('ruleForm.showToken')}
+                    >
+                      {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  )}
                 />
               </div>
 

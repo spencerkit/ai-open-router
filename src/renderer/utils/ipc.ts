@@ -1,5 +1,5 @@
 /**
- * IPC Utility Module for OA Proxy
+ * IPC Utility Module for AI Open Router
  *
  * Provides a centralized interface for all IPC communication with the main process.
  * Maps to window.proxyApp methods exposed via the preload script.

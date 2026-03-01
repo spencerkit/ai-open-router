@@ -157,6 +157,30 @@
   font-family: var(--font-mono);
 }
 
+.tokenVisibilityButton {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tokenVisibilityButton:hover {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.tokenVisibilityButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .formActions {
   display: flex;
   gap: var(--sp-2);

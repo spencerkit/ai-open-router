@@ -1,7 +1,7 @@
 /**
  * Hooks Module Exports
  *
- * Exports all custom hooks for the OA Proxy application.
+ * Exports all custom hooks for the AI Open Router application.
  */
 
 // Proxy configuration hooks

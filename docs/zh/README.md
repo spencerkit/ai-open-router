@@ -1,4 +1,4 @@
-# OA Proxy
+# AI Open Router
 
 桌面代理服务，用于在 OpenAI 兼容协议与 Anthropic 协议之间做双向转发。
 
@@ -6,7 +6,7 @@ English documentation: [../../README.md](../../README.md)
 
 ## 概览
 
-OA Proxy 提供：
+AI Open Router 提供：
 - 按分组路径路由（`/oc/:groupId/...`）
 - 按生效规则转发（`activeRuleId`）
 - 双向协议转换：

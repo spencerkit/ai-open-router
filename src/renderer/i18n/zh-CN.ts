@@ -1,11 +1,11 @@
 /**
- * Chinese (Simplified) Translations for OA Proxy
+ * Chinese (Simplified) Translations for AI Open Router
  */
 
 export const zhCN = {
   // App
   app: {
-    title: 'OA Proxy',
+    title: 'AI Open Router',
     protocolForwardingService: '协议中转服务',
     statusLoading: '状态加载中...',
   },
@@ -93,7 +93,9 @@ export const zhCN = {
     strictMode: '严格模式（不兼容字段直接报错）',
     strictModeHint: '开启后，协议不兼容字段将立即失败。',
     launchOnStartup: '开机启动',
-    launchOnStartupHint: '系统登录后自动启动 OA Proxy。',
+    launchOnStartupHint: '系统登录后自动启动 AI Open Router（AOR）。',
+    closeToTray: '关闭最小化到托盘',
+    closeToTrayHint: '关闭窗口时不退出应用，保留在系统托盘运行。',
     theme: '主题',
     themeHint: '控制应用所有页面的显示风格。',
     themeLight: '浅色',
@@ -238,6 +240,7 @@ export const zhCN = {
   toast: {
     serviceStarted: '服务已启动',
     serviceStopped: '服务已停止',
+    serviceStartPortInUse: '启动失败：端口已被占用，请修改端口后重试',
     restartComplete: '重启完成',
     groupCreated: '分组已创建',
     groupUpdated: '分组已更新',
@@ -280,6 +283,8 @@ export const zhCN = {
     noGroupModels: '当前分组还没有模型，请先去“编辑分组”添加。',
     mappingPlaceholder: '输入要转发的模型名',
     tokenHint: '仅本地保存。建议使用最小权限的上游 Token。',
+    showToken: '显示 Token',
+    hideToken: '隐藏 Token',
     endpointHint: '请包含协议头，例如 https://api.anthropic.com',
     previewTitle: '规则预览',
     previewPath: '入口路径',

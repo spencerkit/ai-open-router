@@ -1,7 +1,7 @@
 {
-  "name": "oa-proxy-electron",
+  "name": "ai-open-router",
   "version": "0.2.0",
-  "description": "Electron-based OpenAI <-> Claude protocol proxy",
+  "description": "Desktop OpenAI <-> Anthropic compatible protocol router",
   "main": "out/main/main.js",
   "type": "commonjs",
   "scripts": {
@@ -26,8 +26,8 @@
     "npm": ">=10.0.0"
   },
   "build": {
-    "appId": "com.local.oaproxy",
-    "productName": "OA Proxy",
+    "appId": "com.local.aiopenrouter",
+    "productName": "AI Open Router",
     "icon": "assets/icon.png",
     "files": [
       "out/**/*",
@@ -49,7 +49,6 @@
     }
   },
   "dependencies": {
-    "electron": "^31.7.7",
     "i18next": "^23.10.0",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
@@ -65,6 +64,7 @@
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
+    "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
     "husky": "^9.1.7",
     "lint-staged": "^16.3.0",

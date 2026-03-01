@@ -1,7 +1,7 @@
 /**
  * Proxy Store - Zustand State Management
  *
- * Central store for managing OA Proxy state including:
+ * Central store for managing AI Open Router state including:
  * - Configuration management
  * - Server status tracking
  * - Request logging
@@ -355,7 +355,8 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       set({ status, loading: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start server';
-      set({ error: errorMessage, loading: false });
+      set({ loading: false });
+      throw (error instanceof Error ? error : new Error(errorMessage));
     }
   },
 
@@ -369,7 +370,8 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       set({ status, loading: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to stop server';
-      set({ error: errorMessage, loading: false });
+      set({ loading: false });
+      throw (error instanceof Error ? error : new Error(errorMessage));
     }
   },
 }));

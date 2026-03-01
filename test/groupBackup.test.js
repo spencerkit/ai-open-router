@@ -27,7 +27,7 @@ test("createGroupsBackupPayload keeps groups and metadata", () => {
   ];
 
   const payload = createGroupsBackupPayload(groups);
-  assert.equal(payload.format, "oa-proxy-groups-backup");
+  assert.equal(payload.format, "ai-open-router-groups-backup");
   assert.equal(payload.version, 1);
   assert.ok(typeof payload.exportedAt === "string");
   assert.deepEqual(payload.groups, groups);

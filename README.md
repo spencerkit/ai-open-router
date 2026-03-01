@@ -1,4 +1,4 @@
-# OA Proxy
+# AI Open Router
 
 Desktop proxy service for bidirectional protocol forwarding between OpenAI-compatible APIs and Anthropic APIs.
 
@@ -6,7 +6,7 @@ Desktop proxy service for bidirectional protocol forwarding between OpenAI-compa
 
 ## Overview
 
-OA Proxy provides:
+AI Open Router provides:
 - Group-based routing (`/oc/:groupId/...`)
 - Rule-based upstream selection (`activeRuleId`)
 - Bidirectional protocol translation:
