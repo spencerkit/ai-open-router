@@ -1,14 +1,14 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { validateConfig } = require("../src/proxy/schema");
-const { getDefaultConfig } = require("../src/proxy/defaultConfig");
+const test = require("node:test")
+const assert = require("node:assert/strict")
+const { validateConfig } = require("../src/proxy/schema")
+const { getDefaultConfig } = require("../src/proxy/defaultConfig")
 
 test("default config validates", () => {
-  const cfg = getDefaultConfig();
-  const result = validateConfig(cfg);
-  assert.equal(result.valid, true);
-  assert.equal(result.errors.length, 0);
-});
+  const cfg = getDefaultConfig()
+  const result = validateConfig(cfg)
+  assert.equal(result.valid, true)
+  assert.equal(result.errors.length, 0)
+})
 
 test("invalid config returns errors", () => {
   const result = validateConfig({
@@ -21,17 +21,17 @@ test("invalid config returns errors", () => {
         name: "n1",
         models: [],
         activeRuleId: "r1",
-        rules: []
-      }
-    ]
-  });
+        rules: [],
+      },
+    ],
+  })
 
-  assert.equal(result.valid, false);
-  assert.ok(result.errors.length > 0);
-});
+  assert.equal(result.valid, false)
+  assert.ok(result.errors.length > 0)
+})
 
 test("group active rule must exist", () => {
-  const cfg = getDefaultConfig();
+  const cfg = getDefaultConfig()
   cfg.groups = [
     {
       id: "g1",
@@ -46,21 +46,21 @@ test("group active rule must exist", () => {
           token: "t1",
           apiAddress: "https://api.example.com",
           defaultModel: "m1",
-          modelMappings: {}
-        }
-      ]
-    }
-  ];
-  const result = validateConfig(cfg);
-  assert.equal(result.valid, false);
-  assert.match(result.errors.join(" | "), /activeRuleId/);
-});
+          modelMappings: {},
+        },
+      ],
+    },
+  ]
+  const result = validateConfig(cfg)
+  assert.equal(result.valid, false)
+  assert.match(result.errors.join(" | "), /activeRuleId/)
+})
 
 test("ui settings must be valid", () => {
-  const cfg = getDefaultConfig();
-  cfg.ui.theme = "system";
+  const cfg = getDefaultConfig()
+  cfg.ui.theme = "system"
 
-  const result = validateConfig(cfg);
-  assert.equal(result.valid, false);
-  assert.match(result.errors.join(" | "), /ui.theme/);
-});
+  const result = validateConfig(cfg)
+  assert.equal(result.valid, false)
+  assert.match(result.errors.join(" | "), /ui.theme/)
+})

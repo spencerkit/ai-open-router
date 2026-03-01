@@ -1,1 +1,1 @@
-export { RuleCreatePage } from './RuleCreatePage';
+export { RuleCreatePage } from "./RuleCreatePage"

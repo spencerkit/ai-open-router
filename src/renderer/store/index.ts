@@ -2,4 +2,4 @@
  * Store Module Exports
  */
 
-export { useProxyStore, proxySelectors } from './proxyStore';
+export { proxySelectors, useProxyStore } from "./proxyStore"

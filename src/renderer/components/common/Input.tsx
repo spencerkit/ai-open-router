@@ -1,55 +1,56 @@
-import React from 'react';
-import styles from './Input.module.css';
+import React from "react"
+import styles from "./Input.module.css"
 
-export type InputSize = 'small' | 'medium' | 'large';
+export type InputSize = "small" | "medium" | "large"
 
-export type InputType = 'text' | 'password' | 'email' | 'number' | 'tel' | 'url';
+export type InputType = "text" | "password" | "email" | "number" | "tel" | "url"
 
-export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'type'> {
+export interface InputProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size" | "type"> {
   /**
    * Input type
    * @default 'text'
    */
-  type?: InputType;
+  type?: InputType
 
   /**
    * Input size
    * @default 'medium'
    */
-  size?: InputSize;
+  size?: InputSize
 
   /**
    * Label for the input
    */
-  label?: string;
+  label?: string
 
   /**
    * Hint text displayed below the input
    */
-  hint?: string;
+  hint?: string
 
   /**
    * Error message
    */
-  error?: string;
+  error?: string
 
   /**
    * Whether the input should take full width
    */
-  fullWidth?: boolean;
+  fullWidth?: boolean
 
   /**
    * Optional trailing content rendered inside the input row
    */
-  endAdornment?: React.ReactNode;
+  endAdornment?: React.ReactNode
 }
 
 /**
  * Input component with support for label, hint, and error states
  */
 export const Input: React.FC<InputProps> = ({
-  type = 'text',
-  size = 'medium',
+  type = "text",
+  size = "medium",
   label,
   hint,
   error,
@@ -60,21 +61,24 @@ export const Input: React.FC<InputProps> = ({
   id,
   ...props
 }) => {
-  const inputId = id || `input-${React.useId()}`;
-  const hintId = hint ? `${inputId}-hint` : undefined;
-  const errorId = error ? `${inputId}-error` : undefined;
+  const generatedId = React.useId()
+  const inputId = id || `input-${generatedId}`
+  const hintId = hint ? `${inputId}-hint` : undefined
+  const errorId = error ? `${inputId}-error` : undefined
 
   const inputClasses = [
     styles.base,
     endAdornment && styles.withEndAdornment,
-    size !== 'medium' && styles[size],
+    size !== "medium" && styles[size],
     error && styles.error,
     fullWidth && styles.fullWidth,
     className,
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(" ")
 
   return (
-    <div className={`${styles.wrapper} ${fullWidth ? styles.fullWidth : ''}`}>
+    <div className={`${styles.wrapper} ${fullWidth ? styles.fullWidth : ""}`}>
       {label && (
         <label htmlFor={inputId} className={styles.label}>
           {label}
@@ -87,15 +91,11 @@ export const Input: React.FC<InputProps> = ({
           type={type}
           className={inputClasses}
           disabled={disabled}
-          aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
+          aria-describedby={[hintId, errorId].filter(Boolean).join(" ") || undefined}
           aria-invalid={error ? true : undefined}
           {...props}
         />
-        {endAdornment && (
-          <div className={styles.endAdornment}>
-            {endAdornment}
-          </div>
-        )}
+        {endAdornment && <div className={styles.endAdornment}>{endAdornment}</div>}
       </div>
 
       {error && (
@@ -110,7 +110,7 @@ export const Input: React.FC<InputProps> = ({
         </p>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default Input;
+export default Input

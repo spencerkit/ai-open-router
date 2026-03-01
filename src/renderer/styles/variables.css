@@ -3,49 +3,49 @@
  * Light + Dark theme variables
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
   /* ── Palette ── */
-  --copper: #B87333;
-  --copper-light: #D4956A;
-  --copper-dark: #8F5A28;
+  --copper: #b87333;
+  --copper-light: #d4956a;
+  --copper-dark: #8f5a28;
   --copper-glow: rgba(184, 115, 51, 0.15);
   --copper-glow-strong: rgba(184, 115, 51, 0.25);
 
-  --emerald: #2D8B6F;
-  --ruby: #C0392B;
-  --ruby-soft: #E74C3C;
-  --amber: #D4A017;
+  --emerald: #2d8b6f;
+  --ruby: #c0392b;
+  --ruby-soft: #e74c3c;
+  --amber: #d4a017;
 
   /* ── Light Theme ── */
-  --bg-base: #F5F3EF;
-  --bg-raised: #FFFFFF;
-  --bg-sunken: #EDE9E3;
+  --bg-base: #f5f3ef;
+  --bg-raised: #ffffff;
+  --bg-sunken: #ede9e3;
   --bg-overlay: rgba(245, 243, 239, 0.92);
 
-  --text-primary: #2D3142;
-  --text-secondary: #6B7280;
-  --text-tertiary: #9CA3AF;
-  --text-inverse: #FFFFFF;
+  --text-primary: #2d3142;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --text-inverse: #ffffff;
 
-  --border: #E0DCD6;
-  --border-strong: #C8C2B8;
+  --border: #e0dcd6;
+  --border-strong: #c8c2b8;
   --border-focus: var(--copper);
 
-  --surface: #FFFFFF;
-  --surface-hover: #FAF8F5;
-  --surface-active: #F0EDE8;
+  --surface: #ffffff;
+  --surface-hover: #faf8f5;
+  --surface-active: #f0ede8;
   --surface-selected: rgba(184, 115, 51, 0.08);
 
   --accent: var(--copper);
   --accent-hover: var(--copper-dark);
-  --accent-text: #FFFFFF;
+  --accent-text: #ffffff;
   --accent-subtle: var(--copper-glow);
 
   --success: var(--emerald);
   --danger: var(--ruby);
-  --danger-hover: #A93226;
+  --danger-hover: #a93226;
   --warning: var(--amber);
 
   --shadow-sm: 0 1px 2px rgba(45, 49, 66, 0.05);
@@ -55,17 +55,17 @@
 
   --modal-backdrop: rgba(45, 49, 66, 0.5);
 
-  --toast-bg: #2D3142;
-  --toast-text: #FFFFFF;
+  --toast-bg: #2d3142;
+  --toast-text: #ffffff;
 
   --scrollbar-track: transparent;
   --scrollbar-thumb: var(--border);
   --scrollbar-thumb-hover: var(--border-strong);
 
   /* ── Typography ── */
-  --font-display: 'Fraunces', 'Georgia', serif;
-  --font-body: 'Outfit', 'Noto Sans SC', 'PingFang SC', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-body: "Outfit", "Noto Sans SC", "PingFang SC", sans-serif;
+  --font-mono: "JetBrains Mono", "Consolas", monospace;
 
   --text-xs: 11px;
   --text-sm: 12px;
@@ -118,35 +118,35 @@
 }
 
 /* ── Dark Theme ── */
-[data-theme='dark'] {
-  --bg-base: #1A1A1E;
-  --bg-raised: #2A2A2E;
+[data-theme="dark"] {
+  --bg-base: #1a1a1e;
+  --bg-raised: #2a2a2e;
   --bg-sunken: #141416;
   --bg-overlay: rgba(26, 26, 30, 0.95);
 
-  --text-primary: #E8E4DD;
-  --text-secondary: #9B9589;
-  --text-tertiary: #6B665E;
-  --text-inverse: #1A1A1E;
+  --text-primary: #e8e4dd;
+  --text-secondary: #9b9589;
+  --text-tertiary: #6b665e;
+  --text-inverse: #1a1a1e;
 
-  --border: #3A3A3E;
-  --border-strong: #4A4A4E;
+  --border: #3a3a3e;
+  --border-strong: #4a4a4e;
   --border-focus: var(--copper-light);
 
-  --surface: #2A2A2E;
+  --surface: #2a2a2e;
   --surface-hover: #323236;
-  --surface-active: #3A3A3E;
+  --surface-active: #3a3a3e;
   --surface-selected: rgba(212, 149, 106, 0.1);
 
   --accent: var(--copper-light);
-  --accent-hover: #E0A87A;
-  --accent-text: #1A1A1E;
+  --accent-hover: #e0a87a;
+  --accent-text: #1a1a1e;
   --accent-subtle: rgba(212, 149, 106, 0.12);
 
-  --success: #3DA87D;
-  --danger: #E74C3C;
-  --danger-hover: #C0392B;
-  --warning: #E8B84D;
+  --success: #3da87d;
+  --danger: #e74c3c;
+  --danger-hover: #c0392b;
+  --warning: #e8b84d;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -155,9 +155,9 @@
 
   --modal-backdrop: rgba(0, 0, 0, 0.6);
 
-  --toast-bg: #E8E4DD;
-  --toast-text: #1A1A1E;
+  --toast-bg: #e8e4dd;
+  --toast-text: #1a1a1e;
 
-  --scrollbar-thumb: #3A3A3E;
-  --scrollbar-thumb-hover: #4A4A4E;
+  --scrollbar-thumb: #3a3a3e;
+  --scrollbar-thumb-hover: #4a4a4e;
 }

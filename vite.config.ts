@@ -1,13 +1,13 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import electron from 'vite-plugin-electron';
-import path from 'path';
+import path from "node:path"
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
+import electron from "vite-plugin-electron"
 
-const rootDir = __dirname;
+const rootDir = __dirname
 
 export default defineConfig({
-  base: './',
-  root: 'src/renderer',
+  base: "./",
+  root: "src/renderer",
   server: {
     port: 5173,
   },
@@ -15,29 +15,29 @@ export default defineConfig({
     react(),
     electron([
       {
-        entry: path.join(rootDir, 'src/main/main.ts'),
+        entry: path.join(rootDir, "src/main/main.ts"),
         onstart(options) {
-          options.startup();
+          options.startup()
         },
         vite: {
           build: {
-            outDir: path.join(rootDir, 'out/main'),
+            outDir: path.join(rootDir, "out/main"),
             rollupOptions: {
-              external: ['electron'],
+              external: ["electron"],
             },
           },
         },
       },
       {
-        entry: path.join(rootDir, 'src/main/preload.ts'),
+        entry: path.join(rootDir, "src/main/preload.ts"),
         onstart(options) {
-          options.reload();
+          options.reload()
         },
         vite: {
           build: {
-            outDir: path.join(rootDir, 'out/preload'),
+            outDir: path.join(rootDir, "out/preload"),
             rollupOptions: {
-              external: ['electron'],
+              external: ["electron"],
             },
           },
         },
@@ -45,17 +45,17 @@ export default defineConfig({
     ]),
   ],
   build: {
-    outDir: path.join(rootDir, 'out/renderer'),
+    outDir: path.join(rootDir, "out/renderer"),
     emptyOutDir: true,
   },
   resolve: {
     alias: {
-      '@': path.resolve(rootDir, 'src/renderer'),
-      '@/types': path.resolve(rootDir, 'src/renderer/types'),
-      '@/utils': path.resolve(rootDir, 'src/renderer/utils'),
-      '@/store': path.resolve(rootDir, 'src/renderer/store'),
-      '@/i18n': path.resolve(rootDir, 'src/renderer/i18n'),
-      '@/contexts': path.resolve(rootDir, 'src/renderer/contexts'),
+      "@": path.resolve(rootDir, "src/renderer"),
+      "@/types": path.resolve(rootDir, "src/renderer/types"),
+      "@/utils": path.resolve(rootDir, "src/renderer/utils"),
+      "@/store": path.resolve(rootDir, "src/renderer/store"),
+      "@/i18n": path.resolve(rootDir, "src/renderer/i18n"),
+      "@/contexts": path.resolve(rootDir, "src/renderer/contexts"),
     },
   },
-});
+})

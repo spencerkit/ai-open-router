@@ -89,10 +89,18 @@
 }
 
 /* Types */
-.success .icon { color: var(--success); }
-.error .icon { color: var(--danger); }
-.warning .icon { color: var(--warning); }
-.info .icon { color: var(--copper-light); }
+.success .icon {
+  color: var(--success);
+}
+.error .icon {
+  color: var(--danger);
+}
+.warning .icon {
+  color: var(--warning);
+}
+.info .icon {
+  color: var(--copper-light);
+}
 
 @keyframes toastIn {
   from {
@@ -106,6 +114,10 @@
 }
 
 @keyframes progress {
-  from { width: 100%; }
-  to { width: 0%; }
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
 }

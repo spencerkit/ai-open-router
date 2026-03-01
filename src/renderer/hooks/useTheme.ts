@@ -5,22 +5,22 @@
  * Provides theme selector, setTheme action, and effect to apply theme to document.
  */
 
-import { useEffect } from 'react';
+import { useEffect } from "react"
 
 /**
  * Theme type
  */
-export type Theme = 'light' | 'dark' | 'system';
+export type Theme = "light" | "dark" | "system"
 
 /**
  * Local storage key for theme preference
  */
-const THEME_STORAGE_KEY = 'oc-proxy-theme';
+const THEME_STORAGE_KEY = "oc-proxy-theme"
 
 /**
  * Default theme
  */
-const DEFAULT_THEME: Theme = 'system';
+const DEFAULT_THEME: Theme = "system"
 
 /**
  * Get the initial theme from local storage or default
@@ -29,14 +29,14 @@ const DEFAULT_THEME: Theme = 'system';
  */
 function getInitialTheme(): Theme {
   try {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark' || stored === 'system') {
-      return stored;
+    const stored = localStorage.getItem(THEME_STORAGE_KEY)
+    if (stored === "light" || stored === "dark" || stored === "system") {
+      return stored
     }
   } catch {
     // Ignore localStorage errors (e.g., in restricted environments)
   }
-  return DEFAULT_THEME;
+  return DEFAULT_THEME
 }
 
 /**
@@ -45,15 +45,15 @@ function getInitialTheme(): Theme {
  * @param theme - The theme preference
  * @returns The effective theme ('light' or 'dark')
  */
-export function getEffectiveTheme(theme: Theme): 'light' | 'dark' {
-  if (theme === 'system') {
+export function getEffectiveTheme(theme: Theme): "light" | "dark" {
+  if (theme === "system") {
     // Check system preference via window.matchMedia
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
+    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+      return "dark"
     }
-    return 'light';
+    return "light"
   }
-  return theme;
+  return theme
 }
 
 /**
@@ -63,17 +63,17 @@ export function getEffectiveTheme(theme: Theme): 'light' | 'dark' {
  * @param theme - The theme to apply
  */
 export function applyThemeToDocument(theme: Theme): void {
-  const effectiveTheme = getEffectiveTheme(theme);
-  const documentElement = document.documentElement;
+  const effectiveTheme = getEffectiveTheme(theme)
+  const documentElement = document.documentElement
 
-  if (effectiveTheme === 'dark') {
-    documentElement.classList.add('dark');
+  if (effectiveTheme === "dark") {
+    documentElement.classList.add("dark")
   } else {
-    documentElement.classList.remove('dark');
+    documentElement.classList.remove("dark")
   }
 
   // Set CSS custom property for potential styling
-  documentElement.style.setProperty('--color-scheme', effectiveTheme);
+  documentElement.style.setProperty("--color-scheme", effectiveTheme)
 }
 
 /**
@@ -83,7 +83,7 @@ export function applyThemeToDocument(theme: Theme): void {
  */
 function saveTheme(theme: Theme): void {
   try {
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    localStorage.setItem(THEME_STORAGE_KEY, theme)
   } catch {
     // Ignore localStorage errors
   }
@@ -92,12 +92,12 @@ function saveTheme(theme: Theme): void {
 /**
  * Current theme state (singleton)
  */
-let currentTheme: Theme = getInitialTheme();
+let currentTheme: Theme = getInitialTheme()
 
 /**
  * Apply initial theme on load
  */
-applyThemeToDocument(currentTheme);
+applyThemeToDocument(currentTheme)
 
 /**
  * Set the current theme and apply it to the document
@@ -105,9 +105,9 @@ applyThemeToDocument(currentTheme);
  * @param theme - The theme to set
  */
 export function setTheme(theme: Theme): void {
-  currentTheme = theme;
-  saveTheme(theme);
-  applyThemeToDocument(theme);
+  currentTheme = theme
+  saveTheme(theme)
+  applyThemeToDocument(theme)
 }
 
 /**
@@ -116,7 +116,7 @@ export function setTheme(theme: Theme): void {
  * @returns The current theme
  */
 export function getTheme(): Theme {
-  return currentTheme;
+  return currentTheme
 }
 
 /**
@@ -137,18 +137,18 @@ export function getTheme(): Theme {
  * }
  */
 export function useTheme() {
-  const isDark = getEffectiveTheme(currentTheme) === 'dark';
+  const isDark = getEffectiveTheme(currentTheme) === "dark"
 
   // Apply theme whenever it changes
   useEffect(() => {
-    applyThemeToDocument(currentTheme);
-  }, [currentTheme]);
+    applyThemeToDocument(currentTheme)
+  }, [])
 
   return {
     theme: currentTheme,
     setTheme,
     isDark,
-  };
+  }
 }
 
 /**
@@ -162,7 +162,7 @@ export function useTheme() {
  * const bgColor = theme === 'dark' ? '#1a1a1a' : '#ffffff';
  */
 export function useThemeValue(): Theme {
-  return currentTheme;
+  return currentTheme
 }
 
 /**
@@ -177,7 +177,7 @@ export function useThemeValue(): Theme {
  * return <div style={{ background: isDark ? '#333' : '#fff' }} />;
  */
 export function useIsDarkMode(): boolean {
-  return getEffectiveTheme(currentTheme) === 'dark';
+  return getEffectiveTheme(currentTheme) === "dark"
 }
 
 /**
@@ -194,29 +194,29 @@ export function useIsDarkMode(): boolean {
 export function useSystemThemeListener() {
   useEffect(() => {
     // Only listen if theme is set to 'system'
-    if (currentTheme !== 'system') {
-      return;
+    if (currentTheme !== "system") {
+      return
     }
 
     // Check for matchMedia support
     if (!window.matchMedia) {
-      return;
+      return
     }
 
     // Create media query listener
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
 
     // Define change handler
     const handleChange = () => {
-      applyThemeToDocument(currentTheme);
-    };
+      applyThemeToDocument(currentTheme)
+    }
 
     // Add listener
-    mediaQuery.addEventListener('change', handleChange);
+    mediaQuery.addEventListener("change", handleChange)
 
     // Cleanup
     return () => {
-      mediaQuery.removeEventListener('change', handleChange);
-    };
-  }, []);
+      mediaQuery.removeEventListener("change", handleChange)
+    }
+  }, [])
 }

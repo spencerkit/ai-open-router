@@ -1,1 +1,1 @@
-export { RuleEditPage } from './RuleEditPage';
+export { RuleEditPage } from "./RuleEditPage"

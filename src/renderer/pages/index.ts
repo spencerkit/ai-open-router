@@ -1,7 +1,7 @@
-export { ServicePage } from './ServicePage';
-export { SettingsPage } from './SettingsPage';
-export { LogsPage } from './LogsPage';
-export { LogDetailPage } from './LogDetailPage';
-export { RuleEditPage } from './RuleEditPage';
-export { RuleCreatePage } from './RuleCreatePage';
-export { GroupEditPage } from './GroupEditPage';
+export { GroupEditPage } from "./GroupEditPage"
+export { LogDetailPage } from "./LogDetailPage"
+export { LogsPage } from "./LogsPage"
+export { RuleCreatePage } from "./RuleCreatePage"
+export { RuleEditPage } from "./RuleEditPage"
+export { ServicePage } from "./ServicePage"
+export { SettingsPage } from "./SettingsPage"

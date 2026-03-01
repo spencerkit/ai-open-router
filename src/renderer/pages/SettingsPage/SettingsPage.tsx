@@ -1,21 +1,31 @@
-import React, { useEffect, useState } from 'react';
-import { useProxyStore } from '@/store';
-import { Button, Input, Modal, Switch } from '@/components';
-import { useTranslation, useLogs } from '@/hooks';
-import { ipc } from '@/utils/ipc';
-import type { AppInfo, CompatConfig, LocaleCode, LocaleMode, ProxyConfig, ServerConfig, ThemeMode, UIConfig } from '@/types';
-import { normalizeLocaleMode, resolveEffectiveLocale } from '@/utils/locale';
-import styles from './SettingsPage.module.css';
+import type React from "react"
+import { useEffect, useState } from "react"
+import { Button, Input, Modal, Switch } from "@/components"
+import { useLogs, useTranslation } from "@/hooks"
+import { useProxyStore } from "@/store"
+import type {
+  AppInfo,
+  CompatConfig,
+  LocaleCode,
+  LocaleMode,
+  ProxyConfig,
+  ServerConfig,
+  ThemeMode,
+  UIConfig,
+} from "@/types"
+import { ipc } from "@/utils/ipc"
+import { normalizeLocaleMode, resolveEffectiveLocale } from "@/utils/locale"
+import styles from "./SettingsPage.module.css"
 
-type ImportSource = 'file' | 'clipboard';
-type ExportTarget = 'folder' | 'clipboard';
+type ImportSource = "file" | "clipboard"
+type ExportTarget = "folder" | "clipboard"
 
 /**
  * SettingsPage Component
  * Service settings configuration page
  */
 export const SettingsPage: React.FC = () => {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   const {
     config,
     saveConfig,
@@ -24,287 +34,280 @@ export const SettingsPage: React.FC = () => {
     importGroupsBackup,
     importGroupsFromJson,
     readClipboardText,
-    loading
-  } = useProxyStore();
-  const { showToast } = useLogs();
+    loading,
+  } = useProxyStore()
+  const { showToast } = useLogs()
 
-  const [host, setHost] = useState('');
-  const [portText, setPortText] = useState('8080');
-  const [strictMode, setStrictMode] = useState(false);
-  const [launchOnStartup, setLaunchOnStartup] = useState(false);
-  const [closeToTray, setCloseToTray] = useState(true);
-  const [theme, setTheme] = useState<ThemeMode>('light');
-  const [locale, setLocale] = useState<LocaleCode>('en-US');
-  const [localeMode, setLocaleMode] = useState<LocaleMode>('auto');
-  const [portError, setPortError] = useState('');
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showAboutModal, setShowAboutModal] = useState(false);
-  const [importSource, setImportSource] = useState<ImportSource>('file');
-  const [exportTarget, setExportTarget] = useState<ExportTarget>('folder');
-  const [importJsonText, setImportJsonText] = useState('');
-  const [readingClipboard, setReadingClipboard] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [aboutLoading, setAboutLoading] = useState(false);
-  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [portText, setPortText] = useState("8080")
+  const [strictMode, setStrictMode] = useState(false)
+  const [launchOnStartup, setLaunchOnStartup] = useState(false)
+  const [closeToTray, setCloseToTray] = useState(true)
+  const [theme, setTheme] = useState<ThemeMode>("light")
+  const [locale, setLocale] = useState<LocaleCode>("en-US")
+  const [localeMode, setLocaleMode] = useState<LocaleMode>("auto")
+  const [portError, setPortError] = useState("")
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [showAboutModal, setShowAboutModal] = useState(false)
+  const [importSource, setImportSource] = useState<ImportSource>("file")
+  const [exportTarget, setExportTarget] = useState<ExportTarget>("folder")
+  const [importJsonText, setImportJsonText] = useState("")
+  const [readingClipboard, setReadingClipboard] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [aboutLoading, setAboutLoading] = useState(false)
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
 
   // Load initial values from config
   useEffect(() => {
     if (config) {
-      setHost(config.server.host);
-      setPortText(String(config.server.port));
-      setStrictMode(config.compat.strictMode);
-      setLaunchOnStartup(config.ui.launchOnStartup);
-      setCloseToTray(config.ui.closeToTray ?? true);
-      setTheme(config.ui.theme);
-      setLocale(resolveEffectiveLocale({
-        locale: config.ui.locale,
-        localeMode: config.ui.localeMode,
-        systemLanguage: navigator.language,
-      }));
-      setLocaleMode(normalizeLocaleMode(config.ui.localeMode, config.ui.locale));
+      setPortText(String(config.server.port))
+      setStrictMode(config.compat.strictMode)
+      setLaunchOnStartup(config.ui.launchOnStartup)
+      setCloseToTray(config.ui.closeToTray ?? true)
+      setTheme(config.ui.theme)
+      setLocale(
+        resolveEffectiveLocale({
+          locale: config.ui.locale,
+          localeMode: config.ui.localeMode,
+          systemLanguage: navigator.language,
+        })
+      )
+      setLocaleMode(normalizeLocaleMode(config.ui.localeMode, config.ui.locale))
     }
-  }, [config]);
+  }, [config])
 
   const validatePort = (value: string): boolean => {
     if (!/^\d+$/.test(value)) {
-      setPortError(t('settings.portError'));
-      return false;
+      setPortError(t("settings.portError"))
+      return false
     }
 
-    const parsed = Number(value);
+    const parsed = Number(value)
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-      setPortError(t('settings.portError'));
-      return false;
+      setPortError(t("settings.portError"))
+      return false
     }
 
-    setPortError('');
-    return true;
-  };
+    setPortError("")
+    return true
+  }
 
   const handlePortChange = (value: string) => {
-    setPortText(value);
-    validatePort(value);
-  };
+    setPortText(value)
+    validatePort(value)
+  }
 
   const focusInput = (id: string) => {
-    const input = document.getElementById(id) as HTMLInputElement | null;
-    input?.focus();
-  };
+    const input = document.getElementById(id) as HTMLInputElement | null
+    input?.focus()
+  }
 
-  const parsedPort = /^\d+$/.test(portText) ? Number(portText) : NaN;
-  const normalizedHost = host.trim();
-  const savedLocale = config ? resolveEffectiveLocale({
-    locale: config.ui.locale,
-    localeMode: config.ui.localeMode,
-    systemLanguage: navigator.language,
-  }) : 'en-US';
-  const savedLocaleMode = config ? normalizeLocaleMode(config.ui.localeMode, config.ui.locale) : 'auto';
+  const parsedPort = /^\d+$/.test(portText) ? Number(portText) : NaN
+  const savedLocale = config
+    ? resolveEffectiveLocale({
+        locale: config.ui.locale,
+        localeMode: config.ui.localeMode,
+        systemLanguage: navigator.language,
+      })
+    : "en-US"
+  const savedLocaleMode = config
+    ? normalizeLocaleMode(config.ui.localeMode, config.ui.locale)
+    : "auto"
 
   const hasChanges = Boolean(
-    config
-    && (
-      host !== config.server.host
-      || String(config.server.port) !== portText
-      || strictMode !== config.compat.strictMode
-      || launchOnStartup !== config.ui.launchOnStartup
-      || closeToTray !== (config.ui.closeToTray ?? true)
-      || theme !== config.ui.theme
-      || locale !== savedLocale
-      || localeMode !== savedLocaleMode
-    )
-  );
+    config &&
+      (String(config.server.port) !== portText ||
+        strictMode !== config.compat.strictMode ||
+        launchOnStartup !== config.ui.launchOnStartup ||
+        closeToTray !== (config.ui.closeToTray ?? true) ||
+        theme !== config.ui.theme ||
+        locale !== savedLocale ||
+        localeMode !== savedLocaleMode)
+  )
 
-  const canSave = !loading && hasChanges && !portError && Number.isInteger(parsedPort);
+  const canSave = !loading && hasChanges && !portError && Number.isInteger(parsedPort)
 
   const handleSave = async () => {
-    if (!config) return;
+    if (!config) return
     if (!validatePort(portText)) {
-      focusInput('port');
-      return;
+      focusInput("port")
+      return
     }
 
-    const port = Number(portText);
+    const port = Number(portText)
     const newServerConfig: ServerConfig = {
-      host: normalizedHost || config.server.host,
+      host: "0.0.0.0",
       port,
       authEnabled: config.server.authEnabled ?? false,
-      localBearerToken: config.server.localBearerToken ?? '',
-    };
+      localBearerToken: config.server.localBearerToken ?? "",
+    }
 
     const newCompatConfig: CompatConfig = {
       strictMode,
-    };
+    }
 
     const newUIConfig: UIConfig = {
       launchOnStartup,
       closeToTray,
       theme,
-      locale: localeMode === 'manual'
-        ? locale
-        : (config.ui.locale === 'zh-CN' ? 'zh-CN' : 'en-US'),
+      locale: localeMode === "manual" ? locale : config.ui.locale === "zh-CN" ? "zh-CN" : "en-US",
       localeMode,
-    };
+    }
 
     const newConfig: ProxyConfig = {
       ...config,
       server: newServerConfig,
       compat: newCompatConfig,
       ui: newUIConfig,
-    };
+    }
 
     try {
-      await saveConfig(newConfig);
-      showToast(t('settings.saveSuccess'), 'success');
+      await saveConfig(newConfig)
+      showToast(t("settings.saveSuccess"), "success")
     } catch (error) {
-      showToast(t('errors.saveFailed', { message: String(error) }), 'error');
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
     }
-  };
+  }
 
   const handleExportGroups = async () => {
-    setExportTarget('folder');
-    setShowExportModal(true);
-  };
+    setExportTarget("folder")
+    setShowExportModal(true)
+  }
 
   const closeExportModal = () => {
-    if (exporting) return;
-    setShowExportModal(false);
-  };
+    if (exporting) return
+    setShowExportModal(false)
+  }
 
   const handleConfirmExport = async () => {
     try {
-      setExporting(true);
-      if (exportTarget === 'folder') {
-        const result = await exportGroupsToFolder();
+      setExporting(true)
+      if (exportTarget === "folder") {
+        const result = await exportGroupsToFolder()
         if (!result.canceled) {
-          showToast(t('settings.backupExportFolderSuccess', { count: result.groupCount }), 'success');
+          showToast(
+            t("settings.backupExportFolderSuccess", { count: result.groupCount }),
+            "success"
+          )
         }
       } else {
-        const result = await exportGroupsToClipboard();
+        const result = await exportGroupsToClipboard()
         if (!result.canceled) {
-          showToast(t('settings.backupExportClipboardSuccess', { count: result.groupCount }), 'success');
+          showToast(
+            t("settings.backupExportClipboardSuccess", { count: result.groupCount }),
+            "success"
+          )
         }
       }
 
-      setShowExportModal(false);
+      setShowExportModal(false)
     } catch (error) {
-      showToast(t('errors.operationFailed', { message: String(error) }), 'error');
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
     } finally {
-      setExporting(false);
+      setExporting(false)
     }
-  };
+  }
 
   const handleImportGroups = async () => {
-    setImportSource('file');
-    setShowImportModal(true);
-  };
+    setImportSource("file")
+    setShowImportModal(true)
+  }
 
   const closeImportModal = () => {
-    setShowImportModal(false);
-  };
+    setShowImportModal(false)
+  }
 
   const handleReadClipboard = async () => {
     try {
-      setReadingClipboard(true);
-      const result = await readClipboardText();
-      setImportJsonText(result.text || '');
+      setReadingClipboard(true)
+      const result = await readClipboardText()
+      setImportJsonText(result.text || "")
     } catch (error) {
-      showToast(t('errors.operationFailed', { message: String(error) }), 'error');
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
     } finally {
-      setReadingClipboard(false);
+      setReadingClipboard(false)
     }
-  };
+  }
 
   const handleConfirmImport = async () => {
     try {
-      const result = importSource === 'file'
-        ? await importGroupsBackup()
-        : await importGroupsFromJson(importJsonText);
+      const result =
+        importSource === "file"
+          ? await importGroupsBackup()
+          : await importGroupsFromJson(importJsonText)
 
       if (!result.canceled) {
-        showToast(t('settings.backupImportSuccess', { count: result.importedGroupCount || 0 }), 'success');
+        showToast(
+          t("settings.backupImportSuccess", { count: result.importedGroupCount || 0 }),
+          "success"
+        )
       }
-      closeImportModal();
+      closeImportModal()
     } catch (error) {
-      showToast(t('errors.operationFailed', { message: String(error) }), 'error');
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
     }
-  };
+  }
 
-  const canConfirmImport = importSource === 'file' || importJsonText.trim().length > 0;
+  const canConfirmImport = importSource === "file" || importJsonText.trim().length > 0
 
   const handleOpenAbout = async () => {
-    setShowAboutModal(true);
-    if (appInfo) return;
+    setShowAboutModal(true)
+    if (appInfo) return
 
     try {
-      setAboutLoading(true);
-      const info = await ipc.getAppInfo();
-      setAppInfo(info);
+      setAboutLoading(true)
+      const info = await ipc.getAppInfo()
+      setAppInfo(info)
     } catch (error) {
-      showToast(t('errors.operationFailed', { message: String(error) }), 'error');
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
     } finally {
-      setAboutLoading(false);
+      setAboutLoading(false)
     }
-  };
+  }
 
   return (
     <div className={styles.settingsPage}>
       <div className={styles.header}>
-        <h2>{t('settings.title')}</h2>
-        <p className={styles.subtitle}>{t('settings.subtitle')}</p>
+        <h2>{t("settings.title")}</h2>
+        <p className={styles.subtitle}>{t("settings.subtitle")}</p>
       </div>
 
       <div className={styles.layout}>
         <div className={styles.form}>
           <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>{t('settings.networkSection')}</h3>
+            <h3 className={styles.sectionTitle}>{t("settings.networkSection")}</h3>
 
             <div className={styles.formGroup}>
-              <label htmlFor="host">{t('settings.listenHost')}</label>
-              <Input
-                id="host"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder="0.0.0.0"
-                hint={t('settings.hostHint')}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label htmlFor="port">{t('settings.servicePort')}</label>
+              <label htmlFor="port">{t("settings.servicePort")}</label>
               <Input
                 id="port"
                 type="number"
                 value={portText}
-                onChange={(e) => handlePortChange(e.target.value)}
+                onChange={e => handlePortChange(e.target.value)}
                 placeholder="8080"
                 min={1}
                 max={65535}
-                hint={!portError ? t('settings.portHint') : undefined}
+                hint={!portError ? t("settings.portHint") : undefined}
                 error={portError || undefined}
               />
             </div>
           </div>
 
           <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>{t('settings.behaviorSection')}</h3>
+            <h3 className={styles.sectionTitle}>{t("settings.behaviorSection")}</h3>
 
             <div className={styles.formGroupSwitch}>
               <div className={styles.switchLabel}>
-                <label htmlFor="strictMode">{t('settings.strictMode')}</label>
-                <p>{t('settings.strictModeHint')}</p>
+                <label htmlFor="strictMode">{t("settings.strictMode")}</label>
+                <p>{t("settings.strictModeHint")}</p>
               </div>
-              <Switch
-                id="strictMode"
-                checked={strictMode}
-                onChange={setStrictMode}
-              />
+              <Switch id="strictMode" checked={strictMode} onChange={setStrictMode} />
             </div>
 
             <div className={styles.formGroupSwitch}>
               <div className={styles.switchLabel}>
-                <label htmlFor="launchOnStartup">{t('settings.launchOnStartup')}</label>
-                <p>{t('settings.launchOnStartupHint')}</p>
+                <label htmlFor="launchOnStartup">{t("settings.launchOnStartup")}</label>
+                <p>{t("settings.launchOnStartupHint")}</p>
               </div>
               <Switch
                 id="launchOnStartup"
@@ -315,135 +318,126 @@ export const SettingsPage: React.FC = () => {
 
             <div className={styles.formGroupSwitch}>
               <div className={styles.switchLabel}>
-                <label htmlFor="closeToTray">{t('settings.closeToTray')}</label>
-                <p>{t('settings.closeToTrayHint')}</p>
+                <label htmlFor="closeToTray">{t("settings.closeToTray")}</label>
+                <p>{t("settings.closeToTrayHint")}</p>
               </div>
-              <Switch
-                id="closeToTray"
-                checked={closeToTray}
-                onChange={setCloseToTray}
-              />
+              <Switch id="closeToTray" checked={closeToTray} onChange={setCloseToTray} />
             </div>
           </div>
 
           <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>{t('settings.interfaceSection')}</h3>
+            <h3 className={styles.sectionTitle}>{t("settings.interfaceSection")}</h3>
 
             <div className={styles.formGroup}>
-              <label>{t('settings.theme')}</label>
-              <div className={styles.choiceGroup} role="radiogroup" aria-label={t('settings.theme')}>
+              <label htmlFor="settings-theme-light">{t("settings.theme")}</label>
+              <div className={styles.choiceGroup}>
                 <button
+                  id="settings-theme-light"
                   type="button"
-                  role="radio"
-                  aria-checked={theme === 'light'}
-                  className={`${styles.choiceButton} ${theme === 'light' ? styles.choiceButtonActive : ''}`}
-                  onClick={() => setTheme('light' as ThemeMode)}
+                  aria-pressed={theme === "light"}
+                  className={`${styles.choiceButton} ${theme === "light" ? styles.choiceButtonActive : ""}`}
+                  onClick={() => setTheme("light" as ThemeMode)}
                 >
-                  <span className={styles.choiceTitle}>{t('settings.themeLight')}</span>
+                  <span className={styles.choiceTitle}>{t("settings.themeLight")}</span>
                   <span className={styles.choiceValue}>LIGHT</span>
                 </button>
                 <button
                   type="button"
-                  role="radio"
-                  aria-checked={theme === 'dark'}
-                  className={`${styles.choiceButton} ${theme === 'dark' ? styles.choiceButtonActive : ''}`}
-                  onClick={() => setTheme('dark' as ThemeMode)}
+                  aria-pressed={theme === "dark"}
+                  className={`${styles.choiceButton} ${theme === "dark" ? styles.choiceButtonActive : ""}`}
+                  onClick={() => setTheme("dark" as ThemeMode)}
                 >
-                  <span className={styles.choiceTitle}>{t('settings.themeDark')}</span>
+                  <span className={styles.choiceTitle}>{t("settings.themeDark")}</span>
                   <span className={styles.choiceValue}>DARK</span>
                 </button>
               </div>
-              <p className={styles.fieldHint}>{t('settings.themeHint')}</p>
+              <p className={styles.fieldHint}>{t("settings.themeHint")}</p>
             </div>
 
             <div className={styles.formGroup}>
-              <label>{t('settings.language')}</label>
-              <div className={styles.choiceGroup} role="radiogroup" aria-label={t('settings.language')}>
+              <label htmlFor="settings-language-en">{t("settings.language")}</label>
+              <div className={styles.choiceGroup}>
                 <button
+                  id="settings-language-en"
                   type="button"
-                  role="radio"
-                  aria-checked={locale === 'en-US'}
-                  className={`${styles.choiceButton} ${locale === 'en-US' ? styles.choiceButtonActive : ''}`}
+                  aria-pressed={locale === "en-US"}
+                  className={`${styles.choiceButton} ${locale === "en-US" ? styles.choiceButtonActive : ""}`}
                   onClick={() => {
-                    setLocale('en-US' as LocaleCode);
-                    setLocaleMode('manual');
+                    setLocale("en-US" as LocaleCode)
+                    setLocaleMode("manual")
                   }}
                 >
-                  <span className={styles.choiceTitle}>{t('settings.languageEnglish')}</span>
+                  <span className={styles.choiceTitle}>{t("settings.languageEnglish")}</span>
                   <span className={styles.choiceValue}>EN-US</span>
                 </button>
                 <button
                   type="button"
-                  role="radio"
-                  aria-checked={locale === 'zh-CN'}
-                  className={`${styles.choiceButton} ${locale === 'zh-CN' ? styles.choiceButtonActive : ''}`}
+                  aria-pressed={locale === "zh-CN"}
+                  className={`${styles.choiceButton} ${locale === "zh-CN" ? styles.choiceButtonActive : ""}`}
                   onClick={() => {
-                    setLocale('zh-CN' as LocaleCode);
-                    setLocaleMode('manual');
+                    setLocale("zh-CN" as LocaleCode)
+                    setLocaleMode("manual")
                   }}
                 >
-                  <span className={styles.choiceTitle}>{t('settings.languageChinese')}</span>
+                  <span className={styles.choiceTitle}>{t("settings.languageChinese")}</span>
                   <span className={styles.choiceValue}>ZH-CN</span>
                 </button>
               </div>
-              <p className={styles.fieldHint}>{t('settings.languageHint')}</p>
+              <p className={styles.fieldHint}>{t("settings.languageHint")}</p>
             </div>
           </div>
 
           <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>{t('settings.backupSection')}</h3>
+            <h3 className={styles.sectionTitle}>{t("settings.backupSection")}</h3>
 
             <div className={styles.formGroup}>
-              <label>{t('settings.backupTitle')}</label>
+              <label htmlFor="settings-backup-export">{t("settings.backupTitle")}</label>
               <div className={styles.backupActions}>
                 <Button
+                  id="settings-backup-export"
                   variant="default"
                   onClick={handleExportGroups}
                   disabled={loading || exporting}
                 >
-                  {t('settings.backupExport')}
+                  {t("settings.backupExport")}
                 </Button>
                 <Button
                   variant="default"
                   onClick={handleImportGroups}
                   disabled={loading || exporting}
                 >
-                  {t('settings.backupImport')}
+                  {t("settings.backupImport")}
                 </Button>
               </div>
-              <p className={styles.fieldHint}>{t('settings.backupHint')}</p>
+              <p className={styles.fieldHint}>{t("settings.backupHint")}</p>
             </div>
           </div>
 
           <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>{t('settings.aboutSection')}</h3>
+            <h3 className={styles.sectionTitle}>{t("settings.aboutSection")}</h3>
 
             <div className={styles.formGroup}>
-              <label>{t('settings.aboutTitle')}</label>
+              <label htmlFor="settings-open-about">{t("settings.aboutTitle")}</label>
               <div className={styles.backupActions}>
                 <Button
+                  id="settings-open-about"
                   variant="default"
                   onClick={handleOpenAbout}
                   disabled={aboutLoading}
                 >
-                  {t('settings.openAbout')}
+                  {t("settings.openAbout")}
                 </Button>
               </div>
-              <p className={styles.fieldHint}>{t('settings.aboutHint')}</p>
+              <p className={styles.fieldHint}>{t("settings.aboutHint")}</p>
             </div>
           </div>
 
           <div className={styles.actions}>
             <span className={styles.changeHint}>
-              {hasChanges ? t('settings.unsavedChanges') : t('settings.noChanges')}
+              {hasChanges ? t("settings.unsavedChanges") : t("settings.noChanges")}
             </span>
-            <Button
-              variant="primary"
-              onClick={handleSave}
-              loading={loading}
-              disabled={!canSave}
-            >
-              {t('settings.save')}
+            <Button variant="primary" onClick={handleSave} loading={loading} disabled={!canSave}>
+              {t("settings.save")}
             </Button>
           </div>
         </div>
@@ -452,38 +446,37 @@ export const SettingsPage: React.FC = () => {
       <Modal
         open={showExportModal}
         onClose={closeExportModal}
-        title={t('settings.exportModalTitle')}
+        title={t("settings.exportModalTitle")}
       >
         <div className={styles.importModalContent}>
-          <p className={styles.importWarning}>{t('settings.exportModalHint')}</p>
+          <p className={styles.importWarning}>{t("settings.exportModalHint")}</p>
 
           <div className={styles.formGroup}>
-            <label>{t('settings.exportTargetLabel')}</label>
-            <div className={styles.importSourceGroup} role="radiogroup" aria-label={t('settings.exportTargetLabel')}>
+            <label htmlFor="settings-export-target-folder">{t("settings.exportTargetLabel")}</label>
+            <div className={styles.importSourceGroup}>
               <button
+                id="settings-export-target-folder"
                 type="button"
-                role="radio"
-                aria-checked={exportTarget === 'folder'}
-                className={`${styles.choiceButton} ${exportTarget === 'folder' ? styles.choiceButtonActive : ''}`}
-                onClick={() => setExportTarget('folder')}
+                aria-pressed={exportTarget === "folder"}
+                className={`${styles.choiceButton} ${exportTarget === "folder" ? styles.choiceButtonActive : ""}`}
+                onClick={() => setExportTarget("folder")}
               >
-                <span className={styles.choiceTitle}>{t('settings.exportTargetFolder')}</span>
+                <span className={styles.choiceTitle}>{t("settings.exportTargetFolder")}</span>
               </button>
               <button
                 type="button"
-                role="radio"
-                aria-checked={exportTarget === 'clipboard'}
-                className={`${styles.choiceButton} ${exportTarget === 'clipboard' ? styles.choiceButtonActive : ''}`}
-                onClick={() => setExportTarget('clipboard')}
+                aria-pressed={exportTarget === "clipboard"}
+                className={`${styles.choiceButton} ${exportTarget === "clipboard" ? styles.choiceButtonActive : ""}`}
+                onClick={() => setExportTarget("clipboard")}
               >
-                <span className={styles.choiceTitle}>{t('settings.exportTargetClipboard')}</span>
+                <span className={styles.choiceTitle}>{t("settings.exportTargetClipboard")}</span>
               </button>
             </div>
           </div>
 
           <div className={styles.importModalActions}>
             <Button variant="default" onClick={closeExportModal} disabled={exporting}>
-              {t('common.cancel')}
+              {t("common.cancel")}
             </Button>
             <Button
               variant="primary"
@@ -491,7 +484,7 @@ export const SettingsPage: React.FC = () => {
               loading={exporting}
               disabled={loading}
             >
-              {t('settings.exportConfirm')}
+              {t("settings.exportConfirm")}
             </Button>
           </div>
         </div>
@@ -500,44 +493,43 @@ export const SettingsPage: React.FC = () => {
       <Modal
         open={showImportModal}
         onClose={closeImportModal}
-        title={t('settings.importModalTitle')}
+        title={t("settings.importModalTitle")}
       >
         <div className={styles.importModalContent}>
-          <p className={styles.importWarning}>{t('settings.importModalWarning')}</p>
+          <p className={styles.importWarning}>{t("settings.importModalWarning")}</p>
 
           <div className={styles.formGroup}>
-            <label>{t('settings.importSourceLabel')}</label>
-            <div className={styles.importSourceGroup} role="radiogroup" aria-label={t('settings.importSourceLabel')}>
+            <label htmlFor="settings-import-source-file">{t("settings.importSourceLabel")}</label>
+            <div className={styles.importSourceGroup}>
               <button
+                id="settings-import-source-file"
                 type="button"
-                role="radio"
-                aria-checked={importSource === 'file'}
-                className={`${styles.choiceButton} ${importSource === 'file' ? styles.choiceButtonActive : ''}`}
-                onClick={() => setImportSource('file')}
+                aria-pressed={importSource === "file"}
+                className={`${styles.choiceButton} ${importSource === "file" ? styles.choiceButtonActive : ""}`}
+                onClick={() => setImportSource("file")}
               >
-                <span className={styles.choiceTitle}>{t('settings.importSourceFile')}</span>
+                <span className={styles.choiceTitle}>{t("settings.importSourceFile")}</span>
               </button>
               <button
                 type="button"
-                role="radio"
-                aria-checked={importSource === 'clipboard'}
-                className={`${styles.choiceButton} ${importSource === 'clipboard' ? styles.choiceButtonActive : ''}`}
-                onClick={() => setImportSource('clipboard')}
+                aria-pressed={importSource === "clipboard"}
+                className={`${styles.choiceButton} ${importSource === "clipboard" ? styles.choiceButtonActive : ""}`}
+                onClick={() => setImportSource("clipboard")}
               >
-                <span className={styles.choiceTitle}>{t('settings.importSourceClipboard')}</span>
+                <span className={styles.choiceTitle}>{t("settings.importSourceClipboard")}</span>
               </button>
             </div>
           </div>
 
-          {importSource === 'clipboard' && (
+          {importSource === "clipboard" && (
             <div className={styles.formGroup}>
-              <label htmlFor="import-json">{t('settings.importClipboardLabel')}</label>
+              <label htmlFor="import-json">{t("settings.importClipboardLabel")}</label>
               <textarea
                 id="import-json"
                 className={styles.importTextarea}
                 value={importJsonText}
-                onChange={(e) => setImportJsonText(e.target.value)}
-                placeholder={t('settings.importClipboardPlaceholder')}
+                onChange={e => setImportJsonText(e.target.value)}
+                placeholder={t("settings.importClipboardPlaceholder")}
               />
               <div className={styles.importAuxActions}>
                 <Button
@@ -546,7 +538,7 @@ export const SettingsPage: React.FC = () => {
                   loading={readingClipboard}
                   disabled={loading}
                 >
-                  {t('settings.readClipboard')}
+                  {t("settings.readClipboard")}
                 </Button>
               </div>
             </div>
@@ -554,7 +546,7 @@ export const SettingsPage: React.FC = () => {
 
           <div className={styles.importModalActions}>
             <Button variant="default" onClick={closeImportModal}>
-              {t('common.cancel')}
+              {t("common.cancel")}
             </Button>
             <Button
               variant="danger"
@@ -562,7 +554,7 @@ export const SettingsPage: React.FC = () => {
               disabled={!canConfirmImport}
               loading={loading}
             >
-              {t('settings.importConfirm')}
+              {t("settings.importConfirm")}
             </Button>
           </div>
         </div>
@@ -571,29 +563,29 @@ export const SettingsPage: React.FC = () => {
       <Modal
         open={showAboutModal}
         onClose={() => setShowAboutModal(false)}
-        title={t('settings.aboutModalTitle')}
+        title={t("settings.aboutModalTitle")}
       >
         <div className={styles.importModalContent}>
           {aboutLoading ? (
-            <p className={styles.importWarning}>{t('common.loading')}</p>
+            <p className={styles.importWarning}>{t("common.loading")}</p>
           ) : (
             <div className={styles.formGroup}>
-              <label>{t('settings.aboutName')}</label>
-              <Input value={appInfo?.name || '-'} readOnly />
-              <label>{t('settings.aboutVersion')}</label>
-              <Input value={appInfo?.version || '-'} readOnly />
+              <label htmlFor="settings-about-name">{t("settings.aboutName")}</label>
+              <Input id="settings-about-name" value={appInfo?.name || "-"} readOnly />
+              <label htmlFor="settings-about-version">{t("settings.aboutVersion")}</label>
+              <Input id="settings-about-version" value={appInfo?.version || "-"} readOnly />
             </div>
           )}
 
           <div className={styles.importModalActions}>
             <Button variant="default" onClick={() => setShowAboutModal(false)}>
-              {t('common.close')}
+              {t("common.close")}
             </Button>
           </div>
         </div>
       </Modal>
     </div>
-  );
-};
+  )
+}
 
-export default SettingsPage;
+export default SettingsPage

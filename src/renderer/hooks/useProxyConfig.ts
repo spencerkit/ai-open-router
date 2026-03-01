@@ -5,8 +5,8 @@
  * Provides config selector and saveConfig action.
  */
 
-import { useProxyStore } from '@/store';
-import type { ProxyConfig } from '@/types';
+import { useProxyStore } from "@/store"
+import type { ProxyConfig } from "@/types"
 
 /**
  * Hook for accessing proxy configuration
@@ -23,17 +23,17 @@ import type { ProxyConfig } from '@/types';
  * await saveConfig(updatedConfig);
  */
 export function useProxyConfig() {
-  const config = useProxyStore((state) => state.config);
-  const saveConfig = useProxyStore((state) => state.saveConfig);
-  const loading = useProxyStore((state) => state.loading);
-  const error = useProxyStore((state) => state.error);
+  const config = useProxyStore(state => state.config)
+  const saveConfig = useProxyStore(state => state.saveConfig)
+  const loading = useProxyStore(state => state.loading)
+  const error = useProxyStore(state => state.error)
 
   return {
     config,
     saveConfig,
     loading,
     error,
-  };
+  }
 }
 
 /**
@@ -47,7 +47,7 @@ export function useProxyConfig() {
  * const port = config?.server.port;
  */
 export function useConfigValue(): ProxyConfig | null {
-  return useProxyStore((state) => state.config);
+  return useProxyStore(state => state.config)
 }
 
 /**
@@ -61,5 +61,5 @@ export function useConfigValue(): ProxyConfig | null {
  * await saveConfig(updatedConfig);
  */
 export function useSaveConfigAction(): (config: ProxyConfig) => Promise<void> {
-  return useProxyStore((state) => state.saveConfig);
+  return useProxyStore(state => state.saveConfig)
 }

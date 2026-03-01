@@ -1,70 +1,70 @@
-import React from 'react';
-import { useLocation } from 'react-router-dom';
-import styles from './Layout.module.css';
-import { Header, type HeaderProps, type HeaderView } from './Header';
+import type React from "react"
+import { useLocation } from "react-router-dom"
+import { Header, type HeaderProps, type HeaderView } from "./Header"
+import styles from "./Layout.module.css"
 
 export interface LayoutProps {
   /**
    * Header props
    */
-  header?: Omit<HeaderProps, 'onViewChange'> & {
-    onViewChange?: (view: HeaderView) => void;
-  };
+  header?: Omit<HeaderProps, "onViewChange"> & {
+    onViewChange?: (view: HeaderView) => void
+  }
 
   /**
    * Main content
    */
-  children: React.ReactNode;
+  children: React.ReactNode
 
   /**
    * Footer content
    */
-  footer?: React.ReactNode;
+  footer?: React.ReactNode
 
   /**
    * Whether to show centered content
    */
-  centered?: boolean;
+  centered?: boolean
 
   /**
    * Whether content should take full height
    */
-  fullHeight?: boolean;
+  fullHeight?: boolean
 
   /**
    * Loading state
    */
-  loading?: boolean;
+  loading?: boolean
 
   /**
    * Error state
    */
-  error?: string;
+  error?: string
 
   /**
    * Test ID for testing
    */
-  testId?: string;
+  testId?: string
 
   /**
    * Service running state
    */
-  isRunning?: boolean;
+  isRunning?: boolean
 
   /**
    * Server address to display
    */
-  serverAddress?: string;
+  serverAddress?: string
 
   /**
    * Callback to start the server
    */
-  onStartServer?: () => void;
+  onStartServer?: () => void
 
   /**
    * Callback to stop the server
    */
-  onStopServer?: () => void;
+  onStopServer?: () => void
 }
 
 /**
@@ -84,23 +84,25 @@ export const Layout: React.FC<LayoutProps> = ({
   onStartServer,
   onStopServer,
 }) => {
-  const location = useLocation();
+  const location = useLocation()
 
   // Determine current view from location
   const getCurrentView = (): HeaderView => {
-    const path = location.pathname;
-    if (path === '/settings') return 'settings';
-    if (path.startsWith('/logs')) return 'logs';
-    return 'service';
-  };
+    const path = location.pathname
+    if (path === "/settings") return "settings"
+    if (path.startsWith("/logs")) return "logs"
+    return "service"
+  }
 
-  const currentView = header?.view ?? getCurrentView();
+  const currentView = header?.view ?? getCurrentView()
 
   const contentClasses = [
     styles.content,
     centered && styles.centered,
     fullHeight && styles.fullHeight,
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(" ")
 
   return (
     <div className={styles.layout} data-testid={testId}>
@@ -125,20 +127,14 @@ export const Layout: React.FC<LayoutProps> = ({
             <p className={styles.errorMessage}>{error}</p>
           </div>
         ) : (
-          <div className={contentClasses}>
-            {children}
-          </div>
+          <div className={contentClasses}>{children}</div>
         )}
       </main>
 
-      {footer && !loading && !error && (
-        <footer className={styles.footer}>
-          {footer}
-        </footer>
-      )}
+      {footer && !loading && !error && <footer className={styles.footer}>{footer}</footer>}
     </div>
-  );
-};
+  )
+}
 
 /**
  * Empty state component
@@ -147,27 +143,27 @@ export interface EmptyStateProps {
   /**
    * Icon to display
    */
-  icon?: React.ReactNode;
+  icon?: React.ReactNode
 
   /**
    * Title text
    */
-  title?: string;
+  title?: string
 
   /**
    * Message/description text
    */
-  message?: string;
+  message?: string
 
   /**
    * Actions to display
    */
-  actions?: React.ReactNode;
+  actions?: React.ReactNode
 
   /**
    * Test ID for testing
    */
-  testId?: string;
+  testId?: string
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
@@ -184,8 +180,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       {message && <p className={styles.emptyMessage}>{message}</p>}
       {actions}
     </div>
-  );
-};
+  )
+}
 
 /**
  * Error state component
@@ -194,27 +190,27 @@ export interface ErrorStateProps {
   /**
    * Error message
    */
-  message?: string;
+  message?: string
 
   /**
    * Title text
    */
-  title?: string;
+  title?: string
 
   /**
    * Actions to display
    */
-  actions?: React.ReactNode;
+  actions?: React.ReactNode
 
   /**
    * Test ID for testing
    */
-  testId?: string;
+  testId?: string
 }
 
 export const ErrorState: React.FC<ErrorStateProps> = ({
   message,
-  title = 'Error',
+  title = "Error",
   actions,
   testId,
 }) => {
@@ -225,8 +221,8 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
       <p className={styles.errorMessage}>{message}</p>
       {actions}
     </div>
-  );
-};
+  )
+}
 
 /**
  * Loading state component
@@ -235,23 +231,20 @@ export interface LoadingStateProps {
   /**
    * Loading message
    */
-  message?: string;
+  message?: string
 
   /**
    * Test ID for testing
    */
-  testId?: string;
+  testId?: string
 }
 
-export const LoadingState: React.FC<LoadingStateProps> = ({
-  message = 'Loading...',
-  testId,
-}) => {
+export const LoadingState: React.FC<LoadingStateProps> = ({ message = "Loading...", testId }) => {
   return (
     <div className={styles.loading} data-testid={testId}>
       <span>{message}</span>
     </div>
-  );
-};
+  )
+}
 
-export default Layout;
+export default Layout

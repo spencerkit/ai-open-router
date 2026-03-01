@@ -5,42 +5,42 @@
  * and provides translation support for the application.
  */
 
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
-import { enUS } from './en-US';
-import { zhCN } from './zh-CN';
+import i18n from "i18next"
+import { initReactI18next } from "react-i18next"
+import { enUS } from "./en-US"
+import { zhCN } from "./zh-CN"
 
 // Type definition for locale
-export type Locale = 'en-US' | 'zh-CN';
+export type Locale = "en-US" | "zh-CN"
 
 // Default locale
-const DEFAULT_LOCALE: Locale = 'en-US';
+const DEFAULT_LOCALE: Locale = "en-US"
 
 /**
  * Translation resources object
  * Maps locale codes to translation content
  */
 const resources = {
-  'en-US': {
+  "en-US": {
     translation: enUS,
   },
-  'zh-CN': {
+  "zh-CN": {
     translation: zhCN,
   },
-};
+}
 
 /**
  * Supported locales list
  */
-export const SUPPORTED_LOCALES: Locale[] = ['en-US', 'zh-CN'];
+export const SUPPORTED_LOCALES: Locale[] = ["en-US", "zh-CN"]
 
 /**
  * Locale display names
  */
 export const LOCALE_NAMES: Record<Locale, string> = {
-  'en-US': 'English',
-  'zh-CN': '简体中文',
-};
+  "en-US": "English",
+  "zh-CN": "简体中文",
+}
 
 /**
  * Initialize i18next
@@ -54,7 +54,7 @@ export async function initI18n(locale: Locale = DEFAULT_LOCALE): Promise<void> {
     resources,
     lng: locale,
     fallbackLng: DEFAULT_LOCALE,
-    keySeparator: '.',
+    keySeparator: ".",
     nsSeparator: false,
     interpolation: {
       escapeValue: false, // React already escapes values
@@ -62,7 +62,7 @@ export async function initI18n(locale: Locale = DEFAULT_LOCALE): Promise<void> {
     react: {
       useSuspense: false, // Disable suspense for SSR compatibility
     },
-  });
+  })
 }
 
 /**
@@ -71,7 +71,7 @@ export async function initI18n(locale: Locale = DEFAULT_LOCALE): Promise<void> {
  * @returns Current locale code
  */
 export function getCurrentLocale(): Locale {
-  return i18n.language as Locale;
+  return i18n.language as Locale
 }
 
 /**
@@ -81,7 +81,7 @@ export function getCurrentLocale(): Locale {
  * @returns Promise that resolves when locale is changed
  */
 export async function changeLocale(locale: Locale): Promise<void> {
-  await i18n.changeLanguage(locale);
+  await i18n.changeLanguage(locale)
 }
 
 /**
@@ -91,7 +91,7 @@ export async function changeLocale(locale: Locale): Promise<void> {
  * @returns Display name for the locale
  */
 export function getLocaleName(locale: Locale): string {
-  return LOCALE_NAMES[locale] || locale;
+  return LOCALE_NAMES[locale] || locale
 }
 
 /**
@@ -102,18 +102,18 @@ export function getLocaleName(locale: Locale): string {
  * @param options - i18n translation options
  * @returns Translated string
  */
-export function t(key: string, options?: any): string {
-  const result = i18n.t(key, options);
-  return typeof result === 'string' ? result : String(result);
+export function t(key: string, options?: Record<string, unknown>): string {
+  const result = i18n.t(key, options)
+  return typeof result === "string" ? result : String(result)
 }
 
 /**
  * Export the i18n instance for use in non-React components
  */
-export { i18n };
-export default i18n;
+export { i18n }
+export default i18n
 
 /**
  * Re-export translation resources for type inference
  */
-export { enUS, zhCN };
+export { enUS, zhCN }

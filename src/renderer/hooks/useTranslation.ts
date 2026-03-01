@@ -5,13 +5,13 @@
  * Integrates with i18next for translation functionality.
  */
 
-import { useTranslation as useI18nTranslation } from 'react-i18next';
-import { initI18n, changeLocale, type Locale, SUPPORTED_LOCALES, LOCALE_NAMES } from '../i18n';
+import { useTranslation as useI18nTranslation } from "react-i18next"
+import { changeLocale, initI18n, LOCALE_NAMES, type Locale, SUPPORTED_LOCALES } from "../i18n"
 
 /**
  * Translation function type
  */
-export type TranslateFunction = (key: string, options?: Record<string, string | number>) => string;
+export type TranslateFunction = (key: string, options?: Record<string, string | number>) => string
 
 /**
  * Initialize i18n with a specific locale
@@ -21,7 +21,7 @@ export type TranslateFunction = (key: string, options?: Record<string, string | 
  * @returns Promise that resolves when i18n is initialized
  */
 export function initializeI18n(locale?: Locale): Promise<void> {
-  return initI18n(locale);
+  return initI18n(locale)
 }
 
 /**
@@ -43,7 +43,7 @@ export function initializeI18n(locale?: Locale): Promise<void> {
  * }
  */
 export function useTranslation() {
-  const { t, i18n } = useI18nTranslation();
+  const { t, i18n } = useI18nTranslation()
 
   return {
     t,
@@ -51,7 +51,7 @@ export function useTranslation() {
     changeLocale,
     getAvailableLocales: () => SUPPORTED_LOCALES,
     getLocaleName: (locale: Locale) => LOCALE_NAMES[locale] || locale,
-  };
+  }
 }
 
 /**
@@ -67,6 +67,6 @@ export function useTranslation() {
  * }
  */
 export function useT(): TranslateFunction {
-  const { t } = useI18nTranslation();
-  return t;
+  const { t } = useI18nTranslation()
+  return t
 }

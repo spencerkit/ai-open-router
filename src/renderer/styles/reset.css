@@ -2,7 +2,9 @@
  * Reset & Base — Copper & Slate
  */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -26,14 +28,21 @@ body {
   color: var(--text-primary);
   background: var(--bg-base);
   min-height: 100vh;
-  transition: background var(--transition-slow), color var(--transition-slow);
+  transition:
+    background var(--transition-slow),
+    color var(--transition-slow);
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font: inherit;
   color: inherit;
   border: none;
@@ -50,22 +59,38 @@ a:hover {
   text-decoration: underline;
 }
 
-img, picture, video, canvas, svg {
+img,
+picture,
+video,
+canvas,
+svg {
   display: block;
   max-width: 100%;
 }
 
-ul, ol {
+ul,
+ol {
   list-style: none;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-display);
   font-weight: var(--weight-medium);
   line-height: var(--leading-tight);
 }
 
-p, h1, h2, h3, h4, h5, h6 {
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   overflow-wrap: break-word;
 }
 

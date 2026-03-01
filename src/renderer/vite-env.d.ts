@@ -9,45 +9,42 @@ import type {
   GroupBackupImportResult,
   ClipboardTextResult,
   AppInfo,
-} from '@/types';
+} from "@/types"
 
-interface ImportMetaEnv {
-  readonly VITE_APP_TITLE?: string;
-  readonly VITE_API_URL?: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
-// IPC types based on preload.js exposure
-interface ProxyApp {
-  // App status operations
-  getAppInfo: () => Promise<AppInfo>;
-  getStatus: () => Promise<ProxyStatus>;
-  readClipboardText: () => Promise<ClipboardTextResult>;
-  startServer: () => Promise<ProxyStatus>;
-  stopServer: () => Promise<ProxyStatus>;
-
-  // Config operations
-  getConfig: () => Promise<ProxyConfig>;
-  saveConfig: (config: ProxyConfig) => Promise<SaveConfigResult>;
-  exportGroupsBackup: () => Promise<GroupBackupExportResult>;
-  exportGroupsToFolder: () => Promise<GroupBackupExportResult>;
-  exportGroupsToClipboard: () => Promise<GroupBackupExportResult>;
-  importGroupsBackup: () => Promise<GroupBackupImportResult>;
-  importGroupsFromJson: (jsonText: string) => Promise<GroupBackupImportResult>;
-
-  // Logs operations
-  listLogs: (max?: number) => Promise<LogEntry[]>;
-  clearLogs: () => Promise<{ ok: boolean }>;
-}
-
-// Extend Window interface with proxyApp
 declare global {
+  interface ImportMetaEnv {
+    readonly VITE_APP_TITLE?: string
+    readonly VITE_API_URL?: string
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv
+  }
+
+  // IPC types based on preload.js exposure
+  interface ProxyApp {
+    // App status operations
+    getAppInfo: () => Promise<AppInfo>
+    getStatus: () => Promise<ProxyStatus>
+    readClipboardText: () => Promise<ClipboardTextResult>
+    startServer: () => Promise<ProxyStatus>
+    stopServer: () => Promise<ProxyStatus>
+
+    // Config operations
+    getConfig: () => Promise<ProxyConfig>
+    saveConfig: (config: ProxyConfig) => Promise<SaveConfigResult>
+    exportGroupsBackup: () => Promise<GroupBackupExportResult>
+    exportGroupsToFolder: () => Promise<GroupBackupExportResult>
+    exportGroupsToClipboard: () => Promise<GroupBackupExportResult>
+    importGroupsBackup: () => Promise<GroupBackupImportResult>
+    importGroupsFromJson: (jsonText: string) => Promise<GroupBackupImportResult>
+
+    // Logs operations
+    listLogs: (max?: number) => Promise<LogEntry[]>
+    clearLogs: () => Promise<{ ok: boolean }>
+  }
+
   interface Window {
-    proxyApp: ProxyApp;
+    proxyApp: ProxyApp
   }
 }
-
-export {};

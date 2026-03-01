@@ -1,88 +1,99 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
-import { useProxyStore } from '@/store';
-import { Button, Input } from '@/components';
-import { useTranslation, useLogs } from '@/hooks';
-import type { Rule, ProxyConfig } from '@/types';
-import styles from './RuleCreatePage.module.css';
+import { Eye, EyeOff } from "lucide-react"
+import type React from "react"
+import { useEffect, useState } from "react"
+import { useNavigate, useParams } from "react-router-dom"
+import { Button, Input } from "@/components"
+import { useLogs, useTranslation } from "@/hooks"
+import { useProxyStore } from "@/store"
+import type { ProxyConfig, Rule } from "@/types"
+import styles from "./RuleCreatePage.module.css"
 
 /**
  * RuleCreatePage Component
  * Page for creating a new rule
  */
 export const RuleCreatePage: React.FC = () => {
-  const { groupId } = useParams<{ groupId: string }>();
-  const navigate = useNavigate();
-  const { t } = useTranslation();
-  const { config, saveConfig } = useProxyStore();
-  const { showToast } = useLogs();
+  const { groupId } = useParams<{ groupId: string }>()
+  const navigate = useNavigate()
+  const { t } = useTranslation()
+  const { config, saveConfig } = useProxyStore()
+  const { showToast } = useLogs()
 
-  const [name, setName] = useState('');
-  const [protocol, setProtocol] = useState<Rule['protocol']>('anthropic');
-  const [token, setToken] = useState('');
-  const [showToken, setShowToken] = useState(false);
-  const [apiAddress, setApiAddress] = useState('');
-  const [defaultModel, setDefaultModel] = useState('');
-  const [modelMappings, setModelMappings] = useState<Record<string, string>>({});
-  const [errors, setErrors] = useState<{ name?: string; token?: string; apiAddress?: string; defaultModel?: string }>({});
+  const [name, setName] = useState("")
+  const [protocol, setProtocol] = useState<Rule["protocol"]>("anthropic")
+  const [token, setToken] = useState("")
+  const [showToken, setShowToken] = useState(false)
+  const [apiAddress, setApiAddress] = useState("")
+  const [defaultModel, setDefaultModel] = useState("")
+  const [modelMappings, setModelMappings] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<{
+    name?: string
+    token?: string
+    apiAddress?: string
+    defaultModel?: string
+  }>({})
 
-  const group = config?.groups.find((g) => g.id === groupId);
+  const group = config?.groups.find(g => g.id === groupId)
 
   useEffect(() => {
-    if (!config || group) return;
-    showToast(t('toast.groupNotFound'), 'error');
-    navigate('/');
-  }, [config, group, navigate, showToast, t]);
+    if (!config || group) return
+    showToast(t("toast.groupNotFound"), "error")
+    navigate("/")
+  }, [config, group, navigate, showToast, t])
 
-  if (!group) return null;
+  if (!group) return null
 
   const focusField = (id: string) => {
-    const input = document.getElementById(id) as HTMLInputElement | null;
-    input?.focus();
-  };
+    const input = document.getElementById(id) as HTMLInputElement | null
+    input?.focus()
+  }
 
   const validateForm = () => {
-    const nextErrors: { name?: string; token?: string; apiAddress?: string; defaultModel?: string } = {};
+    const nextErrors: {
+      name?: string
+      token?: string
+      apiAddress?: string
+      defaultModel?: string
+    } = {}
 
     if (!name.trim()) {
-      nextErrors.name = t('validation.required', { field: t('servicePage.ruleName') });
+      nextErrors.name = t("validation.required", { field: t("servicePage.ruleName") })
     }
     if (!token.trim()) {
-      nextErrors.token = t('validation.required', { field: t('servicePage.token') });
+      nextErrors.token = t("validation.required", { field: t("servicePage.token") })
     }
     if (!apiAddress.trim()) {
-      nextErrors.apiAddress = t('validation.required', { field: t('servicePage.apiAddress') });
+      nextErrors.apiAddress = t("validation.required", { field: t("servicePage.apiAddress") })
     }
     if (!defaultModel.trim()) {
-      nextErrors.defaultModel = t('validation.required', { field: t('servicePage.defaultModel') });
+      nextErrors.defaultModel = t("validation.required", { field: t("servicePage.defaultModel") })
     }
 
-    setErrors(nextErrors);
+    setErrors(nextErrors)
 
     if (nextErrors.name) {
-      focusField('name');
-      return false;
+      focusField("name")
+      return false
     }
     if (nextErrors.token) {
-      focusField('token');
-      return false;
+      focusField("token")
+      return false
     }
     if (nextErrors.apiAddress) {
-      focusField('apiAddress');
-      return false;
+      focusField("apiAddress")
+      return false
     }
     if (nextErrors.defaultModel) {
-      focusField('defaultModel');
-      return false;
+      focusField("defaultModel")
+      return false
     }
-    return true;
-  };
+    return true
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!config || !groupId) return;
-    if (!validateForm()) return;
+    e.preventDefault()
+    if (!config || !groupId) return
+    if (!validateForm()) return
 
     const newRule: Rule = {
       id: crypto.randomUUID(),
@@ -96,49 +107,45 @@ export const RuleCreatePage: React.FC = () => {
           .map(([key, value]) => [key.trim(), value.trim()])
           .filter(([key, value]) => key && value)
       ),
-    };
+    }
 
     const newConfig: ProxyConfig = {
       ...config,
-      groups: config.groups.map((group) => {
+      groups: config.groups.map(group => {
         if (group.id === groupId) {
           return {
             ...group,
             rules: [...group.rules, newRule],
             activeRuleId: group.activeRuleId ?? newRule.id,
-          };
+          }
         }
-        return group;
+        return group
       }),
-    };
+    }
 
-    await saveConfig(newConfig);
-    showToast(t('toast.ruleCreated'), 'success');
-    navigate('/');
-  };
+    await saveConfig(newConfig)
+    showToast(t("toast.ruleCreated"), "success")
+    navigate("/")
+  }
 
   const handleCancel = () => {
-    navigate('/');
-  };
+    navigate("/")
+  }
 
-  const isValid = name.trim() && token.trim() && apiAddress.trim() && defaultModel.trim();
+  const isValid = name.trim() && token.trim() && apiAddress.trim() && defaultModel.trim()
 
   return (
     <div className={styles.ruleCreatePage}>
       <div className={styles.header}>
-        <h1>{t('ruleCreatePage.title')}</h1>
-        <nav className={styles.breadcrumb} aria-label={t('header.backToService')}>
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className={styles.breadcrumbButton}
-          >
-            {t('servicePage.groupPath')}
+        <h1>{t("ruleCreatePage.title")}</h1>
+        <nav className={styles.breadcrumb} aria-label={t("header.backToService")}>
+          <button type="button" onClick={() => navigate("/")} className={styles.breadcrumbButton}>
+            {t("servicePage.groupPath")}
           </button>
           <span className={styles.breadcrumbSeparator}>/</span>
           <span className={styles.breadcrumbItem}>{group.name}</span>
           <span className={styles.breadcrumbSeparator}>/</span>
-          <span className={styles.breadcrumbItem}>{t('ruleCreatePage.newRule')}</span>
+          <span className={styles.breadcrumbItem}>{t("ruleCreatePage.newRule")}</span>
         </nav>
       </div>
 
@@ -146,83 +153,91 @@ export const RuleCreatePage: React.FC = () => {
         <div className={styles.ruleGrid}>
           <form onSubmit={handleSubmit} className={styles.ruleForm}>
             <section className={styles.formSection}>
-              <h2 className={styles.sectionTitle}>{t('ruleForm.sectionRouting')}</h2>
+              <h2 className={styles.sectionTitle}>{t("ruleForm.sectionRouting")}</h2>
 
               <div className={styles.formGroup}>
-                <label htmlFor="name">{t('servicePage.ruleName')}</label>
+                <label htmlFor="name">{t("servicePage.ruleName")}</label>
                 <Input
                   id="name"
                   value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
+                  onChange={e => {
+                    setName(e.target.value)
                     if (errors.name) {
-                      setErrors((prev) => ({ ...prev, name: undefined }));
+                      setErrors(prev => ({ ...prev, name: undefined }))
                     }
                   }}
-                  placeholder={t('ruleForm.ruleNamePlaceholder')}
+                  placeholder={t("ruleForm.ruleNamePlaceholder")}
                   className={styles.input}
                   error={errors.name}
                 />
               </div>
 
               <div className={styles.formGroup}>
-                <label>{t('servicePage.ruleProtocol')}</label>
+                <label htmlFor="create-rule-protocol-anthropic">
+                  {t("servicePage.ruleProtocol")}
+                </label>
                 <div className={styles.directionOptions}>
                   <button
+                    id="create-rule-protocol-anthropic"
                     type="button"
-                    className={`${styles.directionOption} ${protocol === 'anthropic' ? styles.active : ''}`}
-                    onClick={() => setProtocol('anthropic')}
+                    className={`${styles.directionOption} ${protocol === "anthropic" ? styles.active : ""}`}
+                    onClick={() => setProtocol("anthropic")}
                   >
-                    {t('ruleProtocol.anthropic')}
+                    {t("ruleProtocol.anthropic")}
                   </button>
                   <button
                     type="button"
-                    className={`${styles.directionOption} ${protocol === 'openai' ? styles.active : ''}`}
-                    onClick={() => setProtocol('openai')}
+                    className={`${styles.directionOption} ${protocol === "openai" ? styles.active : ""}`}
+                    onClick={() => setProtocol("openai")}
                   >
-                    {t('ruleProtocol.openai')}
+                    {t("ruleProtocol.openai")}
                   </button>
                 </div>
-                <p className={styles.fieldHint}>{t('ruleForm.protocolHint')}</p>
+                <p className={styles.fieldHint}>{t("ruleForm.protocolHint")}</p>
               </div>
             </section>
 
             <section className={styles.formSection}>
-              <h2 className={styles.sectionTitle}>{t('ruleForm.sectionModelSettings')}</h2>
+              <h2 className={styles.sectionTitle}>{t("ruleForm.sectionModelSettings")}</h2>
 
               <div className={styles.formGroup}>
-                <label htmlFor="defaultModel">{t('servicePage.defaultModel')}</label>
+                <label htmlFor="defaultModel">{t("servicePage.defaultModel")}</label>
                 <Input
                   id="defaultModel"
                   value={defaultModel}
-                  onChange={(e) => {
-                    setDefaultModel(e.target.value);
+                  onChange={e => {
+                    setDefaultModel(e.target.value)
                     if (errors.defaultModel) {
-                      setErrors((prev) => ({ ...prev, defaultModel: undefined }));
+                      setErrors(prev => ({ ...prev, defaultModel: undefined }))
                     }
                   }}
-                  placeholder={t('ruleForm.defaultModelPlaceholder')}
+                  placeholder={t("ruleForm.defaultModelPlaceholder")}
                   className={styles.input}
                   error={errors.defaultModel}
-                  hint={t('ruleForm.defaultModelHint')}
+                  hint={t("ruleForm.defaultModelHint")}
                 />
               </div>
 
               <div className={styles.formGroup}>
-                <label>{t('ruleForm.modelMappings')}</label>
+                <label htmlFor="create-rule-mapping-first">{t("ruleForm.modelMappings")}</label>
                 <div className={styles.mappingList}>
                   {(group.models || []).length === 0 ? (
-                    <p className={styles.fieldHint}>{t('ruleForm.noGroupModels')}</p>
+                    <p className={styles.fieldHint}>{t("ruleForm.noGroupModels")}</p>
                   ) : (
-                    (group.models || []).map((modelName) => (
+                    (group.models || []).map(modelName => (
                       <div key={modelName} className={styles.mappingRow}>
                         <span className={styles.mappingLabel}>{modelName}</span>
                         <Input
-                          value={modelMappings[modelName] ?? ''}
-                          onChange={(e) => {
-                            setModelMappings((prev) => ({ ...prev, [modelName]: e.target.value }));
+                          id={
+                            modelName === (group.models || [])[0]
+                              ? "create-rule-mapping-first"
+                              : undefined
+                          }
+                          value={modelMappings[modelName] ?? ""}
+                          onChange={e => {
+                            setModelMappings(prev => ({ ...prev, [modelName]: e.target.value }))
                           }}
-                          placeholder={t('ruleForm.mappingPlaceholder')}
+                          placeholder={t("ruleForm.mappingPlaceholder")}
                         />
                       </div>
                     ))
@@ -232,70 +247,70 @@ export const RuleCreatePage: React.FC = () => {
             </section>
 
             <section className={styles.formSection}>
-              <h2 className={styles.sectionTitle}>{t('ruleForm.sectionSecurity')}</h2>
+              <h2 className={styles.sectionTitle}>{t("ruleForm.sectionSecurity")}</h2>
 
               <div className={styles.formGroup}>
-                <label htmlFor="token">{t('servicePage.token')}</label>
+                <label htmlFor="token">{t("servicePage.token")}</label>
                 <Input
                   id="token"
-                  type={showToken ? 'text' : 'password'}
+                  type={showToken ? "text" : "password"}
                   value={token}
-                  onChange={(e) => {
-                    setToken(e.target.value);
+                  onChange={e => {
+                    setToken(e.target.value)
                     if (errors.token) {
-                      setErrors((prev) => ({ ...prev, token: undefined }));
+                      setErrors(prev => ({ ...prev, token: undefined }))
                     }
                   }}
                   placeholder="sk-..."
                   className={styles.input}
                   error={errors.token}
-                  hint={t('ruleForm.tokenHint')}
-                  endAdornment={(
+                  hint={t("ruleForm.tokenHint")}
+                  endAdornment={
                     <button
                       type="button"
                       className={styles.tokenVisibilityButton}
-                      onClick={() => setShowToken((prev) => !prev)}
-                      aria-label={showToken ? t('ruleForm.hideToken') : t('ruleForm.showToken')}
-                      title={showToken ? t('ruleForm.hideToken') : t('ruleForm.showToken')}
+                      onClick={() => setShowToken(prev => !prev)}
+                      aria-label={showToken ? t("ruleForm.hideToken") : t("ruleForm.showToken")}
+                      title={showToken ? t("ruleForm.hideToken") : t("ruleForm.showToken")}
                     >
                       {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
-                  )}
+                  }
                 />
               </div>
 
               <div className={styles.formGroup}>
-                <label htmlFor="apiAddress">{t('servicePage.apiAddress')}</label>
+                <label htmlFor="apiAddress">{t("servicePage.apiAddress")}</label>
                 <Input
                   id="apiAddress"
                   value={apiAddress}
-                  onChange={(e) => {
-                    setApiAddress(e.target.value);
+                  onChange={e => {
+                    setApiAddress(e.target.value)
                     if (errors.apiAddress) {
-                      setErrors((prev) => ({ ...prev, apiAddress: undefined }));
+                      setErrors(prev => ({ ...prev, apiAddress: undefined }))
                     }
                   }}
                   placeholder="https://api.anthropic.com"
                   className={styles.input}
                   error={errors.apiAddress}
-                  hint={t('ruleForm.endpointHint')}
+                  hint={t("ruleForm.endpointHint")}
                 />
               </div>
             </section>
 
             <div className={styles.formActions}>
               <Button variant="default" onClick={handleCancel} className={styles.button}>
-                {t('common.cancel')}
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="primary" disabled={!isValid} className={styles.button}>
-                {t('ruleCreatePage.createRule')}
+                {t("ruleCreatePage.createRule")}
               </Button>
             </div>
           </form>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default RuleCreatePage;
+export default RuleCreatePage

@@ -1,51 +1,52 @@
-import React from 'react';
-import styles from './Switch.module.css';
+import React from "react"
+import styles from "./Switch.module.css"
 
-export type SwitchSize = 'small' | 'medium' | 'large';
+export type SwitchSize = "small" | "medium" | "large"
 
-export interface SwitchProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'type' | 'onChange'> {
+export interface SwitchProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size" | "type" | "onChange"> {
   /**
    * Switch size
    * @default 'medium'
    */
-  size?: SwitchSize;
+  size?: SwitchSize
 
   /**
    * Whether the switch is checked
    */
-  checked?: boolean;
+  checked?: boolean
 
   /**
    * Callback when checked state changes
    */
-  onChange?: (checked: boolean) => void;
+  onChange?: (checked: boolean) => void
 
   /**
    * Label for the switch
    */
-  label?: string;
+  label?: string
 
   /**
    * Description/hint text displayed below the label
    */
-  description?: string;
+  description?: string
 
   /**
    * Whether the switch should take full width
    */
-  fullWidth?: boolean;
+  fullWidth?: boolean
 
   /**
    * Whether the switch is disabled
    */
-  disabled?: boolean;
+  disabled?: boolean
 }
 
 /**
  * Switch component for toggling boolean values
  */
 export const Switch: React.FC<SwitchProps> = ({
-  size = 'medium',
+  size = "medium",
   checked = false,
   onChange,
   label,
@@ -56,37 +57,31 @@ export const Switch: React.FC<SwitchProps> = ({
   id,
   ...props
 }) => {
-  const switchId = id || `switch-${React.useId()}`;
+  const generatedId = React.useId()
+  const switchId = id || `switch-${generatedId}`
 
   const switchClasses = [
     styles.switch,
     checked && styles.checked,
     disabled && styles.disabled,
-    size !== 'medium' && styles[size],
+    size !== "medium" && styles[size],
     className,
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(" ")
 
-  const knobClasses = [
-    styles.knob,
-    checked && styles.checked,
-  ].filter(Boolean).join(' ');
+  const knobClasses = [styles.knob, checked && styles.checked].filter(Boolean).join(" ")
 
-  const wrapperClasses = [
-    styles.wrapper,
-    fullWidth && styles.fullWidth,
-  ].filter(Boolean).join(' ');
+  const wrapperClasses = [styles.wrapper, fullWidth && styles.fullWidth].filter(Boolean).join(" ")
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newChecked = event.target.checked;
-    onChange?.(newChecked);
-  };
+    const newChecked = event.target.checked
+    onChange?.(newChecked)
+  }
 
   return (
     <div className={wrapperClasses}>
-      <label
-        htmlFor={switchId}
-        className={switchClasses}
-      >
+      <label htmlFor={switchId} className={switchClasses}>
         <span className={knobClasses} />
         <input
           id={switchId}
@@ -101,13 +96,11 @@ export const Switch: React.FC<SwitchProps> = ({
       {label && (
         <div>
           <span className={styles.label}>{label}</span>
-          {description && (
-            <span className={styles.description}>{description}</span>
-          )}
+          {description && <span className={styles.description}>{description}</span>}
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default Switch;
+export default Switch

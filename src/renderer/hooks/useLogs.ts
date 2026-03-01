@@ -5,15 +5,15 @@
  * Provides logs selector and auto-refresh effect.
  */
 
-import { useEffect, useCallback } from 'react';
-import { useProxyStore } from '@/store';
-import { useToast } from '@/contexts/ToastContext';
-import type { LogEntry } from '@/types';
+import { useCallback, useEffect } from "react"
+import { useToast } from "@/contexts/ToastContext"
+import { useProxyStore } from "@/store"
+import type { LogEntry } from "@/types"
 
 /**
  * Auto-refresh interval for logs (in milliseconds)
  */
-const LOGS_REFRESH_INTERVAL = 3000;
+const LOGS_REFRESH_INTERVAL = 3000
 
 /**
  * Hook for accessing server logs with auto-refresh
@@ -28,15 +28,18 @@ const LOGS_REFRESH_INTERVAL = 3000;
  * // Clear all logs: await clearLogs();
  */
 export function useLogs() {
-  const logs = useProxyStore((state) => state.logs);
-  const refreshLogs = useProxyStore((state) => state.refreshLogs);
-  const clearLogs = useProxyStore((state) => state.clearLogs);
-  const error = useProxyStore((state) => state.error);
-  const { showToast } = useToast();
+  const logs = useProxyStore(state => state.logs)
+  const refreshLogs = useProxyStore(state => state.refreshLogs)
+  const clearLogs = useProxyStore(state => state.clearLogs)
+  const error = useProxyStore(state => state.error)
+  const { showToast } = useToast()
 
-  const showToastMessage = useCallback((message: string, type?: 'success' | 'error' | 'info' | 'warning') => {
-    showToast(message, type);
-  }, [showToast]);
+  const showToastMessage = useCallback(
+    (message: string, type?: "success" | "error" | "info" | "warning") => {
+      showToast(message, type)
+    },
+    [showToast]
+  )
 
   return {
     logs,
@@ -44,7 +47,7 @@ export function useLogs() {
     clearLogs,
     error,
     showToast: showToastMessage,
-  };
+  }
 }
 
 /**
@@ -60,36 +63,39 @@ export function useLogs() {
  * return <LogList logs={logs} onClear={clearLogs} />;
  */
 export function useLogsAutoRefresh() {
-  const logs = useProxyStore((state) => state.logs);
-  const refreshLogs = useProxyStore((state) => state.refreshLogs);
-  const clearLogs = useProxyStore((state) => state.clearLogs);
-  const { showToast } = useToast();
+  const logs = useProxyStore(state => state.logs)
+  const refreshLogs = useProxyStore(state => state.refreshLogs)
+  const clearLogs = useProxyStore(state => state.clearLogs)
+  const { showToast } = useToast()
 
   // Auto-refresh effect
   useEffect(() => {
     // Initial refresh
-    refreshLogs();
+    refreshLogs()
 
     // Set up interval for auto-refresh
     const intervalId = setInterval(() => {
-      refreshLogs();
-    }, LOGS_REFRESH_INTERVAL);
+      refreshLogs()
+    }, LOGS_REFRESH_INTERVAL)
 
     // Cleanup interval on unmount
     return () => {
-      clearInterval(intervalId);
-    };
-  }, [refreshLogs]);
+      clearInterval(intervalId)
+    }
+  }, [refreshLogs])
 
-  const showToastMessage = useCallback((message: string, type?: 'success' | 'error' | 'info' | 'warning') => {
-    showToast(message, type);
-  }, [showToast]);
+  const showToastMessage = useCallback(
+    (message: string, type?: "success" | "error" | "info" | "warning") => {
+      showToast(message, type)
+    },
+    [showToast]
+  )
 
   return {
     logs,
     clearLogs,
     showToast: showToastMessage,
-  };
+  }
 }
 
 /**
@@ -103,7 +109,7 @@ export function useLogsAutoRefresh() {
  * const errorCount = logs.filter(log => log.status === 'error').length;
  */
 export function useLogsValue(): LogEntry[] {
-  return useProxyStore((state) => state.logs);
+  return useProxyStore(state => state.logs)
 }
 
 /**
@@ -121,8 +127,8 @@ export function useLogsValue(): LogEntry[] {
  * const groupLogs = useFilteredLogs(log => log.groupId === 'group-123');
  */
 export function useFilteredLogs(predicate: (log: LogEntry) => boolean): LogEntry[] {
-  const logs = useProxyStore((state) => state.logs);
-  return logs.filter(predicate);
+  const logs = useProxyStore(state => state.logs)
+  return logs.filter(predicate)
 }
 
 /**
@@ -136,5 +142,5 @@ export function useFilteredLogs(predicate: (log: LogEntry) => boolean): LogEntry
  * return <Badge count={logCount} />;
  */
 export function useLogCount(): number {
-  return useProxyStore((state) => state.logs.length);
+  return useProxyStore(state => state.logs.length)
 }

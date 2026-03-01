@@ -3,25 +3,25 @@
  * - 'oc': OpenAI format -> Anthropic format
  * - 'co': Anthropic format -> OpenAI format
  */
-export type RuleDirection = 'oc' | 'co';
+export type RuleDirection = "oc" | "co"
 
 /**
  * Protocol family supported by proxy
  */
-export type RuleProtocol = 'openai' | 'anthropic';
+export type RuleProtocol = "openai" | "anthropic"
 
 /**
  * Proxy rule interface
  * Defines a single translation rule between API formats
  */
 export interface Rule {
-  id: string;
-  name: string;
-  protocol: RuleProtocol;
-  token: string;
-  apiAddress: string;
-  defaultModel: string;
-  modelMappings: Record<string, string>;
+  id: string
+  name: string
+  protocol: RuleProtocol
+  token: string
+  apiAddress: string
+  defaultModel: string
+  modelMappings: Record<string, string>
 }
 
 /**
@@ -29,11 +29,11 @@ export interface Rule {
  * Organizes rules under a single path endpoint
  */
 export interface Group {
-  id: string;
-  name: string;
-  models: string[];
-  activeRuleId: string | null;
-  rules: Rule[];
+  id: string
+  name: string
+  models: string[]
+  activeRuleId: string | null
+  rules: Rule[]
 }
 
 /**
@@ -41,9 +41,9 @@ export interface Group {
  * Represents the current status of the proxy server
  */
 export interface ProxyStatus {
-  running: boolean;
-  address: string | null;
-  metrics: ProxyMetrics;
+  running: boolean
+  address: string | null
+  metrics: ProxyMetrics
 }
 
 /**
@@ -51,62 +51,62 @@ export interface ProxyStatus {
  * Tracks server performance and request statistics
  */
 export interface ProxyMetrics {
-  requests: number;
-  streamRequests: number;
-  errors: number;
-  avgLatencyMs: number;
-  uptimeStartedAt: string | null;
+  requests: number
+  streamRequests: number
+  errors: number
+  avgLatencyMs: number
+  uptimeStartedAt: string | null
 }
 
 /**
  * Log entry error interface
  */
 export interface LogEntryError {
-  message: string;
-  code: string;
+  message: string
+  code: string
 }
 
 /**
  * Log entry status
  */
-export type LogEntryStatus = 'ok' | 'error' | 'processing' | 'rejected';
+export type LogEntryStatus = "ok" | "error" | "processing" | "rejected"
 
 /**
  * Log entry phase
  */
-export type LogEntryPhase = 'request_chain' | string;
+export type LogEntryPhase = "request_chain" | string
 
 /**
  * Log entry interface
  * Represents a single request/response log entry
  */
 export interface LogEntry {
-  timestamp: string;
-  traceId: string;
-  phase: LogEntryPhase;
-  status: LogEntryStatus;
-  method: string;
-  requestPath: string;
-  requestAddress: string;
-  clientAddress?: string;
-  groupPath: string | null;
-  groupName: string | null;
-  ruleId: string | null;
-  direction: RuleDirection | null;
-  entryProtocol?: RuleProtocol | null;
-  downstreamProtocol?: RuleProtocol | null;
-  model: string | null;
-  forwardedModel?: string | null;
-  forwardingAddress: string | null;
-  requestHeaders?: Record<string, string>;
-  forwardRequestHeaders?: Record<string, string> | null;
-  upstreamResponseHeaders?: Record<string, string> | null;
-  responseHeaders?: Record<string, string> | null;
-  requestBody: unknown;
-  forwardRequestBody: unknown;
-  responseBody: unknown;
-  httpStatus: number | null;
-  upstreamStatus: number | null;
-  durationMs: number;
-  error: LogEntryError | null;
+  timestamp: string
+  traceId: string
+  phase: LogEntryPhase
+  status: LogEntryStatus
+  method: string
+  requestPath: string
+  requestAddress: string
+  clientAddress?: string
+  groupPath: string | null
+  groupName: string | null
+  ruleId: string | null
+  direction: RuleDirection | null
+  entryProtocol?: RuleProtocol | null
+  downstreamProtocol?: RuleProtocol | null
+  model: string | null
+  forwardedModel?: string | null
+  forwardingAddress: string | null
+  requestHeaders?: Record<string, string>
+  forwardRequestHeaders?: Record<string, string> | null
+  upstreamResponseHeaders?: Record<string, string> | null
+  responseHeaders?: Record<string, string> | null
+  requestBody: unknown
+  forwardRequestBody: unknown
+  responseBody: unknown
+  httpStatus: number | null
+  upstreamStatus: number | null
+  durationMs: number
+  error: LogEntryError | null
 }

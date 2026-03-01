@@ -6,23 +6,23 @@
  */
 
 import type {
-  ProxyConfig,
-  ProxyStatus,
-  LogEntry,
-  SaveConfigResult,
+  AppInfo,
+  ClipboardTextResult,
   GroupBackupExportResult,
   GroupBackupImportResult,
-  ClipboardTextResult,
-  AppInfo,
-} from '@/types';
+  LogEntry,
+  ProxyConfig,
+  ProxyStatus,
+  SaveConfigResult,
+} from "@/types"
 
 /**
  * IPC utility object containing all methods for main process communication
  */
 export const ipc = {
   getAppInfo(): Promise<AppInfo> {
-    console.log('[IPC] getAppInfo called');
-    return window.proxyApp.getAppInfo();
+    console.log("[IPC] getAppInfo called")
+    return window.proxyApp.getAppInfo()
   },
 
   /**
@@ -30,13 +30,13 @@ export const ipc = {
    * @returns Promise resolving to server status with metrics
    */
   getStatus(): Promise<ProxyStatus> {
-    console.log('[IPC] getStatus called');
-    return window.proxyApp.getStatus();
+    console.log("[IPC] getStatus called")
+    return window.proxyApp.getStatus()
   },
 
   readClipboardText(): Promise<ClipboardTextResult> {
-    console.log('[IPC] readClipboardText called');
-    return window.proxyApp.readClipboardText();
+    console.log("[IPC] readClipboardText called")
+    return window.proxyApp.readClipboardText()
   },
 
   /**
@@ -44,8 +44,8 @@ export const ipc = {
    * @returns Promise resolving to server status with metrics
    */
   startServer(): Promise<ProxyStatus> {
-    console.log('[IPC] startServer called');
-    return window.proxyApp.startServer();
+    console.log("[IPC] startServer called")
+    return window.proxyApp.startServer()
   },
 
   /**
@@ -53,8 +53,8 @@ export const ipc = {
    * @returns Promise resolving to server status with metrics
    */
   stopServer(): Promise<ProxyStatus> {
-    console.log('[IPC] stopServer called');
-    return window.proxyApp.stopServer();
+    console.log("[IPC] stopServer called")
+    return window.proxyApp.stopServer()
   },
 
   /**
@@ -62,8 +62,8 @@ export const ipc = {
    * @returns Promise resolving to proxy configuration
    */
   getConfig(): Promise<ProxyConfig> {
-    console.log('[IPC] getConfig called');
-    return window.proxyApp.getConfig();
+    console.log("[IPC] getConfig called")
+    return window.proxyApp.getConfig()
   },
 
   /**
@@ -72,33 +72,33 @@ export const ipc = {
    * @returns Promise resolving to save result with status
    */
   saveConfig(config: ProxyConfig): Promise<SaveConfigResult> {
-    console.log('[IPC] saveConfig called');
-    return window.proxyApp.saveConfig(config);
+    console.log("[IPC] saveConfig called")
+    return window.proxyApp.saveConfig(config)
   },
 
   exportGroupsBackup(): Promise<GroupBackupExportResult> {
-    console.log('[IPC] exportGroupsBackup called');
-    return window.proxyApp.exportGroupsBackup();
+    console.log("[IPC] exportGroupsBackup called")
+    return window.proxyApp.exportGroupsBackup()
   },
 
   exportGroupsToFolder(): Promise<GroupBackupExportResult> {
-    console.log('[IPC] exportGroupsToFolder called');
-    return window.proxyApp.exportGroupsToFolder();
+    console.log("[IPC] exportGroupsToFolder called")
+    return window.proxyApp.exportGroupsToFolder()
   },
 
   exportGroupsToClipboard(): Promise<GroupBackupExportResult> {
-    console.log('[IPC] exportGroupsToClipboard called');
-    return window.proxyApp.exportGroupsToClipboard();
+    console.log("[IPC] exportGroupsToClipboard called")
+    return window.proxyApp.exportGroupsToClipboard()
   },
 
   importGroupsBackup(): Promise<GroupBackupImportResult> {
-    console.log('[IPC] importGroupsBackup called');
-    return window.proxyApp.importGroupsBackup();
+    console.log("[IPC] importGroupsBackup called")
+    return window.proxyApp.importGroupsBackup()
   },
 
   importGroupsFromJson(jsonText: string): Promise<GroupBackupImportResult> {
-    console.log('[IPC] importGroupsFromJson called');
-    return window.proxyApp.importGroupsFromJson(jsonText);
+    console.log("[IPC] importGroupsFromJson called")
+    return window.proxyApp.importGroupsFromJson(jsonText)
   },
 
   /**
@@ -107,8 +107,8 @@ export const ipc = {
    * @returns Promise resolving to array of log entries
    */
   listLogs(max?: number): Promise<LogEntry[]> {
-    console.log('[IPC] listLogs called', max);
-    return window.proxyApp.listLogs(max);
+    console.log("[IPC] listLogs called", max)
+    return window.proxyApp.listLogs(max)
   },
 
   /**
@@ -116,7 +116,7 @@ export const ipc = {
    * @returns Promise resolving to success status
    */
   clearLogs(): Promise<{ ok: boolean }> {
-    console.log('[IPC] clearLogs called');
-    return window.proxyApp.clearLogs();
+    console.log("[IPC] clearLogs called")
+    return window.proxyApp.clearLogs()
   },
-};
+}

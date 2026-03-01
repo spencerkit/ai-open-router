@@ -1,17 +1,17 @@
-import React from 'react';
-import { Plus, Folder, ChevronRight, Check, Trash2, Play } from 'lucide-react';
-import { Button } from '@/components';
-import { useTranslation } from '@/hooks';
-import { useNavigate } from 'react-router-dom';
-import type { Group } from '@/types';
-import styles from './ServicePage.module.css';
+import { Check, ChevronRight, Folder, Play, Plus, Trash2 } from "lucide-react"
+import type React from "react"
+import { useNavigate } from "react-router-dom"
+import { Button } from "@/components"
+import { useTranslation } from "@/hooks"
+import type { Group } from "@/types"
+import styles from "./ServicePage.module.css"
 
 export interface ServicePageProps {
-  groups: Group[];
-  activeGroupId: string | null;
-  onSelectGroup: (groupId: string) => void;
-  onAddGroup: () => void;
-  onDeleteGroup: (groupId: string) => void;
+  groups: Group[]
+  activeGroupId: string | null
+  onSelectGroup: (groupId: string) => void
+  onAddGroup: () => void
+  onDeleteGroup: (groupId: string) => void
 }
 
 /**
@@ -19,43 +19,41 @@ export interface ServicePageProps {
  * Displays a list of groups in the sidebar
  */
 export const GroupList: React.FC<{
-  groups: Group[];
-  activeGroupId: string | null;
-  onSelect: (groupId: string) => void;
-  onAdd: () => void;
+  groups: Group[]
+  activeGroupId: string | null
+  onSelect: (groupId: string) => void
+  onAdd: () => void
 }> = ({ groups, activeGroupId, onSelect, onAdd }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
 
   return (
     <div className={styles.groupList}>
       <div className={styles.groupListHeader}>
-        <h3>{t('servicePage.groupInfo')}</h3>
+        <h3>{t("servicePage.groupInfo")}</h3>
         <Button
           variant="ghost"
           size="small"
           icon={Plus}
           onClick={onAdd}
-          title={t('header.addGroup')}
+          title={t("header.addGroup")}
         />
       </div>
       <div className={styles.groupListContent}>
         {groups.length === 0 ? (
-          <p className={styles.emptyHint}>{t('servicePage.noGroupsHint')}</p>
+          <p className={styles.emptyHint}>{t("servicePage.noGroupsHint")}</p>
         ) : (
           <ul className={styles.groupItems}>
-            {groups.map((group) => (
+            {groups.map(group => (
               <li key={group.id}>
                 <button
                   type="button"
-                  className={`${styles.groupItem} ${group.id === activeGroupId ? styles.active : ''}`}
+                  className={`${styles.groupItem} ${group.id === activeGroupId ? styles.active : ""}`}
                   onClick={() => onSelect(group.id)}
                 >
                   <Folder size={16} className={styles.groupIcon} />
                   <span className={styles.groupName}>{group.name}</span>
                   <span className={styles.groupPath}>/{group.id}</span>
-                  {group.id === activeGroupId && (
-                    <Check size={14} className={styles.activeIcon} />
-                  )}
+                  {group.id === activeGroupId && <Check size={14} className={styles.activeIcon} />}
                   <ChevronRight size={14} className={styles.chevron} />
                 </button>
               </li>
@@ -64,101 +62,110 @@ export const GroupList: React.FC<{
         )}
       </div>
     </div>
-  );
-};
+  )
+}
 
 /**
  * RuleList Component
  * Displays rules within a group
  */
 export const RuleList: React.FC<{
-  rules: Group['rules'];
-  activeRuleId: string | null;
-  onSelect: (ruleId: string) => void;
-  onActivate: (ruleId: string) => void | Promise<void>;
-  activatingRuleId?: string | null;
-  onDelete: (ruleId: string) => void;
-  groupName: string;
-  groupId: string;
-}> = ({ rules, activeRuleId, onSelect, onActivate, activatingRuleId, onDelete, groupName, groupId }) => {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
+  rules: Group["rules"]
+  activeRuleId: string | null
+  onSelect: (ruleId: string) => void
+  onActivate: (ruleId: string) => void | Promise<void>
+  activatingRuleId?: string | null
+  onDelete: (ruleId: string) => void
+  groupName: string
+  groupId: string
+}> = ({
+  rules,
+  activeRuleId,
+  onSelect,
+  onActivate,
+  activatingRuleId,
+  onDelete,
+  groupName,
+  groupId,
+}) => {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
 
   const handleRuleClick = (ruleId: string) => {
-    navigate(`/groups/${groupId}/rules/${ruleId}/edit`);
-  };
+    navigate(`/groups/${groupId}/rules/${ruleId}/edit`)
+  }
 
   const handleAddRuleClick = () => {
-    navigate(`/groups/${groupId}/rules/new`);
-  };
+    navigate(`/groups/${groupId}/rules/new`)
+  }
 
   return (
     <div className={styles.ruleList}>
       <div className={styles.ruleListHeader}>
         <div className={styles.ruleHeaderTitle}>
-          <h3>{t('servicePage.ruleName')}</h3>
+          <h3>{t("servicePage.ruleName")}</h3>
           <span className={styles.countBadge}>{rules.length}</span>
-          <span className={styles.ruleGroupName} title={groupName}>{groupName}</span>
+          <span className={styles.ruleGroupName} title={groupName}>
+            {groupName}
+          </span>
         </div>
         <Button
           variant="ghost"
           size="small"
           icon={Plus}
           onClick={handleAddRuleClick}
-          title={t('servicePage.addRule')}
+          title={t("servicePage.addRule")}
         />
       </div>
       <div className={styles.ruleListContent}>
         {rules.length === 0 ? (
-          <p className={styles.emptyHint}>{t('servicePage.noRulesHint')}</p>
+          <p className={styles.emptyHint}>{t("servicePage.noRulesHint")}</p>
         ) : (
           <ul className={styles.ruleItems}>
-            {rules.map((rule) => (
+            {rules.map(rule => (
               <li
                 key={rule.id}
-                className={`${styles.ruleItemContainer} ${rule.id === activeRuleId ? styles.ruleItemContainerActive : ''}`}
+                className={`${styles.ruleItemContainer} ${rule.id === activeRuleId ? styles.ruleItemContainerActive : ""}`}
               >
                 <button
                   type="button"
-                  className={`${styles.ruleItem} ${rule.id === activeRuleId ? styles.active : ''}`}
+                  className={`${styles.ruleItem} ${rule.id === activeRuleId ? styles.active : ""}`}
                   onClick={() => {
-                    onSelect(rule.id);
-                    handleRuleClick(rule.id);
+                    onSelect(rule.id)
+                    handleRuleClick(rule.id)
                   }}
                 >
                   <span className={styles.ruleModel}>{rule.name}</span>
-                  <span className={styles.ruleDirection}>
-                    {t(`ruleProtocol.${rule.protocol}`)}
-                  </span>
+                  <span className={styles.ruleDirection}>{t(`ruleProtocol.${rule.protocol}`)}</span>
                   {rule.id === activeRuleId && (
-                    <span className={styles.currentBadge}>{t('servicePage.current')}</span>
+                    <span className={styles.currentBadge}>{t("servicePage.current")}</span>
                   )}
                 </button>
                 {rule.id !== activeRuleId && (
                   <button
                     type="button"
                     className={styles.activateButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onActivate(rule.id);
+                    onClick={e => {
+                      e.stopPropagation()
+                      onActivate(rule.id)
                     }}
-                    title={t('servicePage.activateRule')}
-                    aria-label={`${t('servicePage.activateRule')}: ${rule.name}`}
+                    title={t("servicePage.activateRule")}
+                    aria-label={`${t("servicePage.activateRule")}: ${rule.name}`}
                     disabled={activatingRuleId === rule.id}
                   >
                     <Play size={13} />
-                    <span>{t('servicePage.activateRule')}</span>
+                    <span>{t("servicePage.activateRule")}</span>
                   </button>
                 )}
                 <button
                   type="button"
                   className={styles.deleteButton}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(rule.id);
+                  onClick={e => {
+                    e.stopPropagation()
+                    onDelete(rule.id)
                   }}
-                  title={t('servicePage.deleteRule')}
-                  aria-label={`${t('servicePage.deleteRule')}: ${rule.name}`}
+                  title={t("servicePage.deleteRule")}
+                  aria-label={`${t("servicePage.deleteRule")}: ${rule.name}`}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -168,7 +175,7 @@ export const RuleList: React.FC<{
         )}
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default RuleList;
+export default RuleList

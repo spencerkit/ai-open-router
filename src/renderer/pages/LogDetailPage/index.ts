@@ -1,1 +1,1 @@
-export { LogDetailPage } from './LogDetailPage';
+export { LogDetailPage } from "./LogDetailPage"

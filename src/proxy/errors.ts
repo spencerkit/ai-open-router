@@ -1,6 +1,6 @@
 // @ts-nocheck
 function toProxyError(err, traceId, protocol) {
-  const statusCode = err.statusCode || 500;
+  const statusCode = err.statusCode || 500
   return {
     statusCode,
     body: {
@@ -9,12 +9,12 @@ function toProxyError(err, traceId, protocol) {
         message: err.message || "Unknown proxy error",
         upstreamStatus: err.upstreamStatus,
         protocol,
-        traceId
-      }
-    }
-  };
+        traceId,
+      },
+    },
+  }
 }
 
 module.exports = {
-  toProxyError
-};
+  toProxyError,
+}
