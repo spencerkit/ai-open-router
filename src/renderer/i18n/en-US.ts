@@ -12,7 +12,7 @@ export const enUS = {
 
   // Header
   header: {
-    serviceSwitch: 'Service Switch',
+    serviceSwitch: 'Service',
     addGroup: 'Add Group',
     settings: 'Settings',
     logs: 'Logs',
@@ -45,6 +45,7 @@ export const enUS = {
     noGroupSelected: 'Please select a group.',
     noRulesHint: 'This group has no rules yet. Click "Add Rule" to create one.',
     groupPath: 'Group ID',
+    groupInfo: 'Group Info',
     entryUrl: 'Entry URL',
     copyEntryUrl: 'Copy Entry URL',
     addRule: 'Add Rule',

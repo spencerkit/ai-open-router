@@ -14,10 +14,20 @@ const {
 } = require("./mappers/anthropicToOpenai");
 const { createSSEParser, beginSSE, writeSSE } = require("./sse");
 
+const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024;
+
 async function readRequestBody(req) {
   const chunks = [];
+  let totalBytes = 0;
   for await (const chunk of req) {
-    chunks.push(chunk);
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > MAX_REQUEST_BODY_BYTES) {
+      const err = new Error(`Request body too large (max ${MAX_REQUEST_BODY_BYTES} bytes)`);
+      err.statusCode = 413;
+      throw err;
+    }
+    chunks.push(buffer);
   }
   if (chunks.length === 0) return {};
   const raw = Buffer.concat(chunks).toString("utf-8");
@@ -235,6 +245,37 @@ function toRedacted(payload, config) {
 
 function toRedactedHeaders(payload, config) {
   return redactPayload(payload, config.logging.redactRules);
+}
+
+function mapAnthropicStopReason(stopReason) {
+  if (stopReason === "tool_use") return "tool_calls";
+  if (stopReason === "max_tokens") return "length";
+  return "stop";
+}
+
+function toStatusCode(value, fallback = 502) {
+  const asNumber = Number(value);
+  if (Number.isInteger(asNumber) && asNumber >= 100 && asNumber <= 599) {
+    return asNumber;
+  }
+  return fallback;
+}
+
+function buildUpstreamError(upstreamStatus, message, code = "upstream_error") {
+  const err = new Error(message || "Upstream returned error");
+  err.code = code;
+  err.statusCode = toStatusCode(upstreamStatus, 502);
+  err.upstreamStatus = upstreamStatus;
+  return err;
+}
+
+function toAnthropicUsage(usage) {
+  const inputTokens = Number.isFinite(usage?.prompt_tokens) ? usage.prompt_tokens : 0;
+  const outputTokens = Number.isFinite(usage?.completion_tokens) ? usage.completion_tokens : 0;
+  return {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens
+  };
 }
 
 class ProxyServer {
@@ -519,10 +560,10 @@ class ProxyServer {
       if (stream && isSSEResponse(upstreamResponse.headers)) {
         if (!upstreamResponse.ok) {
           const text = await upstreamResponse.text();
-          const err = new Error(`Upstream stream failed: ${text}`);
-          err.statusCode = 502;
-          err.upstreamStatus = upstreamResponse.status;
-          throw err;
+          throw buildUpstreamError(
+            upstreamResponse.status,
+            `Upstream stream failed: ${text || `HTTP ${upstreamResponse.status}`}`
+          );
         }
 
         if (entry.protocol === "openai" && downstreamProtocol === "anthropic") {
@@ -554,10 +595,10 @@ class ProxyServer {
       }
 
       if (!upstreamResponse.ok) {
-        const err = new Error(upstreamJson.error?.message || "Upstream returned error");
-        err.statusCode = 502;
-        err.upstreamStatus = upstreamResponse.status;
-        throw err;
+        throw buildUpstreamError(
+          upstreamResponse.status,
+          upstreamJson.error?.message || `Upstream returned HTTP ${upstreamResponse.status}`
+        );
       }
 
       let outputBody = upstreamJson;
@@ -621,10 +662,44 @@ class ProxyServer {
     let messageId = `chatcmpl_${randomUUID().replace(/-/g, "")}`;
     const created = Math.floor(Date.now() / 1000);
     let emittedRole = false;
+    let doneSent = false;
+    let finishReason = "stop";
+    const toolIndexesByContentIndex = new Map();
+    let nextToolIndex = 0;
+
+    const ensureRole = () => {
+      if (emittedRole) return;
+      emittedRole = true;
+      res.write(`data: ${JSON.stringify({
+        id: messageId,
+        object: "chat.completion.chunk",
+        created,
+        model: requestModel,
+        choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }]
+      })}\n\n`);
+    };
+
+    const emitChunk = (delta, chunkFinishReason = null) => {
+      ensureRole();
+      res.write(`data: ${JSON.stringify({
+        id: messageId,
+        object: "chat.completion.chunk",
+        created,
+        model: requestModel,
+        choices: [{ index: 0, delta, finish_reason: chunkFinishReason }]
+      })}\n\n`);
+    };
+
+    const emitDone = () => {
+      if (doneSent) return;
+      doneSent = true;
+      emitChunk({}, finishReason);
+      res.write("data: [DONE]\n\n");
+    };
 
     const parser = createSSEParser(({ event, data }) => {
       if (data === "[DONE]") {
-        res.write("data: [DONE]\n\n");
+        emitDone();
         return;
       }
 
@@ -639,36 +714,60 @@ class ProxyServer {
         messageId = payload.message.id;
       }
 
-      if (!emittedRole) {
-        emittedRole = true;
-        res.write(`data: ${JSON.stringify({
-          id: messageId,
-          object: "chat.completion.chunk",
-          created,
-          model: requestModel,
-          choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }]
-        })}\n\n`);
+      if (event === "message_delta" && payload.delta?.stop_reason) {
+        finishReason = mapAnthropicStopReason(payload.delta.stop_reason);
+        return;
       }
 
       if (event === "content_block_delta" && payload.delta?.text) {
-        res.write(`data: ${JSON.stringify({
-          id: messageId,
-          object: "chat.completion.chunk",
-          created,
-          model: requestModel,
-          choices: [{ index: 0, delta: { content: payload.delta.text }, finish_reason: null }]
-        })}\n\n`);
+        emitChunk({ content: payload.delta.text });
+        return;
+      }
+
+      if (event === "content_block_start" && payload.content_block?.type === "tool_use") {
+        const contentIndex = Number.isInteger(payload.index) ? payload.index : nextToolIndex;
+        const existingToolIndex = toolIndexesByContentIndex.get(contentIndex);
+        const toolIndex = existingToolIndex == null ? nextToolIndex++ : existingToolIndex;
+        toolIndexesByContentIndex.set(contentIndex, toolIndex);
+        finishReason = "tool_calls";
+        emitChunk({
+          tool_calls: [{
+            index: toolIndex,
+            id: payload.content_block.id || `call_${randomUUID().replace(/-/g, "")}`,
+            type: "function",
+            function: {
+              name: payload.content_block.name || "tool",
+              arguments: ""
+            }
+          }]
+        });
+        return;
+      }
+
+      if (
+        event === "content_block_delta"
+        && payload.delta?.type === "input_json_delta"
+        && typeof payload.delta.partial_json === "string"
+      ) {
+        const contentIndex = Number.isInteger(payload.index) ? payload.index : 0;
+        const existingToolIndex = toolIndexesByContentIndex.get(contentIndex);
+        const toolIndex = existingToolIndex == null ? nextToolIndex++ : existingToolIndex;
+        toolIndexesByContentIndex.set(contentIndex, toolIndex);
+        finishReason = "tool_calls";
+        emitChunk({
+          tool_calls: [{
+            index: toolIndex,
+            type: "function",
+            function: {
+              arguments: payload.delta.partial_json
+            }
+          }]
+        });
+        return;
       }
 
       if (event === "message_stop") {
-        res.write(`data: ${JSON.stringify({
-          id: messageId,
-          object: "chat.completion.chunk",
-          created,
-          model: requestModel,
-          choices: [{ index: 0, delta: {}, finish_reason: "stop" }]
-        })}\n\n`);
-        res.write("data: [DONE]\n\n");
+        emitDone();
       }
     });
 
@@ -678,6 +777,7 @@ class ProxyServer {
       parser.write(decoder.decode(value, { stream: true }));
     }
     parser.end();
+    emitDone();
     res.end();
   }
 
@@ -685,25 +785,127 @@ class ProxyServer {
     beginSSE(res, { "x-trace-id": traceId });
 
     const msgId = `msg_${randomUUID().replace(/-/g, "")}`;
-    writeSSE(res, {
-      event: "message_start",
-      data: JSON.stringify({
-        type: "message_start",
-        message: {
-          id: msgId,
-          type: "message",
-          role: "assistant",
-          model: requestModel,
-          content: []
-        }
-      })
-    });
 
     const reader = upstreamResponse.body.getReader();
     const decoder = new TextDecoder();
+    let stopSent = false;
+    let started = false;
+    let usageSnapshot = null;
+    let nextContentIndex = 0;
+    let textBlockIndex = null;
+    const toolBlocks = new Map();
+    const openedContentBlockIndexes = new Set();
+
+    const emitMessageStart = (usage) => {
+      if (started) return;
+      writeSSE(res, {
+        event: "message_start",
+        data: JSON.stringify({
+          type: "message_start",
+          message: {
+            id: msgId,
+            type: "message",
+            role: "assistant",
+            model: requestModel,
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: toAnthropicUsage(usage)
+          }
+        })
+      });
+      started = true;
+    };
+
+    const emitUsageDelta = (usage) => {
+      const mapped = toAnthropicUsage(usage);
+      const nextSnapshot = `${mapped.input_tokens}:${mapped.output_tokens}`;
+      if (usageSnapshot === nextSnapshot) return;
+      usageSnapshot = nextSnapshot;
+      writeSSE(res, {
+        event: "message_delta",
+        data: JSON.stringify({
+          type: "message_delta",
+          delta: {
+            stop_reason: null,
+            stop_sequence: null
+          },
+          usage: mapped
+        })
+      });
+    };
+
+    const emitContentBlockStart = (index, contentBlock) => {
+      if (openedContentBlockIndexes.has(index)) return;
+      writeSSE(res, {
+        event: "content_block_start",
+        data: JSON.stringify({
+          type: "content_block_start",
+          index,
+          content_block: contentBlock
+        })
+      });
+      openedContentBlockIndexes.add(index);
+    };
+
+    const emitContentBlockStop = (index) => {
+      if (!openedContentBlockIndexes.has(index)) return;
+      writeSSE(res, {
+        event: "content_block_stop",
+        data: JSON.stringify({
+          type: "content_block_stop",
+          index
+        })
+      });
+      openedContentBlockIndexes.delete(index);
+    };
+
+    const ensureTextBlock = () => {
+      if (textBlockIndex != null) return textBlockIndex;
+      textBlockIndex = nextContentIndex;
+      nextContentIndex += 1;
+      emitContentBlockStart(textBlockIndex, {
+        type: "text",
+        text: ""
+      });
+      return textBlockIndex;
+    };
+
+    const ensureToolBlock = (toolCall, position) => {
+      const key = Number.isInteger(toolCall?.index) ? `index:${toolCall.index}` : `position:${position}`;
+      let state = toolBlocks.get(key);
+      if (!state) {
+        state = {
+          index: nextContentIndex,
+          id: toolCall?.id || `toolu_${randomUUID().replace(/-/g, "")}`,
+          name: toolCall?.function?.name || "tool"
+        };
+        nextContentIndex += 1;
+        toolBlocks.set(key, state);
+        emitContentBlockStart(state.index, {
+          type: "tool_use",
+          id: state.id,
+          name: state.name,
+          input: {}
+        });
+      }
+      return state;
+    };
+
+    const emitMessageStop = () => {
+      if (stopSent) return;
+      const indexes = Array.from(openedContentBlockIndexes.keys()).sort((a, b) => a - b);
+      for (const index of indexes) {
+        emitContentBlockStop(index);
+      }
+      writeSSE(res, { event: "message_stop", data: JSON.stringify({ type: "message_stop" }) });
+      stopSent = true;
+    };
+
     const parser = createSSEParser(({ data }) => {
       if (data === "[DONE]") {
-        writeSSE(res, { event: "message_stop", data: JSON.stringify({ type: "message_stop" }) });
+        emitMessageStart();
+        emitMessageStop();
         return;
       }
 
@@ -714,15 +916,20 @@ class ProxyServer {
         return;
       }
 
+      emitMessageStart(payload.usage);
+      if (payload.usage) {
+        emitUsageDelta(payload.usage);
+      }
       const choice = payload.choices?.[0];
       const delta = choice?.delta || {};
 
       if (typeof delta.content === "string" && delta.content.length > 0) {
+        const index = ensureTextBlock();
         writeSSE(res, {
           event: "content_block_delta",
           data: JSON.stringify({
             type: "content_block_delta",
-            index: 0,
+            index,
             delta: {
               type: "text_delta",
               text: delta.content
@@ -731,8 +938,29 @@ class ProxyServer {
         });
       }
 
+      if (Array.isArray(delta.tool_calls)) {
+        for (const [position, toolCall] of delta.tool_calls.entries()) {
+          const state = ensureToolBlock(toolCall, position);
+
+          const argumentsChunk = toolCall?.function?.arguments;
+          if (typeof argumentsChunk === "string" && argumentsChunk.length > 0) {
+            writeSSE(res, {
+              event: "content_block_delta",
+              data: JSON.stringify({
+                type: "content_block_delta",
+                index: state.index,
+                delta: {
+                  type: "input_json_delta",
+                  partial_json: argumentsChunk
+                }
+              })
+            });
+          }
+        }
+      }
+
       if (choice?.finish_reason) {
-        writeSSE(res, { event: "message_stop", data: JSON.stringify({ type: "message_stop" }) });
+        emitMessageStop();
       }
     });
 
@@ -742,10 +970,19 @@ class ProxyServer {
       parser.write(decoder.decode(value, { stream: true }));
     }
     parser.end();
+    emitMessageStart();
+    emitMessageStop();
     res.end();
   }
 }
 
 module.exports = {
-  ProxyServer
+  ProxyServer,
+  __test__: {
+    readRequestBody,
+    buildUpstreamError,
+    mapAnthropicStopReason,
+    toStatusCode,
+    toAnthropicUsage
+  }
 };

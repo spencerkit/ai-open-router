@@ -3,7 +3,8 @@ const assert = require("node:assert/strict");
 const {
   mapOpenAIToAnthropicRequest,
   mapAnthropicToOpenAIResponse,
-  normalizeOpenAIRequest
+  normalizeOpenAIRequest,
+  mapOpenAIChatToResponses
 } = require("../src/proxy/mappers/openaiToAnthropic");
 const {
   mapAnthropicToOpenAIRequest,
@@ -118,4 +119,31 @@ test("strict mode allows openai system/thinking/context_management fields", () =
   assert.equal(out.system, "be concise");
   assert.equal(out.thinking.type, "enabled");
   assert.equal(out.context_management.clear_function_results, false);
+});
+
+test("chat response -> responses keeps tool calls", () => {
+  const mapped = mapOpenAIChatToResponses({
+    id: "chatcmpl_1",
+    created: 123456,
+    model: "gpt-4.1",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "I will call a tool",
+        tool_calls: [{
+          id: "call_1",
+          type: "function",
+          function: {
+            name: "weather_lookup",
+            arguments: "{\"city\":\"sf\"}"
+          }
+        }]
+      }
+    }]
+  });
+
+  assert.equal(mapped.object, "response");
+  assert.equal(mapped.output[0].type, "message");
+  assert.equal(mapped.output[1].type, "function_call");
+  assert.equal(mapped.output[1].name, "weather_lookup");
 });

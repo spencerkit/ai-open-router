@@ -212,23 +212,38 @@ function mapAnthropicToOpenAIResponse(anthropicResponse, { requestModel }) {
 
 function mapOpenAIChatToResponses(chatResponse) {
   const text = chatResponse.choices?.[0]?.message?.content || "";
+  const toolCalls = Array.isArray(chatResponse.choices?.[0]?.message?.tool_calls)
+    ? chatResponse.choices[0].message.tool_calls
+    : [];
+
+  const output = [
+    {
+      type: "message",
+      role: "assistant",
+      content: [
+        {
+          type: "output_text",
+          text
+        }
+      ]
+    }
+  ];
+
+  for (const toolCall of toolCalls) {
+    output.push({
+      type: "function_call",
+      id: toolCall.id,
+      name: toolCall.function?.name,
+      arguments: toolCall.function?.arguments || "{}"
+    });
+  }
+
   return {
     id: chatResponse.id,
     object: "response",
     created_at: chatResponse.created,
     model: chatResponse.model,
-    output: [
-      {
-        type: "message",
-        role: "assistant",
-        content: [
-          {
-            type: "output_text",
-            text
-          }
-        ]
-      }
-    ],
+    output,
     usage: chatResponse.usage || {}
   };
 }

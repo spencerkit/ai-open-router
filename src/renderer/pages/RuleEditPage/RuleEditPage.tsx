@@ -132,8 +132,6 @@ export const RuleEditPage: React.FC = () => {
   };
 
   const isValid = name.trim() && token.trim() && apiAddress.trim() && defaultModel.trim();
-  const previewPath = `/oc/${group?.id ?? ''}`;
-  const previewUpstream = apiAddress.trim() || 'https://...';
 
   if (loading) {
     return (
@@ -301,22 +299,6 @@ export const RuleEditPage: React.FC = () => {
               </Button>
             </div>
           </form>
-
-          <aside className={styles.previewCard}>
-            <h3>{t('ruleForm.previewTitle')}</h3>
-            <div className={styles.previewRow}>
-              <span>{t('ruleForm.previewPath')}</span>
-              <code>{previewPath}</code>
-            </div>
-            <div className={styles.previewRow}>
-              <span>{t('ruleForm.previewDirection')}</span>
-              <strong>{t(`ruleProtocol.${protocol}`)}</strong>
-            </div>
-            <div className={styles.previewRow}>
-              <span>{t('ruleForm.previewUpstream')}</span>
-              <code>{previewUpstream}</code>
-            </div>
-          </aside>
         </div>
       </div>
     </div>

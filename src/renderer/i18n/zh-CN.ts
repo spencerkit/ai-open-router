@@ -12,7 +12,7 @@ export const zhCN = {
 
   // Header
   header: {
-    serviceSwitch: '服务开关',
+    serviceSwitch: '服务',
     addGroup: '添加分组',
     settings: '设置',
     logs: '日志',
@@ -45,6 +45,7 @@ export const zhCN = {
     noGroupSelected: '请选择一个分组。',
     noRulesHint: '该分组暂无规则，请点击"添加规则"。',
     groupPath: '分组 ID',
+    groupInfo: '分组信息',
     entryUrl: '入口 URL',
     copyEntryUrl: '复制入口 URL',
     addRule: '添加规则',

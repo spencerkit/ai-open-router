@@ -25,7 +25,7 @@
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-4);
   align-items: start;
 }
@@ -155,56 +155,6 @@
 .changeHint {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
-}
-
-.previewCard {
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-5);
-  display: grid;
-  gap: var(--sp-4);
-}
-
-.previewCard h3 {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  font-weight: var(--weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.previewRow {
-  display: grid;
-  gap: var(--sp-1);
-}
-
-.previewRow span {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.previewRow code,
-.previewRow strong {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-}
-
-.previewRow code {
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-sm);
-  background: var(--surface-active);
-}
-
-@media (max-width: 960px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-
-  .previewCard {
-    order: -1;
-  }
 }
 
 @media (max-width: 640px) {

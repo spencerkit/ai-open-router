@@ -62,8 +62,6 @@ export const SettingsPage: React.FC = () => {
 
   const parsedPort = /^\d+$/.test(portText) ? Number(portText) : NaN;
   const normalizedHost = host.trim();
-  const previewHost = normalizedHost || '0.0.0.0';
-  const previewPort = Number.isInteger(parsedPort) ? parsedPort : '----';
 
   const hasChanges = Boolean(
     config
@@ -258,32 +256,6 @@ export const SettingsPage: React.FC = () => {
             </Button>
           </div>
         </div>
-
-        <aside className={styles.previewCard}>
-          <h3>{t('settings.previewTitle')}</h3>
-          <div className={styles.previewRow}>
-            <span>{t('settings.previewAddress')}</span>
-            <code>{`http://${previewHost}:${previewPort}`}</code>
-          </div>
-          <div className={styles.previewRow}>
-            <span>{t('settings.previewMode')}</span>
-            <strong>
-              {strictMode ? t('settings.modeStrict') : t('settings.modeCompatible')}
-            </strong>
-          </div>
-          <div className={styles.previewRow}>
-            <span>{t('settings.previewTheme')}</span>
-            <strong>{theme === 'dark' ? t('settings.themeDark') : t('settings.themeLight')}</strong>
-          </div>
-          <div className={styles.previewRow}>
-            <span>{t('settings.previewLanguage')}</span>
-            <strong>{locale === 'zh-CN' ? t('settings.languageChinese') : t('settings.languageEnglish')}</strong>
-          </div>
-          <div className={styles.previewRow}>
-            <span>{t('settings.previewStartup')}</span>
-            <strong>{launchOnStartup ? t('settings.startupEnabled') : t('settings.startupDisabled')}</strong>
-          </div>
-        </aside>
       </div>
     </div>
   );

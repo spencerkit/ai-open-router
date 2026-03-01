@@ -29,7 +29,7 @@ export const GroupList: React.FC<{
   return (
     <div className={styles.groupList}>
       <div className={styles.groupListHeader}>
-        <h3>{t('servicePage.groupPath')}</h3>
+        <h3>{t('servicePage.groupInfo')}</h3>
         <Button
           variant="ghost"
           size="small"

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Globe, Settings as SettingsIcon, FileText, Server, ArrowLeft } from 'lucide-react';
+import { Sun, Moon, Globe, Settings as SettingsIcon, FileText, Server } from 'lucide-react';
 import { useProxyStore } from '@/store';
 import type { LocaleCode, ThemeMode } from '@/types';
 import styles from './Header.module.css';
@@ -163,17 +163,6 @@ export const Header: React.FC<HeaderProps> = ({
     <header className={styles.header} data-testid={testId}>
       {/* Left section */}
       <div className={styles.left}>
-        {currentView !== 'service' && (
-          <Button
-            variant="ghost"
-            size="small"
-            icon={ArrowLeft}
-            onClick={() => handleViewChange('service')}
-            aria-label={t('header.backToService')}
-          >
-            {t('header.backToService')}
-          </Button>
-        )}
         <div>
           <h1 className={styles.title}>{t('app.title')}</h1>
           <p className={styles.subtitle}>{t('app.protocolForwardingService')}</p>

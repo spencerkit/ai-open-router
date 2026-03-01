@@ -161,7 +161,7 @@ export const ServicePage: React.FC = () => {
         <div className={styles.groupList}>
           <div className={styles.groupListHeader}>
             <div className={styles.groupHeaderTitle}>
-              <h3>{t('servicePage.groupPath')}</h3>
+              <h3>{t('servicePage.groupInfo')}</h3>
               <span className={styles.countBadge}>{groups.length}</span>
             </div>
             <Button
