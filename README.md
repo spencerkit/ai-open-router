@@ -27,6 +27,20 @@ OA Proxy provides:
 - Local team/dev gateway:
   Keep upstream tokens in local config while exposing one stable local API surface to tools and scripts.
 
+## Screenshots
+
+### Service
+
+![Service Page](docs/assets/screenshots/service-page.png)
+
+### Settings
+
+![Settings Page](docs/assets/screenshots/settings-page.png)
+
+### Logs
+
+![Logs Page](docs/assets/screenshots/logs-page.png)
+
 ## Supported Entry Endpoints
 
 The server listens on `0.0.0.0:8899` by default.

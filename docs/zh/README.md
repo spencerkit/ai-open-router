@@ -27,6 +27,20 @@ OA Proxy 提供：
 - 本地开发/团队网关：
   上游凭证保存在本地配置中，对外只暴露统一且稳定的本地 API 入口。
 
+## 界面截图
+
+### 服务页
+
+![Service Page](../assets/screenshots/service-page.png)
+
+### 设置页
+
+![Settings Page](../assets/screenshots/settings-page.png)
+
+### 日志页
+
+![Logs Page](../assets/screenshots/logs-page.png)
+
 ## 支持的入口路径
 
 服务默认监听 `0.0.0.0:8899`。
