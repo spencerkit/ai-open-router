@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Folder, ChevronRight, Check, Trash2 } from 'lucide-react';
+import { Plus, Folder, ChevronRight, Check, Trash2, Play } from 'lucide-react';
 import { Button } from '@/components';
 import { useTranslation } from '@/hooks';
 import { useNavigate } from 'react-router-dom';
@@ -75,10 +75,12 @@ export const RuleList: React.FC<{
   rules: Group['rules'];
   activeRuleId: string | null;
   onSelect: (ruleId: string) => void;
+  onActivate: (ruleId: string) => void | Promise<void>;
+  activatingRuleId?: string | null;
   onDelete: (ruleId: string) => void;
   groupName: string;
   groupId: string;
-}> = ({ rules, activeRuleId, onSelect, onDelete, groupName, groupId }) => {
+}> = ({ rules, activeRuleId, onSelect, onActivate, activatingRuleId, onDelete, groupName, groupId }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
@@ -112,7 +114,10 @@ export const RuleList: React.FC<{
         ) : (
           <ul className={styles.ruleItems}>
             {rules.map((rule) => (
-              <li key={rule.id} className={styles.ruleItemContainer}>
+              <li
+                key={rule.id}
+                className={`${styles.ruleItemContainer} ${rule.id === activeRuleId ? styles.ruleItemContainerActive : ''}`}
+              >
                 <button
                   type="button"
                   className={`${styles.ruleItem} ${rule.id === activeRuleId ? styles.active : ''}`}
@@ -129,6 +134,22 @@ export const RuleList: React.FC<{
                     <span className={styles.currentBadge}>{t('servicePage.current')}</span>
                   )}
                 </button>
+                {rule.id !== activeRuleId && (
+                  <button
+                    type="button"
+                    className={styles.activateButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onActivate(rule.id);
+                    }}
+                    title={t('servicePage.activateRule')}
+                    aria-label={`${t('servicePage.activateRule')}: ${rule.name}`}
+                    disabled={activatingRuleId === rule.id}
+                  >
+                    <Play size={13} />
+                    <span>{t('servicePage.activateRule')}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className={styles.deleteButton}

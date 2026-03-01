@@ -96,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
   const getCurrentView = (): HeaderView => {
     const path = location.pathname;
     if (path === '/settings') return 'settings';
-    if (path === '/logs') return 'logs';
+    if (path.startsWith('/logs')) return 'logs';
     return 'service';
   };
 

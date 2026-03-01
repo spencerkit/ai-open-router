@@ -1,0 +1,1 @@
+export { LogDetailPage } from './LogDetailPage';

@@ -62,6 +62,44 @@ function normalizeHeaders(headers) {
   return out;
 }
 
+function toPlainHeaders(headers) {
+  const out = {};
+
+  if (!headers) {
+    return out;
+  }
+
+  if (typeof headers.forEach === "function") {
+    headers.forEach((value, key) => {
+      out[String(key).toLowerCase()] = String(value);
+    });
+    return out;
+  }
+
+  for (const [k, v] of Object.entries(headers)) {
+    out[String(k).toLowerCase()] = Array.isArray(v) ? v.join(",") : String(v);
+  }
+
+  return out;
+}
+
+function responseHeadersForJson(traceId) {
+  return {
+    "content-type": "application/json; charset=utf-8",
+    "x-trace-id": traceId
+  };
+}
+
+function responseHeadersForSSE(traceId) {
+  return {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    "x-accel-buffering": "no",
+    "x-trace-id": traceId
+  };
+}
+
 function findGroupAndRule(config, groupId) {
   const groups = config.groups || [];
   const group = groups.find((g) => g.id === groupId);
@@ -278,6 +316,12 @@ function toAnthropicUsage(usage) {
   };
 }
 
+function toAnthropicStopReason(finishReason) {
+  if (finishReason === "tool_calls") return "tool_use";
+  if (finishReason === "length") return "max_tokens";
+  return "end_turn";
+}
+
 class ProxyServer {
   constructor(configStore, logStore) {
     this.configStore = configStore;
@@ -326,6 +370,9 @@ class ProxyServer {
             requestPath: req.url?.split("?")[0] || "/",
             requestAddress: `${req.method || "GET"} ${req.url || "/"}`,
             forwardingAddress: "",
+            forwardRequestHeaders: null,
+            upstreamResponseHeaders: null,
+            responseHeaders: responseHeadersForJson(traceId),
             requestBody: null,
             forwardRequestBody: null,
             responseBody: null,
@@ -393,6 +440,9 @@ class ProxyServer {
       forwardedModel: null,
       forwardingAddress: null,
       requestHeaders: toRedactedHeaders(headers, config),
+      forwardRequestHeaders: null,
+      upstreamResponseHeaders: null,
+      responseHeaders: null,
       requestBody: null,
       forwardRequestBody: null,
       responseBody: null,
@@ -425,6 +475,7 @@ class ProxyServer {
         this.finalizeRequestChain(chain, started, {
           status: "ok",
           httpStatus: 200,
+          responseHeaders: toRedactedHeaders(responseHeadersForJson(traceId), config),
           responseBody: { ok: true, running: true }
         });
         return;
@@ -435,6 +486,7 @@ class ProxyServer {
         this.finalizeRequestChain(chain, started, {
           status: "ok",
           httpStatus: 200,
+          responseHeaders: toRedactedHeaders(responseHeadersForJson(traceId), config),
           responseBody: this.metrics
         });
         return;
@@ -449,6 +501,7 @@ class ProxyServer {
           this.finalizeRequestChain(chain, started, {
             status: "rejected",
             httpStatus: 401,
+            responseHeaders: toRedactedHeaders(responseHeadersForJson(traceId), config),
             responseBody: payload,
             error: { message: "invalid_local_token", code: "unauthorized" }
           });
@@ -463,6 +516,7 @@ class ProxyServer {
         this.finalizeRequestChain(chain, started, {
           status: "rejected",
           httpStatus: 404,
+          responseHeaders: toRedactedHeaders(responseHeadersForJson(traceId), config),
           responseBody: payload,
           error: { message: "invalid_path", code: "not_found" }
         });
@@ -531,6 +585,8 @@ class ProxyServer {
 
       stream = !!upstreamBody.stream;
       chain.forwardRequestBody = toRedacted(upstreamBody, config);
+      const upstreamRequestHeaders = buildRuleHeaders(downstreamProtocol, rule);
+      chain.forwardRequestHeaders = toRedactedHeaders(upstreamRequestHeaders, config);
 
       this.metrics.requests += 1;
       if (stream) this.metrics.streamRequests += 1;
@@ -542,7 +598,7 @@ class ProxyServer {
       try {
         upstreamResponse = await fetch(upstreamUrl, {
           method: "POST",
-          headers: buildRuleHeaders(downstreamProtocol, rule),
+          headers: upstreamRequestHeaders,
           body: JSON.stringify(upstreamBody),
           signal: controller.signal
         });
@@ -556,6 +612,7 @@ class ProxyServer {
       }
 
       chain.upstreamStatus = upstreamResponse.status;
+      chain.upstreamResponseHeaders = toRedactedHeaders(toPlainHeaders(upstreamResponse.headers), config);
 
       if (stream && isSSEResponse(upstreamResponse.headers)) {
         if (!upstreamResponse.ok) {
@@ -578,6 +635,7 @@ class ProxyServer {
         this.finalizeRequestChain(chain, started, {
           status: "ok",
           httpStatus: 200,
+          responseHeaders: toRedactedHeaders(responseHeadersForSSE(traceId), config),
           responseBody: { stream: true }
         });
         return;
@@ -615,6 +673,7 @@ class ProxyServer {
       this.finalizeRequestChain(chain, started, {
         status: "ok",
         httpStatus: 200,
+        responseHeaders: toRedactedHeaders(responseHeadersForJson(traceId), config),
         responseBody: toRedacted(outputBody, config)
       });
     } catch (err) {
@@ -622,6 +681,7 @@ class ProxyServer {
         status: "error",
         httpStatus: err.statusCode || 500,
         upstreamStatus: err.upstreamStatus || null,
+        responseHeaders: toRedactedHeaders(responseHeadersForJson(traceId), config),
         responseBody: null,
         error: {
           message: err.message || "proxy_error",
@@ -791,6 +851,9 @@ class ProxyServer {
     let stopSent = false;
     let started = false;
     let usageSnapshot = null;
+    let latestUsage = toAnthropicUsage();
+    let finalStopReason = "end_turn";
+    let finalDeltaSent = false;
     let nextContentIndex = 0;
     let textBlockIndex = null;
     const toolBlocks = new Map();
@@ -810,7 +873,10 @@ class ProxyServer {
             content: [],
             stop_reason: null,
             stop_sequence: null,
-            usage: toAnthropicUsage(usage)
+            usage: (() => {
+              latestUsage = toAnthropicUsage(usage);
+              return latestUsage;
+            })()
           }
         })
       });
@@ -822,6 +888,7 @@ class ProxyServer {
       const nextSnapshot = `${mapped.input_tokens}:${mapped.output_tokens}`;
       if (usageSnapshot === nextSnapshot) return;
       usageSnapshot = nextSnapshot;
+      latestUsage = mapped;
       writeSSE(res, {
         event: "message_delta",
         data: JSON.stringify({
@@ -833,6 +900,22 @@ class ProxyServer {
           usage: mapped
         })
       });
+    };
+
+    const emitFinalMessageDelta = () => {
+      if (finalDeltaSent) return;
+      writeSSE(res, {
+        event: "message_delta",
+        data: JSON.stringify({
+          type: "message_delta",
+          delta: {
+            stop_reason: finalStopReason,
+            stop_sequence: null
+          },
+          usage: latestUsage
+        })
+      });
+      finalDeltaSent = true;
     };
 
     const emitContentBlockStart = (index, contentBlock) => {
@@ -905,6 +988,7 @@ class ProxyServer {
     const parser = createSSEParser(({ data }) => {
       if (data === "[DONE]") {
         emitMessageStart();
+        emitFinalMessageDelta();
         emitMessageStop();
         return;
       }
@@ -960,7 +1044,7 @@ class ProxyServer {
       }
 
       if (choice?.finish_reason) {
-        emitMessageStop();
+        finalStopReason = toAnthropicStopReason(choice.finish_reason);
       }
     });
 
@@ -971,6 +1055,7 @@ class ProxyServer {
     }
     parser.end();
     emitMessageStart();
+    emitFinalMessageDelta();
     emitMessageStop();
     res.end();
   }
@@ -983,6 +1068,7 @@ module.exports = {
     buildUpstreamError,
     mapAnthropicStopReason,
     toStatusCode,
-    toAnthropicUsage
+    toAnthropicUsage,
+    toAnthropicStopReason
   }
 };

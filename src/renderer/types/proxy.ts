@@ -99,6 +99,9 @@ export interface LogEntry {
   forwardedModel?: string | null;
   forwardingAddress: string | null;
   requestHeaders?: Record<string, string>;
+  forwardRequestHeaders?: Record<string, string> | null;
+  upstreamResponseHeaders?: Record<string, string> | null;
+  responseHeaders?: Record<string, string> | null;
   requestBody: unknown;
   forwardRequestBody: unknown;
   responseBody: unknown;

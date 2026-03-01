@@ -23,6 +23,7 @@ export const ServicePage: React.FC = () => {
   const [showDeleteGroupModal, setShowDeleteGroupModal] = useState(false);
   const [showDeleteRuleModal, setShowDeleteRuleModal] = useState(false);
   const [pendingDeleteRuleId, setPendingDeleteRuleId] = useState<string | null>(null);
+  const [activatingRuleId, setActivatingRuleId] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupId, setNewGroupId] = useState('');
 
@@ -104,6 +105,31 @@ export const ServicePage: React.FC = () => {
   const handleRequestDeleteRule = (ruleId: string) => {
     setPendingDeleteRuleId(ruleId);
     setShowDeleteRuleModal(true);
+  };
+
+  const handleActivateRule = async (ruleId: string) => {
+    if (!activeGroupId || !config) return;
+    if (activeGroup?.activeRuleId === ruleId) return;
+
+    setActivatingRuleId(ruleId);
+    try {
+      const newGroups = config.groups.map((group) => {
+        if (group.id !== activeGroupId) {
+          return group;
+        }
+        return { ...group, activeRuleId: ruleId };
+      });
+
+      await saveConfig({
+        ...config,
+        groups: newGroups,
+      });
+      showToast(t('toast.ruleSwitched'), 'success');
+    } catch (error) {
+      showToast(t('errors.saveFailed', { message: String(error) }), 'error');
+    } finally {
+      setActivatingRuleId(null);
+    }
   };
 
   const handleDeleteRule = async () => {
@@ -263,8 +289,10 @@ export const ServicePage: React.FC = () => {
             {/* Rule List */}
             <RuleList
               rules={activeGroup.rules}
-              activeRuleId={selectedRuleId ?? activeGroup.activeRuleId}
+              activeRuleId={activeGroup.activeRuleId}
               onSelect={setSelectedRuleId}
+              onActivate={handleActivateRule}
+              activatingRuleId={activatingRuleId}
               onDelete={handleRequestDeleteRule}
               groupName={activeGroup.name}
               groupId={activeGroup.id}

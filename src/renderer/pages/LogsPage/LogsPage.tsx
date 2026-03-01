@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { useProxyStore } from '@/store';
 import { Button, Modal } from '@/components';
@@ -11,20 +12,13 @@ import styles from './LogsPage.module.css';
  * Request log viewer page
  */
 export const LogsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const { logs, refreshLogs, clearLogs, loading } = useProxyStore();
   const { showToast } = useLogs();
-  const logsEndRef = useRef<HTMLDivElement>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | LogEntry['status']>('all');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const statusFilters: Array<'all' | LogEntry['status']> = ['all', 'error', 'processing', 'rejected', 'ok'];
-
-  // Auto-scroll to bottom when new logs arrive
-  useEffect(() => {
-    if (statusFilter === 'all') {
-      logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [statusFilter, logs]);
 
   const handleRefresh = async () => {
     try {
@@ -64,10 +58,16 @@ export const LogsPage: React.FC = () => {
     }
   };
 
+  const orderedLogs = useMemo(() => {
+    return [...logs].sort((a, b) => {
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+  }, [logs]);
+
   const filteredLogs = useMemo(() => {
-    if (statusFilter === 'all') return logs;
-    return logs.filter((log) => log.status === statusFilter);
-  }, [logs, statusFilter]);
+    if (statusFilter === 'all') return orderedLogs;
+    return orderedLogs.filter((log) => log.status === statusFilter);
+  }, [orderedLogs, statusFilter]);
 
   const logSummary = useMemo(() => {
     const total = logs.length;
@@ -89,74 +89,85 @@ export const LogsPage: React.FC = () => {
     return getStatusText(filter);
   };
 
-  const renderLogEntry = (log: LogEntry, index: number) => {
+  const renderLogEntry = (log: LogEntry) => {
     return (
-      <div key={`${log.timestamp}-${index}`} className={styles.logEntry}>
-        <div className={styles.logHeader}>
-          <span className={styles.timestamp}>{formatTimestamp(log.timestamp)}</span>
-          <span className={styles.method}>{log.method}</span>
-          <span className={styles.path}>{log.requestPath}</span>
-          <span className={`${styles.status} ${getStatusClass(log.status)}`}>
-            {t('logs.requestStatus', {
-              status: log.httpStatus ?? '---',
-              state: getStatusText(log.status),
-            })}
-          </span>
+      <button
+        key={`${log.traceId}-${log.timestamp}`}
+        type="button"
+        className={styles.logEntryButton}
+        onClick={() => navigate(`/logs/${encodeURIComponent(log.traceId)}`)}
+        title={t('logs.viewDetail')}
+      >
+        <div className={styles.logEntry}>
+          <div className={styles.logHeader}>
+            <span className={styles.timestamp}>{formatTimestamp(log.timestamp)}</span>
+            <span className={styles.method}>{log.method}</span>
+            <span className={styles.path}>{log.requestPath}</span>
+            <span className={`${styles.status} ${getStatusClass(log.status)}`}>
+              {t('logs.requestStatus', {
+                status: log.httpStatus ?? '---',
+                state: getStatusText(log.status),
+              })}
+            </span>
+          </div>
+          <div className={styles.logDetails}>
+            {log.groupPath && (
+              <div className={styles.logDetail}>
+                <span className={styles.label}>{t('logs.group')}:</span>
+                <span>{log.groupPath}</span>
+              </div>
+            )}
+            {log.model && (
+              <div className={styles.logDetail}>
+                <span className={styles.label}>{t('logs.model')}:</span>
+                <span>{log.model}</span>
+              </div>
+            )}
+            {log.entryProtocol && (
+              <div className={styles.logDetail}>
+                <span className={styles.label}>{t('logs.entryProtocol')}:</span>
+                <span>{t(`ruleProtocol.${log.entryProtocol}`)}</span>
+              </div>
+            )}
+            {log.downstreamProtocol && (
+              <div className={styles.logDetail}>
+                <span className={styles.label}>{t('logs.downstreamProtocol')}:</span>
+                <span>{t(`ruleProtocol.${log.downstreamProtocol}`)}</span>
+              </div>
+            )}
+            {log.forwardedModel && (
+              <div className={styles.logDetail}>
+                <span className={styles.label}>{t('logs.forwardedModel')}:</span>
+                <span>{log.forwardedModel}</span>
+              </div>
+            )}
+            {log.forwardingAddress ? (
+              <div className={styles.logDetail}>
+                <span className={styles.label}>{t('logs.forwardingTo')}:</span>
+                <span>{log.forwardingAddress}</span>
+              </div>
+            ) : (
+              <div className={styles.logDetail}>
+                <span className={styles.label}>{t('logs.notForwarding')}</span>
+              </div>
+            )}
+            {log.error && (
+              <div className={`${styles.logDetail} ${styles.error}`}>
+                <span className={styles.label}>{t('logs.errorReason', { reason: log.error.message })}</span>
+              </div>
+            )}
+            {log.durationMs > 0 && (
+              <div className={styles.logDetail}>
+                <span className={styles.label}>{t('logs.duration')}:</span>
+                <span>{log.durationMs}ms</span>
+              </div>
+            )}
+            <div className={styles.logDetailAction}>
+              <span>{t('logs.viewDetail')}</span>
+            </div>
+          </div>
         </div>
-        <div className={styles.logDetails}>
-          {log.groupPath && (
-            <div className={styles.logDetail}>
-              <span className={styles.label}>{t('logs.group')}:</span>
-              <span>{log.groupPath}</span>
-            </div>
-          )}
-          {log.model && (
-            <div className={styles.logDetail}>
-              <span className={styles.label}>{t('logs.model')}:</span>
-              <span>{log.model}</span>
-            </div>
-          )}
-          {log.entryProtocol && (
-            <div className={styles.logDetail}>
-              <span className={styles.label}>{t('logs.entryProtocol')}:</span>
-              <span>{t(`ruleProtocol.${log.entryProtocol}`)}</span>
-            </div>
-          )}
-          {log.downstreamProtocol && (
-            <div className={styles.logDetail}>
-              <span className={styles.label}>{t('logs.downstreamProtocol')}:</span>
-              <span>{t(`ruleProtocol.${log.downstreamProtocol}`)}</span>
-            </div>
-          )}
-          {log.forwardedModel && (
-            <div className={styles.logDetail}>
-              <span className={styles.label}>{t('logs.forwardedModel')}:</span>
-              <span>{log.forwardedModel}</span>
-            </div>
-          )}
-          {log.forwardingAddress ? (
-            <div className={styles.logDetail}>
-              <span className={styles.label}>{t('logs.forwardingTo')}:</span>
-              <span>{log.forwardingAddress}</span>
-            </div>
-          ) : (
-            <div className={styles.logDetail}>
-              <span className={styles.label}>{t('logs.notForwarding')}</span>
-            </div>
-          )}
-          {log.error && (
-            <div className={`${styles.logDetail} ${styles.error}`}>
-              <span className={styles.label}>{t('logs.errorReason', { reason: log.error.message })}</span>
-            </div>
-          )}
-          {log.durationMs > 0 && (
-            <div className={styles.logDetail}>
-              <span className={styles.label}>{t('logs.duration')}:</span>
-              <span>{log.durationMs}ms</span>
-            </div>
-          )}
-        </div>
-      </div>
+      </button>
     );
   };
 
@@ -239,10 +250,7 @@ export const LogsPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <>
-            {filteredLogs.map((log, index) => renderLogEntry(log, index))}
-            <div ref={logsEndRef} />
-          </>
+          <>{filteredLogs.map((log) => renderLogEntry(log))}</>
         )}
       </div>
 
