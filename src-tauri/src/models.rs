@@ -96,6 +96,7 @@ pub struct ProxyMetrics {
 pub struct ProxyStatus {
     pub running: bool,
     pub address: Option<String>,
+    pub lan_address: Option<String>,
     pub metrics: ProxyMetrics,
 }
 

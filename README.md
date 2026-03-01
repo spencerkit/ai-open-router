@@ -74,6 +74,8 @@ npm start
 Notes:
 - `npm start` runs `tauri dev` (starts Vite + Tauri desktop shell).
 - For production packaging, use `npm run tauri:build`.
+- `npm run tauri:build` now auto-syncs installer/binary artifacts into `dist/`.
+- If you run `cargo tauri build` manually, run `npm run tauri:collect` to sync artifacts into `dist/`.
 - Ensure Tauri CLI and Rust toolchain are installed on your machine before running Tauri commands.
 
 ## Development & Debugging
@@ -125,7 +127,8 @@ npm run build
 
 Build output:
 - `out/renderer`: frontend assets
-- `src-tauri/target`: Rust backend build artifacts
+- `dist/target`: Rust/Tauri build artifacts
+- `dist`: packaged artifacts (`.deb`, Windows `.exe`, and installer outputs)
 
 ## Configuration
 

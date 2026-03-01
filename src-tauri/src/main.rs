@@ -17,8 +17,9 @@ use proxy::ProxyRuntime;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, State, WindowEvent};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -302,7 +303,7 @@ fn create_tray(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| format!("create tray menu failed: {e}"))?;
     let menu = Menu::with_items(app, &[&show_hide, &quit]).map_err(|e| format!("build menu failed: {e}"))?;
 
-    TrayIconBuilder::with_id("main-tray")
+    let mut builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
         .tooltip("AI Open Router")
         .on_menu_event(|app, event| {
@@ -326,7 +327,12 @@ fn create_tray(app: &AppHandle) -> Result<(), String> {
             }
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { .. } = event {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
                 if let Some(window) = tray.app_handle().get_webview_window("main") {
                     let visible = window.is_visible().unwrap_or(true);
                     if visible {
@@ -337,7 +343,13 @@ fn create_tray(app: &AppHandle) -> Result<(), String> {
                     }
                 }
             }
-        })
+        });
+
+    let tray_icon = Image::from_bytes(include_bytes!("../../assets/icon.png"))
+        .map_err(|e| format!("load tray icon failed: {e}"))?;
+    builder = builder.icon(tray_icon);
+
+    builder
         .build(app)
         .map_err(|e| format!("create tray icon failed: {e}"))?;
 
@@ -407,7 +419,9 @@ async fn main() {
 
             let runtime_clone = state.runtime.clone();
             tauri::async_runtime::spawn(async move {
-                let _ = runtime_clone.start().await;
+                if let Err(err) = runtime_clone.start().await {
+                    eprintln!("proxy auto-start failed: {err}");
+                }
             });
 
             let tray_ready = if state.config_store.get().ui.close_to_tray {

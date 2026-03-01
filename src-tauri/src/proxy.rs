@@ -18,6 +18,7 @@ use futures_util::TryStreamExt;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::net::{IpAddr, UdpSocket};
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -43,6 +44,7 @@ struct ProxyRuntimeInner {
 
 struct RunningServer {
     address: String,
+    lan_address: Option<String>,
     shutdown: Option<oneshot::Sender<()>>,
     handle: JoinHandle<()>,
 }
@@ -93,9 +95,10 @@ fn format_bind_target(host: &str, port: u16) -> String {
 fn bind_candidates(host: &str) -> Vec<String> {
     let host = normalized_host(host);
     let mut candidates = match host {
-        // Prefer dual-stack bind when wildcard is configured.
-        "0.0.0.0" => vec!["::".to_string(), "0.0.0.0".to_string()],
+        // Prefer IPv4 wildcard first for best compatibility on Windows.
+        "0.0.0.0" => vec!["0.0.0.0".to_string(), "::".to_string()],
         "::" => vec!["::".to_string(), "0.0.0.0".to_string()],
+        "localhost" => vec!["127.0.0.1".to_string(), "::1".to_string()],
         _ => vec![host.to_string()],
     };
     candidates.dedup();
@@ -108,6 +111,16 @@ fn public_host_for_status(bound_host: &str) -> String {
         "::" => "[::1]".to_string(),
         _ if bound_host.contains(':') => format!("[{bound_host}]"),
         _ => bound_host.to_string(),
+    }
+}
+
+fn detect_local_ipv4() -> Option<String> {
+    // Use routing table resolution to infer the primary LAN IPv4 of this machine.
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    match socket.local_addr().ok()?.ip() {
+        IpAddr::V4(ipv4) if !ipv4.is_loopback() => Some(ipv4.to_string()),
+        _ => None,
     }
 }
 
@@ -187,8 +200,13 @@ impl ProxyRuntime {
             public_host_for_status(&bound_host),
             config.server.port
         );
+        let lan_address = match bound_host.as_str() {
+            "0.0.0.0" | "::" => detect_local_ipv4().map(|ip| format!("http://{}:{}", ip, config.server.port)),
+            _ => None,
+        };
         let running = RunningServer {
             address,
+            lan_address,
             shutdown: Some(tx),
             handle,
         };
@@ -226,14 +244,14 @@ impl ProxyRuntime {
 
     pub fn get_status(&self) -> ProxyStatus {
         let running_guard = self.inner.server.lock();
-        let (running, address) = if let Ok(guard) = running_guard {
+        let (running, address, lan_address) = if let Ok(guard) = running_guard {
             if let Some(srv) = guard.as_ref() {
-                (true, Some(srv.address.clone()))
+                (true, Some(srv.address.clone()), srv.lan_address.clone())
             } else {
-                (false, None)
+                (false, None, None)
             }
         } else {
-            (false, None)
+            (false, None, None)
         };
 
         let metrics = self
@@ -246,6 +264,7 @@ impl ProxyRuntime {
         ProxyStatus {
             running,
             address,
+            lan_address,
             metrics,
         }
     }

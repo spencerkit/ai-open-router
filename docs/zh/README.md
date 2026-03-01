@@ -72,8 +72,8 @@ npm start
 ```
 
 说明：
-- `npm start` 启动本地桌面应用，读取 `out/` 中的构建产物。
-- 若 `out/` 不存在或内容过旧，请先执行 `npm run build`。
+- `npm start` 等价于 `tauri dev`，会启动 Vite 开发服务并拉起 Tauri 桌面壳。
+- 生产打包请使用 `npm run tauri:build`。
 
 ## 开发与调试
 
@@ -83,21 +83,15 @@ npm start
 npm install
 ```
 
-启动前端开发服务（终端 1）：
-
-```bash
-npm run dev
-```
-
-启动桌面应用（终端 2）：
+直接启动：
 
 ```bash
 npm start
 ```
 
 调试建议：
-- 主进程日志输出在执行 `npm start` 的终端。
-- 渲染进程日志在应用 DevTools 中查看（当前配置会自动打开）。
+- Rust 后端日志输出在执行 `npm start` 的终端。
+- 渲染进程日志在应用 DevTools 中查看。
 
 ## 工程化流程
 
@@ -132,9 +126,7 @@ npm run build
 
 构建产物目录：
 - `out/renderer`：前端静态资源
-- `out/main`：主进程产物
-- `out/preload`：预加载脚本产物
-- `out/proxy`：同步后的代理运行模块
+- `src-tauri/target`：Rust 后端与安装包构建产物
 
 ## 配置说明
 

@@ -5,7 +5,7 @@ import { Button, Input, Modal } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import { useProxyStore } from "@/store"
 import type { Group, ProxyConfig } from "@/types"
-import { resolveReachableServerBaseUrl } from "@/utils/serverAddress"
+import { resolveReachableServerBaseUrls } from "@/utils/serverAddress"
 import { RuleList } from "./RuleList"
 import styles from "./ServicePage.module.css"
 
@@ -158,10 +158,8 @@ export const ServicePage: React.FC = () => {
     showToast(t("toast.ruleDeleted"), "success")
   }
 
-  const handleCopyEntryUrl = async () => {
-    if (!activeGroup) return
-
-    const url = `${getServerBaseUrl()}/oc/${activeGroup.id}`
+  const handleCopyEntryUrl = async (url: string) => {
+    if (!url) return
 
     try {
       await navigator.clipboard.writeText(url)
@@ -171,18 +169,19 @@ export const ServicePage: React.FC = () => {
     }
   }
 
-  const getEntryUrl = () => {
-    if (!activeGroup) return ""
-    return `${getServerBaseUrl()}/oc/${activeGroup.id}`
-  }
-
-  const getServerBaseUrl = () => {
-    return resolveReachableServerBaseUrl({
+  const getServerBaseUrls = () => {
+    return resolveReachableServerBaseUrls({
       statusAddress: status?.address,
+      statusLanAddress: status?.lanAddress,
       configHost: config?.server.host,
       configPort: config?.server.port,
     })
   }
+
+  const entryUrls = React.useMemo(() => {
+    if (!activeGroup) return []
+    return getServerBaseUrls().map(baseUrl => `${baseUrl}/oc/${activeGroup.id}`)
+  }, [activeGroup, status?.address, status?.lanAddress, config?.server.host, config?.server.port])
 
   return (
     <div className={styles.servicePage}>
@@ -254,15 +253,22 @@ export const ServicePage: React.FC = () => {
                   </span>
                 </div>
                 <div className={styles.entryUrl}>
-                  <code>{getEntryUrl()}</code>
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    icon={Copy}
-                    onClick={handleCopyEntryUrl}
-                    title={t("servicePage.copyEntryUrl")}
-                    aria-label={t("servicePage.copyEntryUrl")}
-                  />
+                  <div className={styles.entryUrlList}>
+                    {entryUrls.map(url => (
+                      <div key={url} className={styles.entryUrlItem}>
+                        <code>{url}</code>
+                        <Button
+                          variant="ghost"
+                          size="small"
+                          icon={Copy}
+                          className={styles.entryUrlCopyButton}
+                          onClick={() => handleCopyEntryUrl(url)}
+                          title={t("servicePage.copyEntryUrl")}
+                          aria-label={`${t("servicePage.copyEntryUrl")}: ${url}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className={styles.groupActions}>

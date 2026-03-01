@@ -1,8 +1,7 @@
 {
   "name": "ai-open-router",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Desktop OpenAI <-> Anthropic compatible protocol router",
-  "main": "out/main/main.js",
   "type": "commonjs",
   "scripts": {
     "dev": "vite",
@@ -14,51 +13,17 @@
     "ci": "npm run check && npm run build",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "start": "tauri dev",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "icons:generate": "electron scripts/generate-icons.js",
-    "electron:dev": "vite",
-    "electron:build": "npm run build && electron-builder",
+    "start": "cargo tauri dev",
+    "tauri:dev": "cargo tauri dev",
+    "tauri:collect": "bash ./scripts/collect-tauri-artifacts.sh",
+    "tauri:build": "CARGO_TARGET_DIR=\"$PWD/dist/target\" cargo tauri build && npm run tauri:collect",
+    "tauri:build:win": "CARGO_TARGET_DIR=\"$PWD/dist/target\" cargo tauri build --target x86_64-pc-windows-gnu && npm run tauri:collect",
     "test": "node --require ./scripts/register-ts.js --test",
     "prepare": "husky install"
   },
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
-  },
-  "build": {
-    "appId": "com.local.aiopenrouter",
-    "productName": "AI Open Router",
-    "icon": "assets/icon.png",
-    "files": [
-      "out/**/*",
-      "assets/**/*",
-      "package.json"
-    ],
-    "asarUnpack": [
-      "out/main/proxyWorker.js",
-      "out/main/logStore.js",
-      "out/proxy/**"
-    ],
-    "mac": {
-      "icon": "assets/icon.icns",
-      "target": [
-        "dmg"
-      ]
-    },
-    "win": {
-      "icon": "assets/icon.ico",
-      "target": [
-        "nsis",
-        "zip"
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "runAfterFinish": true
-    }
   },
   "dependencies": {
     "i18next": "^23.10.0",
@@ -75,15 +40,10 @@
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
-    "concurrently": "^8.2.2",
-    "electron": "^31.7.7",
-    "electron-builder": "^24.13.3",
     "husky": "^9.1.7",
     "lint-staged": "^16.3.0",
     "typescript": "^5.2.2",
-    "vite": "^5.1.0",
-    "vite-plugin-electron": "^0.28.1",
-    "wait-on": "^7.2.0"
+    "vite": "^5.1.0"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
