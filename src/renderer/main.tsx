@@ -6,6 +6,7 @@ import { I18nextProvider } from 'react-i18next';
 import i18n, { initI18n, type Locale } from './i18n';
 import { ToastProvider } from './contexts/ToastContext';
 import { ToastContainer } from './components/common/ToastContainer';
+import { resolveEffectiveLocale } from './utils/locale';
 import './styles.css';
 
 // 添加全局错误处理
@@ -29,10 +30,6 @@ function resolveTheme(theme?: unknown): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function resolveLocale(locale?: unknown): Locale {
-  return locale === 'zh-CN' ? 'zh-CN' : 'en-US';
-}
-
 function resolveRouter() {
   return window.location.protocol === 'file:' ? HashRouter : BrowserRouter;
 }
@@ -44,7 +41,11 @@ async function init() {
 
   try {
     const config = await window.proxyApp.getConfig();
-    initialLocale = resolveLocale(config?.ui?.locale);
+    initialLocale = resolveEffectiveLocale({
+      locale: config?.ui?.locale,
+      localeMode: config?.ui?.localeMode,
+      systemLanguage: navigator.language,
+    }) as Locale;
     initialTheme = resolveTheme(config?.ui?.theme);
   } catch (error) {
     console.error('[Main] Failed to load config for bootstrap preferences:', error);

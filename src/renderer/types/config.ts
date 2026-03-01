@@ -29,10 +29,12 @@ export interface LoggingConfig {
  */
 export type ThemeMode = 'light' | 'dark';
 export type LocaleCode = 'en-US' | 'zh-CN';
+export type LocaleMode = 'auto' | 'manual';
 
 export interface UIConfig {
   theme: ThemeMode;
   locale: LocaleCode;
+  localeMode: LocaleMode;
   launchOnStartup: boolean;
   closeToTray: boolean;
 }

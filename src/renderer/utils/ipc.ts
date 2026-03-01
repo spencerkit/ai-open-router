@@ -13,12 +13,18 @@ import type {
   GroupBackupExportResult,
   GroupBackupImportResult,
   ClipboardTextResult,
+  AppInfo,
 } from '@/types';
 
 /**
  * IPC utility object containing all methods for main process communication
  */
 export const ipc = {
+  getAppInfo(): Promise<AppInfo> {
+    console.log('[IPC] getAppInfo called');
+    return window.proxyApp.getAppInfo();
+  },
+
   /**
    * Get the current proxy server status
    * @returns Promise resolving to server status with metrics

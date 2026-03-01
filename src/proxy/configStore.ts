@@ -83,6 +83,10 @@ class ConfigStore extends EventEmitter {
       ui: {
         ...defaults.ui,
         ...(source.ui || {}),
+        locale: source.ui && source.ui.locale === "zh-CN" ? "zh-CN" : "en-US",
+        localeMode: source.ui && Object.prototype.hasOwnProperty.call(source.ui, "localeMode")
+          ? (source.ui.localeMode === "manual" ? "manual" : "auto")
+          : (source.ui && source.ui.locale === "zh-CN" ? "manual" : "auto"),
         launchOnStartup: !!(source.ui && source.ui.launchOnStartup),
         closeToTray: source.ui && Object.prototype.hasOwnProperty.call(source.ui, "closeToTray")
           ? !!source.ui.closeToTray

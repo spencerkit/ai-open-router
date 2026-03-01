@@ -12,24 +12,8 @@ import { useLogs, useTranslation } from '@/hooks';
 const App: React.FC = () => {
   console.log('[App] Rendering...');
 
-  let store;
-  try {
-    console.log('[App] Calling useProxyStore...');
-    store = useProxyStore();
-    console.log('[App] useProxyStore returned:', store);
-  } catch (e) {
-    console.error('[App] useProxyStore error:', e);
-  }
-
-  let t: ((key: string, options?: Record<string, string | number>) => string) | undefined;
-  try {
-    console.log('[App] Calling useTranslation...');
-    const result = useTranslation();
-    t = result?.t;
-    console.log('[App] useTranslation returned, t:', typeof t);
-  } catch (e) {
-    console.error('[App] useTranslation error:', e);
-  }
+  const store = useProxyStore();
+  const {t} = useTranslation();
   const { showToast } = useLogs();
 
   // Fallback translation function
@@ -60,8 +44,8 @@ const App: React.FC = () => {
   };
 
   const isRunning = status?.running ?? false;
-  const serverAddress = status?.address && config?.server.port
-    ? `http://${status.address}:${config.server.port}`
+  const serverAddress = status?.address
+    ? (/^https?:\/\//.test(status.address) ? status.address : `http://${status.address}`)
     : undefined;
 
   const handleStartServer = useCallback(async () => {

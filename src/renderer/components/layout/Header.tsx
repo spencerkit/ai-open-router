@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Sun, Moon, Globe, Settings as SettingsIcon, FileText, Server } from 'lucide-react';
 import { useProxyStore } from '@/store';
 import type { LocaleCode, ThemeMode } from '@/types';
+import { resolveEffectiveLocale } from '@/utils/locale';
 import styles from './Header.module.css';
 import { Button } from '../common';
 
@@ -90,7 +91,11 @@ export const Header: React.FC<HeaderProps> = ({
       : documentTheme === 'dark'
         ? 'dark'
         : 'light';
-  const currentLocale: LocaleCode = config?.ui?.locale === 'zh-CN' ? 'zh-CN' : 'en-US';
+  const currentLocale: LocaleCode = resolveEffectiveLocale({
+    locale: config?.ui?.locale,
+    localeMode: config?.ui?.localeMode,
+    systemLanguage: navigator.language,
+  });
 
   // Determine current view from location
   const getCurrentView = (): HeaderView => {
@@ -136,6 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
       ui: {
         ...config.ui,
         locale,
+        localeMode: 'manual',
       },
     });
   }, [config, i18n, saveConfig]);

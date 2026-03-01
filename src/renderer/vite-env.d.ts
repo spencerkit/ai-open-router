@@ -8,6 +8,7 @@ import type {
   GroupBackupExportResult,
   GroupBackupImportResult,
   ClipboardTextResult,
+  AppInfo,
 } from '@/types';
 
 interface ImportMetaEnv {
@@ -22,6 +23,7 @@ interface ImportMeta {
 // IPC types based on preload.js exposure
 interface ProxyApp {
   // App status operations
+  getAppInfo: () => Promise<AppInfo>;
   getStatus: () => Promise<ProxyStatus>;
   readClipboardText: () => Promise<ClipboardTextResult>;
   startServer: () => Promise<ProxyStatus>;

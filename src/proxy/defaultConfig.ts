@@ -12,6 +12,7 @@ const DEFAULT_CONFIG = {
   ui: {
     theme: "light",
     locale: "en-US",
+    localeMode: "auto",
     launchOnStartup: false,
     closeToTray: true
   },

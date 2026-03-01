@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("proxyApp", {
+  getAppInfo: () => ipcRenderer.invoke("app:get-info"),
   getStatus: () => ipcRenderer.invoke("app:get-status"),
   readClipboardText: () => ipcRenderer.invoke("app:read-clipboard-text"),
   startServer: () => ipcRenderer.invoke("app:start-server"),

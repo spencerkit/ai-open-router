@@ -15,6 +15,7 @@ let logStore = null;
 let tray = null;
 let isQuitting = false;
 const SHUTDOWN_TIMEOUT_MS = 2500;
+let packageMetadata = {};
 
 // 检查是否为开发模式
 // 开发模式：从 out 目录运行，但源代码在 src/main 目录
@@ -80,6 +81,26 @@ function getDevServerUrl() {
 
 const devServerUrl = isDev ? getDevServerUrl() : null;
 console.log('[Main] isDev:', isDev, 'devServerUrl:', devServerUrl);
+
+try {
+  const packageJsonPath = path.join(__dirname, "../../package.json");
+  packageMetadata = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+} catch (error) {
+  console.error("[Main] Failed to read package metadata:", error);
+}
+
+function getAppInfo() {
+  const resolvedName = packageMetadata?.build?.productName
+    || packageMetadata?.productName
+    || app.getName()
+    || "AI Open Router";
+  const resolvedVersion = app.getVersion() || packageMetadata?.version || "0.0.0";
+
+  return {
+    name: resolvedName,
+    version: resolvedVersion
+  };
+}
 
 function resolveAppIconPath() {
   const isWin = process.platform === "win32";
@@ -345,6 +366,10 @@ async function importGroupsAndSave(parsedInput, meta = {}) {
 }
 
 function setupIpc() {
+  ipcMain.handle("app:get-info", async () => {
+    return getAppInfo();
+  });
+
   ipcMain.handle("app:get-status", async () => {
     return proxyServer.getStatus();
   });

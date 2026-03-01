@@ -44,6 +44,9 @@ function validateConfig(config) {
     if (!["en-US", "zh-CN"].includes(config.ui.locale)) {
       errors.push("ui.locale must be en-US|zh-CN");
     }
+    if (!["auto", "manual"].includes(config.ui.localeMode)) {
+      errors.push("ui.localeMode must be auto|manual");
+    }
     if (typeof config.ui.launchOnStartup !== "boolean") {
       errors.push("ui.launchOnStartup must be boolean");
     }

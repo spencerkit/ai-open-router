@@ -13,6 +13,7 @@ export type {
   UIConfig,
   ThemeMode,
   LocaleCode,
+  LocaleMode,
 } from './config';
 
 // Proxy types
@@ -76,4 +77,9 @@ export interface GroupBackupImportResult {
 
 export interface ClipboardTextResult {
   text: string;
+}
+
+export interface AppInfo {
+  name: string;
+  version: string;
 }

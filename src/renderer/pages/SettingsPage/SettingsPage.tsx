@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useProxyStore } from '@/store';
 import { Button, Input, Modal, Switch } from '@/components';
 import { useTranslation, useLogs } from '@/hooks';
-import type { CompatConfig, LocaleCode, ProxyConfig, ServerConfig, ThemeMode, UIConfig } from '@/types';
+import { ipc } from '@/utils/ipc';
+import type { AppInfo, CompatConfig, LocaleCode, LocaleMode, ProxyConfig, ServerConfig, ThemeMode, UIConfig } from '@/types';
+import { normalizeLocaleMode, resolveEffectiveLocale } from '@/utils/locale';
 import styles from './SettingsPage.module.css';
 
 type ImportSource = 'file' | 'clipboard';
@@ -33,14 +35,18 @@ export const SettingsPage: React.FC = () => {
   const [closeToTray, setCloseToTray] = useState(true);
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [locale, setLocale] = useState<LocaleCode>('en-US');
+  const [localeMode, setLocaleMode] = useState<LocaleMode>('auto');
   const [portError, setPortError] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
   const [importSource, setImportSource] = useState<ImportSource>('file');
   const [exportTarget, setExportTarget] = useState<ExportTarget>('folder');
   const [importJsonText, setImportJsonText] = useState('');
   const [readingClipboard, setReadingClipboard] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [aboutLoading, setAboutLoading] = useState(false);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 
   // Load initial values from config
   useEffect(() => {
@@ -51,7 +57,12 @@ export const SettingsPage: React.FC = () => {
       setLaunchOnStartup(config.ui.launchOnStartup);
       setCloseToTray(config.ui.closeToTray ?? true);
       setTheme(config.ui.theme);
-      setLocale(config.ui.locale);
+      setLocale(resolveEffectiveLocale({
+        locale: config.ui.locale,
+        localeMode: config.ui.localeMode,
+        systemLanguage: navigator.language,
+      }));
+      setLocaleMode(normalizeLocaleMode(config.ui.localeMode, config.ui.locale));
     }
   }, [config]);
 
@@ -83,6 +94,12 @@ export const SettingsPage: React.FC = () => {
 
   const parsedPort = /^\d+$/.test(portText) ? Number(portText) : NaN;
   const normalizedHost = host.trim();
+  const savedLocale = config ? resolveEffectiveLocale({
+    locale: config.ui.locale,
+    localeMode: config.ui.localeMode,
+    systemLanguage: navigator.language,
+  }) : 'en-US';
+  const savedLocaleMode = config ? normalizeLocaleMode(config.ui.localeMode, config.ui.locale) : 'auto';
 
   const hasChanges = Boolean(
     config
@@ -93,7 +110,8 @@ export const SettingsPage: React.FC = () => {
       || launchOnStartup !== config.ui.launchOnStartup
       || closeToTray !== (config.ui.closeToTray ?? true)
       || theme !== config.ui.theme
-      || locale !== config.ui.locale
+      || locale !== savedLocale
+      || localeMode !== savedLocaleMode
     )
   );
 
@@ -122,7 +140,10 @@ export const SettingsPage: React.FC = () => {
       launchOnStartup,
       closeToTray,
       theme,
-      locale,
+      locale: localeMode === 'manual'
+        ? locale
+        : (config.ui.locale === 'zh-CN' ? 'zh-CN' : 'en-US'),
+      localeMode,
     };
 
     const newConfig: ProxyConfig = {
@@ -210,6 +231,21 @@ export const SettingsPage: React.FC = () => {
   };
 
   const canConfirmImport = importSource === 'file' || importJsonText.trim().length > 0;
+
+  const handleOpenAbout = async () => {
+    setShowAboutModal(true);
+    if (appInfo) return;
+
+    try {
+      setAboutLoading(true);
+      const info = await ipc.getAppInfo();
+      setAppInfo(info);
+    } catch (error) {
+      showToast(t('errors.operationFailed', { message: String(error) }), 'error');
+    } finally {
+      setAboutLoading(false);
+    }
+  };
 
   return (
     <div className={styles.settingsPage}>
@@ -328,7 +364,10 @@ export const SettingsPage: React.FC = () => {
                   role="radio"
                   aria-checked={locale === 'en-US'}
                   className={`${styles.choiceButton} ${locale === 'en-US' ? styles.choiceButtonActive : ''}`}
-                  onClick={() => setLocale('en-US' as LocaleCode)}
+                  onClick={() => {
+                    setLocale('en-US' as LocaleCode);
+                    setLocaleMode('manual');
+                  }}
                 >
                   <span className={styles.choiceTitle}>{t('settings.languageEnglish')}</span>
                   <span className={styles.choiceValue}>EN-US</span>
@@ -338,7 +377,10 @@ export const SettingsPage: React.FC = () => {
                   role="radio"
                   aria-checked={locale === 'zh-CN'}
                   className={`${styles.choiceButton} ${locale === 'zh-CN' ? styles.choiceButtonActive : ''}`}
-                  onClick={() => setLocale('zh-CN' as LocaleCode)}
+                  onClick={() => {
+                    setLocale('zh-CN' as LocaleCode);
+                    setLocaleMode('manual');
+                  }}
                 >
                   <span className={styles.choiceTitle}>{t('settings.languageChinese')}</span>
                   <span className={styles.choiceValue}>ZH-CN</span>
@@ -370,6 +412,24 @@ export const SettingsPage: React.FC = () => {
                 </Button>
               </div>
               <p className={styles.fieldHint}>{t('settings.backupHint')}</p>
+            </div>
+          </div>
+
+          <div className={styles.section}>
+            <h3 className={styles.sectionTitle}>{t('settings.aboutSection')}</h3>
+
+            <div className={styles.formGroup}>
+              <label>{t('settings.aboutTitle')}</label>
+              <div className={styles.backupActions}>
+                <Button
+                  variant="default"
+                  onClick={handleOpenAbout}
+                  disabled={aboutLoading}
+                >
+                  {t('settings.openAbout')}
+                </Button>
+              </div>
+              <p className={styles.fieldHint}>{t('settings.aboutHint')}</p>
             </div>
           </div>
 
@@ -503,6 +563,31 @@ export const SettingsPage: React.FC = () => {
               loading={loading}
             >
               {t('settings.importConfirm')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showAboutModal}
+        onClose={() => setShowAboutModal(false)}
+        title={t('settings.aboutModalTitle')}
+      >
+        <div className={styles.importModalContent}>
+          {aboutLoading ? (
+            <p className={styles.importWarning}>{t('common.loading')}</p>
+          ) : (
+            <div className={styles.formGroup}>
+              <label>{t('settings.aboutName')}</label>
+              <Input value={appInfo?.name || '-'} readOnly />
+              <label>{t('settings.aboutVersion')}</label>
+              <Input value={appInfo?.version || '-'} readOnly />
+            </div>
+          )}
+
+          <div className={styles.importModalActions}>
+            <Button variant="default" onClick={() => setShowAboutModal(false)}>
+              {t('common.close')}
             </Button>
           </div>
         </div>
