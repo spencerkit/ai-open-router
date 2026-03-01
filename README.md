@@ -72,8 +72,9 @@ npm start
 ```
 
 Notes:
-- `npm start` runs the local desktop app using built output in `out/`.
-- If `out/` is stale or missing, run `npm run build` first.
+- `npm start` runs `tauri dev` (starts Vite + Tauri desktop shell).
+- For production packaging, use `npm run tauri:build`.
+- Ensure Tauri CLI and Rust toolchain are installed on your machine before running Tauri commands.
 
 ## Development & Debugging
 
@@ -83,21 +84,13 @@ Install dependencies:
 npm install
 ```
 
-Start renderer dev server (Terminal 1):
-
-```bash
-npm run dev
-```
-
-Start desktop app (Terminal 2):
-
 ```bash
 npm start
 ```
 
 Debug tips:
-- Main-process logs are printed in the terminal running `npm start`.
-- Renderer logs are visible in the app DevTools (opened automatically in current setup).
+- Rust backend logs are printed in the terminal running `npm start`.
+- Renderer logs are visible in the app DevTools.
 
 ## Engineering Workflow
 
@@ -132,9 +125,7 @@ npm run build
 
 Build output:
 - `out/renderer`: frontend assets
-- `out/main`: main process bundle
-- `out/preload`: preload bundle
-- `out/proxy`: synced proxy runtime modules
+- `src-tauri/target`: Rust backend build artifacts
 
 ## Configuration
 

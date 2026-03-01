@@ -62,6 +62,22 @@ const STATUS_POLL_INTERVAL = 3000
 const LOGS_POLL_INTERVAL = 3000
 const MAX_LOGS = 100
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string" && message.trim()) {
+      return message
+    }
+  }
+  return fallback
+}
+
 /**
  * Create Zustand store for proxy state management
  */
@@ -351,9 +367,9 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       const status = await ipc.startServer()
       set({ status, loading: false })
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to start server"
+      const errorMessage = getErrorMessage(error, "Failed to start server")
       set({ loading: false })
-      throw error instanceof Error ? error : new Error(errorMessage)
+      throw new Error(errorMessage)
     }
   },
 
@@ -366,9 +382,9 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       const status = await ipc.stopServer()
       set({ status, loading: false })
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to stop server"
+      const errorMessage = getErrorMessage(error, "Failed to stop server")
       set({ loading: false })
-      throw error instanceof Error ? error : new Error(errorMessage)
+      throw new Error(errorMessage)
     }
   },
 }))

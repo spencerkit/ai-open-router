@@ -6,6 +6,7 @@ import App from "./App"
 import { ToastContainer } from "./components/common/ToastContainer"
 import { ToastProvider } from "./contexts/ToastContext"
 import i18n, { initI18n, type Locale } from "./i18n"
+import { ipc } from "./utils/ipc"
 import { resolveEffectiveLocale } from "./utils/locale"
 import "./styles.css"
 
@@ -20,7 +21,6 @@ window.onunhandledrejection = event => {
 }
 
 console.log("Renderer starting...")
-console.log("window.proxyApp:", window.proxyApp)
 
 function resolveTheme(theme?: unknown): "light" | "dark" {
   if (theme === "light" || theme === "dark") {
@@ -31,6 +31,9 @@ function resolveTheme(theme?: unknown): "light" | "dark" {
 }
 
 function resolveRouter() {
+  if (window.__TAURI__) {
+    return HashRouter
+  }
   return window.location.protocol === "file:" ? HashRouter : BrowserRouter
 }
 
@@ -40,7 +43,7 @@ async function init() {
   let initialTheme: "light" | "dark" = resolveTheme()
 
   try {
-    const config = await window.proxyApp.getConfig()
+    const config = await ipc.getConfig()
     initialLocale = resolveEffectiveLocale({
       locale: config?.ui?.locale,
       localeMode: config?.ui?.localeMode,
