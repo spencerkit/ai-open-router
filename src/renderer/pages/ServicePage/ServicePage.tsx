@@ -46,6 +46,18 @@ export const ServicePage: React.FC = () => {
     setPendingDeleteRuleId(null);
   };
 
+  const openAddGroupModal = () => {
+    setNewGroupName('');
+    setNewGroupId('');
+    setShowAddGroupModal(true);
+  };
+
+  const closeAddGroupModal = () => {
+    setShowAddGroupModal(false);
+    setNewGroupName('');
+    setNewGroupId('');
+  };
+
   const handleAddGroup = async () => {
     if (!newGroupName.trim() || !newGroupId.trim() || !config) return;
     const normalizedId = newGroupId.trim().replace(/^\/+/, '');
@@ -72,9 +84,7 @@ export const ServicePage: React.FC = () => {
     };
 
     await saveConfig(newConfig);
-    setShowAddGroupModal(false);
-    setNewGroupName('');
-    setNewGroupId('');
+    closeAddGroupModal();
     setActiveGroupId(newGroup.id);
     showToast(t('toast.groupCreated'), 'success');
   };
@@ -158,7 +168,7 @@ export const ServicePage: React.FC = () => {
               variant="ghost"
               size="small"
               icon={Plus}
-              onClick={() => setShowAddGroupModal(true)}
+              onClick={openAddGroupModal}
               title={t('header.addGroup')}
               aria-label={t('header.addGroup')}
             />
@@ -171,7 +181,7 @@ export const ServicePage: React.FC = () => {
                   variant="primary"
                   size="small"
                   icon={Plus}
-                  onClick={() => setShowAddGroupModal(true)}
+                  onClick={openAddGroupModal}
                 >
                   {t('servicePage.createFirstGroup')}
                 </Button>
@@ -296,7 +306,7 @@ export const ServicePage: React.FC = () => {
       {/* Add Group Modal */}
       <Modal
         open={showAddGroupModal}
-        onClose={() => setShowAddGroupModal(false)}
+        onClose={closeAddGroupModal}
         title={t('modal.addGroupTitle')}
       >
         <div className={styles.modalContent}>
@@ -320,7 +330,7 @@ export const ServicePage: React.FC = () => {
             <p className={styles.formHint}>{t('modal.groupIdHint', { id: newGroupId.trim() || 'group-id' })}</p>
           </div>
           <div className={styles.modalActions}>
-            <Button variant="default" onClick={() => setShowAddGroupModal(false)}>
+            <Button variant="default" onClick={closeAddGroupModal}>
               {t('common.cancel')}
             </Button>
             <Button

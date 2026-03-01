@@ -90,6 +90,7 @@ export const Modal: React.FC<ModalProps> = ({
   const modalRef = React.useRef<HTMLDivElement>(null);
   const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
   const isExitingRef = React.useRef(false);
+  const wasOpenRef = React.useRef(false);
 
   // Focus management
   const focusModal = useCallback(() => {
@@ -129,17 +130,23 @@ export const Modal: React.FC<ModalProps> = ({
   // Setup event listeners and focus
   useEffect(() => {
     if (open) {
-      isExitingRef.current = false;
-      focusModal();
+      if (!wasOpenRef.current) {
+        isExitingRef.current = false;
+        focusModal();
+      }
       document.addEventListener('keydown', handleKeyDown);
       // Prevent body scroll
       document.body.style.overflow = 'hidden';
     } else {
-      restoreFocus();
+      if (wasOpenRef.current) {
+        restoreFocus();
+      }
       document.removeEventListener('keydown', handleKeyDown);
       // Restore body scroll
       document.body.style.overflow = '';
     }
+
+    wasOpenRef.current = open;
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
