@@ -20,6 +20,7 @@
   transition: all var(--transition-base);
   outline: none;
   user-select: none;
+  white-space: nowrap;
 }
 
 .base:hover {
@@ -66,8 +67,9 @@
   color: white;
 }
 
-.danger:hover {
-  filter: brightness(1.1);
+.danger:hover:not(:disabled) {
+  background: #a33a3a;
+  border-color: #a33a3a;
 }
 
 .danger:focus-visible {
@@ -106,18 +108,45 @@
 
 /* Size variants */
 .small {
+  height: 28px;
   padding: var(--space-1) var(--space-3);
   font-size: var(--font-size-sm);
 }
 
+.medium {
+  height: 36px;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-md);
+}
+
 .large {
-  padding: var(--space-3) var(--space-6);
+  height: 44px;
+  padding: var(--space-3) var(--space-5);
   font-size: var(--font-size-lg);
 }
 
 /* Full width */
 .fullWidth {
   width: 100%;
+}
+
+/* Loading state */
+.loading {
+  cursor: wait;
+}
+
+/* Spinner animation */
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Dark theme ghost variant hover */
