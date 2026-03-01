@@ -60,32 +60,27 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border: none;
+  border-bottom: 2px solid transparent;
   background: transparent;
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  color: var(--tab-text);
-  transition: all var(--transition-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted);
+  transition: all var(--transition-fast);
   outline: none;
 }
 
 .navButton:hover {
-  background: rgba(0, 0, 0, 0.03);
   color: var(--text);
+  background: var(--tab-active-bg-2);
 }
 
 .navButton.active {
-  background: var(--tab-active-bg-1);
-  border-color: var(--tab-active-border);
   color: var(--accent);
-  font-weight: var(--font-weight-semibold);
-}
-
-[data-theme='dark'] .navButton:hover {
-  background: rgba(255, 255, 255, 0.05);
+  border-bottom-color: var(--accent);
+  background: var(--tab-active-bg-1);
 }
 
 .navButton:focus-visible {
