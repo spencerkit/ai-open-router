@@ -191,6 +191,13 @@ export const RuleCreatePage: React.FC = () => {
                   </button>
                   <button
                     type="button"
+                    className={`${styles.directionOption} ${protocol === "openai_completion" ? styles.active : ""}`}
+                    onClick={() => setProtocol("openai_completion")}
+                  >
+                    {t("ruleProtocol.openai_completion")}
+                  </button>
+                  <button
+                    type="button"
                     className={`${styles.directionOption} ${protocol === "openai" ? styles.active : ""}`}
                     onClick={() => setProtocol("openai")}
                   >

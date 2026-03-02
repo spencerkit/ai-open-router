@@ -75,7 +75,8 @@ export const zhCN = {
 
   // Rule Protocol
   ruleProtocol: {
-    openai: "OpenAI Compatible",
+    openai: "OpenAI",
+    openai_completion: "OpenAI Completion",
     anthropic: "Anthropic",
   },
 

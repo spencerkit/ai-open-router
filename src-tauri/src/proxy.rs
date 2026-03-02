@@ -554,7 +554,7 @@ async fn handle_proxy_request(
         .unwrap_or(&rule.default_model)
         .to_string();
     let downstream_protocol = protocol_from_entry(&entry);
-    let upstream_path = resolve_upstream_path(&downstream_protocol, entry.endpoint);
+    let upstream_path = resolve_upstream_path(&downstream_protocol);
     let upstream_url = match resolve_upstream_url(&rule.api_address, upstream_path) {
         Ok(v) => v,
         Err(msg) => {
@@ -870,23 +870,19 @@ fn detect_entry_protocol(suffix: &str) -> Option<PathEntry> {
     }
 }
 
-fn resolve_upstream_path(target_protocol: &RuleProtocol, endpoint: EntryEndpoint) -> &'static str {
+fn resolve_upstream_path(target_protocol: &RuleProtocol) -> &'static str {
     match target_protocol {
         RuleProtocol::Anthropic => "/v1/messages",
-        RuleProtocol::Openai => {
-            if endpoint == EntryEndpoint::Responses {
-                "/v1/responses"
-            } else {
-                "/v1/chat/completions"
-            }
-        }
+        RuleProtocol::Openai => "/v1/responses",
+        RuleProtocol::OpenaiCompletion => "/v1/chat/completions",
     }
 }
 
 fn protocol_from_entry(entry: &PathEntry) -> RuleProtocol {
-    match entry.protocol {
-        EntryProtocol::Openai => RuleProtocol::Openai,
-        EntryProtocol::Anthropic => RuleProtocol::Anthropic,
+    match entry.endpoint {
+        EntryEndpoint::Responses => RuleProtocol::Openai,
+        EntryEndpoint::ChatCompletions => RuleProtocol::OpenaiCompletion,
+        EntryEndpoint::Messages => RuleProtocol::Anthropic,
     }
 }
 
@@ -922,7 +918,7 @@ fn build_rule_headers(protocol: &RuleProtocol, rule: &Rule) -> HashMap<String, S
             headers.insert("x-api-key".to_string(), rule.token.clone());
             headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
         }
-        RuleProtocol::Openai => {
+        RuleProtocol::Openai | RuleProtocol::OpenaiCompletion => {
             headers.insert("authorization".to_string(), format!("Bearer {}", rule.token));
         }
     }
@@ -1282,12 +1278,6 @@ fn finalize_log(
     status: &str,
     capture_body: bool,
 ) {
-    let direction = match (&entry.protocol, &rule.protocol) {
-        (EntryProtocol::Openai, RuleProtocol::Anthropic) => Some("oc".to_string()),
-        (EntryProtocol::Anthropic, RuleProtocol::Openai) => Some("co".to_string()),
-        _ => None,
-    };
-
     let entry = LogEntry {
         timestamp: Utc::now().to_rfc3339(),
         trace_id: trace_id.to_string(),
@@ -1300,13 +1290,14 @@ fn finalize_log(
         group_path: Some(parsed_path.group_id.clone()),
         group_name: Some(group.name.clone()),
         rule_id: Some(rule.id.clone()),
-        direction,
+        direction: None,
         entry_protocol: Some(match entry.protocol {
             EntryProtocol::Openai => "openai".to_string(),
             EntryProtocol::Anthropic => "anthropic".to_string(),
         }),
         downstream_protocol: Some(match rule.protocol {
             RuleProtocol::Openai => "openai".to_string(),
+            RuleProtocol::OpenaiCompletion => "openai_completion".to_string(),
             RuleProtocol::Anthropic => "anthropic".to_string(),
         }),
         model: model.map(|m| m.to_string()),
@@ -1340,7 +1331,8 @@ fn should_capture_body(state: &ServiceState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_upstream_body, extract_token_usage, resolve_target_model, StreamTokenAccumulator,
+        build_upstream_body, extract_token_usage, resolve_target_model, resolve_upstream_path,
+        StreamTokenAccumulator,
     };
     use crate::models::{Group, Rule, RuleProtocol};
     use serde_json::json;
@@ -1503,5 +1495,15 @@ mod tests {
 
         assert_eq!(out["model"], "gpt-4.1");
         assert_eq!(out["input"], "hello from responses");
+    }
+
+    #[test]
+    fn resolve_upstream_path_uses_rule_protocol_enum_directly() {
+        assert_eq!(resolve_upstream_path(&RuleProtocol::Anthropic), "/v1/messages");
+        assert_eq!(resolve_upstream_path(&RuleProtocol::Openai), "/v1/responses");
+        assert_eq!(
+            resolve_upstream_path(&RuleProtocol::OpenaiCompletion),
+            "/v1/chat/completions"
+        );
     }
 }

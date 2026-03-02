@@ -8,7 +8,7 @@ export type RuleDirection = "oc" | "co"
 /**
  * Protocol family supported by proxy
  */
-export type RuleProtocol = "openai" | "anthropic"
+export type RuleProtocol = "openai" | "openai_completion" | "anthropic"
 
 /**
  * Proxy rule interface

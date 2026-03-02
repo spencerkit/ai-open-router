@@ -145,8 +145,10 @@ function validateConfig(config) {
         if (typeof rule.apiAddress !== "string") {
           errors.push(`rule.apiAddress must be string for ${rule.id || "unknown"}`)
         }
-        if (!["openai", "anthropic"].includes(rule.protocol)) {
-          errors.push(`rule.protocol must be openai|anthropic for ${rule.id || "unknown"}`)
+        if (!["openai", "openai_completion", "anthropic"].includes(rule.protocol)) {
+          errors.push(
+            `rule.protocol must be openai|openai_completion|anthropic for ${rule.id || "unknown"}`
+          )
         }
         if (!isNonEmptyString(rule.defaultModel)) {
           errors.push(`rule.defaultModel must be non-empty string for ${rule.id || "unknown"}`)

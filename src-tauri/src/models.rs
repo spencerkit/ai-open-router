@@ -43,9 +43,12 @@ pub struct RemoteGitConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum RuleProtocol {
+    #[serde(rename = "openai")]
     Openai,
+    #[serde(rename = "openai_completion", alias = "openaiCompletion", alias = "openai-completion")]
+    OpenaiCompletion,
+    #[serde(rename = "anthropic")]
     Anthropic,
 }
 
