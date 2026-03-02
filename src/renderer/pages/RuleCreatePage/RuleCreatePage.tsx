@@ -2,11 +2,48 @@ import { Eye, EyeOff } from "lucide-react"
 import type React from "react"
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Button, Input } from "@/components"
+import { Button, Input, Switch } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import { useProxyStore } from "@/store"
 import type { ProxyConfig, Rule } from "@/types"
 import styles from "./RuleCreatePage.module.css"
+
+const parseQuotaHeaders = (raw: string): Record<string, string> => {
+  const trimmed = raw.trim()
+  if (!trimmed) return {}
+
+  const parsed = JSON.parse(trimmed) as unknown
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("headers must be a JSON object")
+  }
+
+  const next: Record<string, string> = {}
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!key.trim()) continue
+    if (typeof value === "string") {
+      next[key.trim()] = value
+      continue
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      next[key.trim()] = String(value)
+      continue
+    }
+    throw new Error(`header value must be string/number/boolean: ${key}`)
+  }
+  return next
+}
+
+const buildRemainingMapping = (path: string, expr: string) => {
+  const nextExpr = expr.trim()
+  if (nextExpr) {
+    return { expr: nextExpr }
+  }
+  const nextPath = path.trim()
+  if (nextPath) {
+    return nextPath
+  }
+  return null
+}
 
 /**
  * RuleCreatePage Component
@@ -26,11 +63,32 @@ export const RuleCreatePage: React.FC = () => {
   const [apiAddress, setApiAddress] = useState("")
   const [defaultModel, setDefaultModel] = useState("")
   const [modelMappings, setModelMappings] = useState<Record<string, string>>({})
+
+  const [quotaEnabled, setQuotaEnabled] = useState(false)
+  const [quotaProvider, setQuotaProvider] = useState("custom")
+  const [quotaEndpoint, setQuotaEndpoint] = useState("")
+  const [quotaMethod, setQuotaMethod] = useState("GET")
+  const [quotaUseRuleToken, setQuotaUseRuleToken] = useState(true)
+  const [quotaCustomToken, setQuotaCustomToken] = useState("")
+  const [quotaAuthHeader, setQuotaAuthHeader] = useState("Authorization")
+  const [quotaAuthScheme, setQuotaAuthScheme] = useState("Bearer")
+  const [quotaHeadersText, setQuotaHeadersText] = useState("{}")
+  const [quotaRemainingPath, setQuotaRemainingPath] = useState("")
+  const [quotaRemainingExpr, setQuotaRemainingExpr] = useState("")
+  const [quotaUnitPath, setQuotaUnitPath] = useState("")
+  const [quotaTotalPath, setQuotaTotalPath] = useState("")
+  const [quotaResetAtPath, setQuotaResetAtPath] = useState("")
+  const [quotaLowThresholdPercent, setQuotaLowThresholdPercent] = useState("10")
+
   const [errors, setErrors] = useState<{
     name?: string
     token?: string
     apiAddress?: string
     defaultModel?: string
+    quotaEndpoint?: string
+    quotaHeaders?: string
+    quotaRemaining?: string
+    quotaThreshold?: string
   }>({})
 
   const group = config?.groups.find(g => g.id === groupId)
@@ -44,7 +102,7 @@ export const RuleCreatePage: React.FC = () => {
   if (!group) return null
 
   const focusField = (id: string) => {
-    const input = document.getElementById(id) as HTMLInputElement | null
+    const input = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null
     input?.focus()
   }
 
@@ -54,6 +112,10 @@ export const RuleCreatePage: React.FC = () => {
       token?: string
       apiAddress?: string
       defaultModel?: string
+      quotaEndpoint?: string
+      quotaHeaders?: string
+      quotaRemaining?: string
+      quotaThreshold?: string
     } = {}
 
     if (!name.trim()) {
@@ -67,6 +129,27 @@ export const RuleCreatePage: React.FC = () => {
     }
     if (!defaultModel.trim()) {
       nextErrors.defaultModel = t("validation.required", { field: t("servicePage.defaultModel") })
+    }
+
+    if (quotaEnabled) {
+      if (!quotaEndpoint.trim()) {
+        nextErrors.quotaEndpoint = t("validation.required", { field: t("ruleForm.quotaEndpoint") })
+      }
+      if (!quotaRemainingPath.trim() && !quotaRemainingExpr.trim()) {
+        nextErrors.quotaRemaining = t("validation.required", {
+          field: t("ruleForm.quotaRemainingMapping"),
+        })
+      }
+      try {
+        parseQuotaHeaders(quotaHeadersText)
+      } catch {
+        nextErrors.quotaHeaders = t("ruleForm.quotaHeadersError")
+      }
+
+      const threshold = Number(quotaLowThresholdPercent)
+      if (!Number.isFinite(threshold) || threshold <= 0) {
+        nextErrors.quotaThreshold = t("ruleForm.quotaThresholdError")
+      }
     }
 
     setErrors(nextErrors)
@@ -87,6 +170,22 @@ export const RuleCreatePage: React.FC = () => {
       focusField("defaultModel")
       return false
     }
+    if (nextErrors.quotaEndpoint) {
+      focusField("quota-endpoint")
+      return false
+    }
+    if (nextErrors.quotaRemaining) {
+      focusField("quota-remaining-path")
+      return false
+    }
+    if (nextErrors.quotaHeaders) {
+      focusField("quota-headers")
+      return false
+    }
+    if (nextErrors.quotaThreshold) {
+      focusField("quota-threshold")
+      return false
+    }
     return true
   }
 
@@ -94,6 +193,9 @@ export const RuleCreatePage: React.FC = () => {
     e.preventDefault()
     if (!config || !groupId) return
     if (!validateForm()) return
+
+    const quotaHeaders = parseQuotaHeaders(quotaHeadersText)
+    const threshold = Number(quotaLowThresholdPercent)
 
     const newRule: Rule = {
       id: crypto.randomUUID(),
@@ -107,6 +209,24 @@ export const RuleCreatePage: React.FC = () => {
           .map(([key, value]) => [key.trim(), value.trim()])
           .filter(([key, value]) => key && value)
       ),
+      quota: {
+        enabled: quotaEnabled,
+        provider: quotaProvider.trim() || "custom",
+        endpoint: quotaEndpoint.trim(),
+        method: quotaMethod,
+        useRuleToken: quotaUseRuleToken,
+        customToken: quotaUseRuleToken ? "" : quotaCustomToken.trim(),
+        authHeader: quotaAuthHeader.trim(),
+        authScheme: quotaAuthScheme.trim(),
+        customHeaders: quotaHeaders,
+        lowThresholdPercent: Number.isFinite(threshold) && threshold > 0 ? threshold : 10,
+        response: {
+          remaining: buildRemainingMapping(quotaRemainingPath, quotaRemainingExpr),
+          unit: quotaUnitPath.trim() || null,
+          total: quotaTotalPath.trim() || null,
+          resetAt: quotaResetAtPath.trim() || null,
+        },
+      },
     }
 
     const newConfig: ProxyConfig = {
@@ -136,7 +256,13 @@ export const RuleCreatePage: React.FC = () => {
     navigate("/")
   }
 
-  const isValid = name.trim() && token.trim() && apiAddress.trim() && defaultModel.trim()
+  const isValid =
+    name.trim() &&
+    token.trim() &&
+    apiAddress.trim() &&
+    defaultModel.trim() &&
+    (!quotaEnabled ||
+      (quotaEndpoint.trim() && (quotaRemainingPath.trim() || quotaRemainingExpr.trim())))
 
   return (
     <div className={styles.ruleCreatePage}>
@@ -307,6 +433,228 @@ export const RuleCreatePage: React.FC = () => {
                   hint={t("ruleForm.endpointHint")}
                 />
               </div>
+            </section>
+
+            <section className={styles.formSection}>
+              <h2 className={styles.sectionTitle}>{t("ruleForm.sectionQuota")}</h2>
+
+              <div className={styles.switchRow}>
+                <div>
+                  <label htmlFor="quota-enabled">{t("ruleForm.quotaEnabled")}</label>
+                  <p className={styles.fieldHint}>{t("ruleForm.quotaEnabledHint")}</p>
+                </div>
+                <Switch
+                  id="quota-enabled"
+                  checked={quotaEnabled}
+                  onChange={next => setQuotaEnabled(next)}
+                />
+              </div>
+
+              {quotaEnabled && (
+                <>
+                  <div className={styles.formGroup}>
+                    <label htmlFor="quota-provider">{t("ruleForm.quotaProvider")}</label>
+                    <Input
+                      id="quota-provider"
+                      value={quotaProvider}
+                      onChange={e => setQuotaProvider(e.target.value)}
+                      placeholder="custom"
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label htmlFor="quota-endpoint">{t("ruleForm.quotaEndpoint")}</label>
+                    <Input
+                      id="quota-endpoint"
+                      value={quotaEndpoint}
+                      onChange={e => {
+                        setQuotaEndpoint(e.target.value)
+                        if (errors.quotaEndpoint) {
+                          setErrors(prev => ({ ...prev, quotaEndpoint: undefined }))
+                        }
+                      }}
+                      placeholder="https://provider.example.com/quota"
+                      error={errors.quotaEndpoint}
+                      hint={t("ruleForm.quotaEndpointHint")}
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label htmlFor="quota-method-get">{t("ruleForm.quotaMethod")}</label>
+                    <div className={styles.directionOptions}>
+                      <button
+                        id="quota-method-get"
+                        type="button"
+                        className={`${styles.directionOption} ${quotaMethod === "GET" ? styles.active : ""}`}
+                        onClick={() => setQuotaMethod("GET")}
+                      >
+                        GET
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.directionOption} ${quotaMethod === "POST" ? styles.active : ""}`}
+                        onClick={() => setQuotaMethod("POST")}
+                      >
+                        POST
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={styles.switchRow}>
+                    <div>
+                      <label htmlFor="quota-use-rule-token">
+                        {t("ruleForm.quotaUseRuleToken")}
+                      </label>
+                      <p className={styles.fieldHint}>{t("ruleForm.quotaUseRuleTokenHint")}</p>
+                    </div>
+                    <Switch
+                      id="quota-use-rule-token"
+                      checked={quotaUseRuleToken}
+                      onChange={next => setQuotaUseRuleToken(next)}
+                    />
+                  </div>
+
+                  {!quotaUseRuleToken && (
+                    <div className={styles.formGroup}>
+                      <label htmlFor="quota-custom-token">{t("ruleForm.quotaCustomToken")}</label>
+                      <Input
+                        id="quota-custom-token"
+                        type="password"
+                        value={quotaCustomToken}
+                        onChange={e => setQuotaCustomToken(e.target.value)}
+                        placeholder="token..."
+                      />
+                    </div>
+                  )}
+
+                  <div className={styles.dualColumnRow}>
+                    <div className={styles.formGroup}>
+                      <label htmlFor="quota-auth-header">{t("ruleForm.quotaAuthHeader")}</label>
+                      <Input
+                        id="quota-auth-header"
+                        value={quotaAuthHeader}
+                        onChange={e => setQuotaAuthHeader(e.target.value)}
+                        placeholder="Authorization"
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label htmlFor="quota-auth-scheme">{t("ruleForm.quotaAuthScheme")}</label>
+                      <Input
+                        id="quota-auth-scheme"
+                        value={quotaAuthScheme}
+                        onChange={e => setQuotaAuthScheme(e.target.value)}
+                        placeholder="Bearer"
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label htmlFor="quota-headers">{t("ruleForm.quotaHeaders")}</label>
+                    <textarea
+                      id="quota-headers"
+                      className={styles.jsonTextarea}
+                      value={quotaHeadersText}
+                      onChange={e => {
+                        setQuotaHeadersText(e.target.value)
+                        if (errors.quotaHeaders) {
+                          setErrors(prev => ({ ...prev, quotaHeaders: undefined }))
+                        }
+                      }}
+                      placeholder='{"x-api-key":"{{rule.token}}"}'
+                    />
+                    {errors.quotaHeaders ? (
+                      <p className={styles.errorText}>{errors.quotaHeaders}</p>
+                    ) : (
+                      <p className={styles.fieldHint}>{t("ruleForm.quotaHeadersHint")}</p>
+                    )}
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label htmlFor="quota-remaining-path">{t("ruleForm.quotaRemainingPath")}</label>
+                    <Input
+                      id="quota-remaining-path"
+                      value={quotaRemainingPath}
+                      onChange={e => {
+                        setQuotaRemainingPath(e.target.value)
+                        if (errors.quotaRemaining) {
+                          setErrors(prev => ({ ...prev, quotaRemaining: undefined }))
+                        }
+                      }}
+                      placeholder="$.data.remaining_balance"
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label htmlFor="quota-remaining-expr">{t("ruleForm.quotaRemainingExpr")}</label>
+                    <Input
+                      id="quota-remaining-expr"
+                      value={quotaRemainingExpr}
+                      onChange={e => {
+                        setQuotaRemainingExpr(e.target.value)
+                        if (errors.quotaRemaining) {
+                          setErrors(prev => ({ ...prev, quotaRemaining: undefined }))
+                        }
+                      }}
+                      placeholder="$.data.remaining_balance/$.data.remaining_total"
+                      hint={
+                        errors.quotaRemaining ? undefined : t("ruleForm.quotaRemainingExprHint")
+                      }
+                      error={errors.quotaRemaining}
+                    />
+                  </div>
+
+                  <div className={styles.dualColumnRow}>
+                    <div className={styles.formGroup}>
+                      <label htmlFor="quota-unit-path">{t("ruleForm.quotaUnitPath")}</label>
+                      <Input
+                        id="quota-unit-path"
+                        value={quotaUnitPath}
+                        onChange={e => setQuotaUnitPath(e.target.value)}
+                        placeholder="$.data.currency"
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label htmlFor="quota-total-path">{t("ruleForm.quotaTotalPath")}</label>
+                      <Input
+                        id="quota-total-path"
+                        value={quotaTotalPath}
+                        onChange={e => setQuotaTotalPath(e.target.value)}
+                        placeholder="$.data.total_balance"
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.dualColumnRow}>
+                    <div className={styles.formGroup}>
+                      <label htmlFor="quota-reset-at-path">{t("ruleForm.quotaResetAtPath")}</label>
+                      <Input
+                        id="quota-reset-at-path"
+                        value={quotaResetAtPath}
+                        onChange={e => setQuotaResetAtPath(e.target.value)}
+                        placeholder="$.data.reset_at"
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label htmlFor="quota-threshold">{t("ruleForm.quotaLowThreshold")}</label>
+                      <Input
+                        id="quota-threshold"
+                        value={quotaLowThresholdPercent}
+                        onChange={e => {
+                          setQuotaLowThresholdPercent(e.target.value)
+                          if (errors.quotaThreshold) {
+                            setErrors(prev => ({ ...prev, quotaThreshold: undefined }))
+                          }
+                        }}
+                        placeholder="10"
+                        error={errors.quotaThreshold}
+                        hint={
+                          !errors.quotaThreshold ? t("ruleForm.quotaLowThresholdHint") : undefined
+                        }
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </section>
 
             <div className={styles.formActions}>

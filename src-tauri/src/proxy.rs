@@ -1361,7 +1361,7 @@ mod tests {
         build_upstream_body, extract_token_usage, resolve_target_model, resolve_upstream_path,
         StreamTokenAccumulator,
     };
-    use crate::models::{Group, Rule, RuleProtocol};
+    use crate::models::{default_rule_quota_config, Group, Rule, RuleProtocol};
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -1473,6 +1473,7 @@ mod tests {
             api_address: "https://api.example.com".to_string(),
             default_model: "fallback".to_string(),
             model_mappings: mappings,
+            quota: default_rule_quota_config(),
         };
         let group = Group {
             id: "g1".to_string(),
@@ -1496,6 +1497,7 @@ mod tests {
             api_address: "https://api.example.com".to_string(),
             default_model: "fallback".to_string(),
             model_mappings: HashMap::new(),
+            quota: default_rule_quota_config(),
         };
         let group = Group {
             id: "g1".to_string(),

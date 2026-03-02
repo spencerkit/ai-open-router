@@ -26,9 +26,12 @@ export type {
   LogEntryStatus,
   ProxyMetrics,
   ProxyStatus,
+  QuotaStatus,
   Rule,
   RuleDirection,
   RuleProtocol,
+  RuleQuotaConfig,
+  RuleQuotaSnapshot,
   TokenUsage,
 } from "./proxy"
 

@@ -6,6 +6,7 @@ mod log_store;
 mod mappers;
 mod models;
 mod proxy;
+mod quota;
 mod remote_sync;
 mod stats_store;
 
@@ -438,6 +439,25 @@ async fn logs_stats_clear(state: State<'_, SharedState>) -> Result<serde_json::V
     Ok(json!({ "ok": true }))
 }
 
+#[tauri::command]
+async fn quota_get_rule(
+    state: State<'_, SharedState>,
+    group_id: String,
+    rule_id: String,
+) -> Result<models::RuleQuotaSnapshot, String> {
+    let config = state.config_store.get();
+    quota::fetch_rule_quota(&config, &group_id, &rule_id).await
+}
+
+#[tauri::command]
+async fn quota_get_group(
+    state: State<'_, SharedState>,
+    group_id: String,
+) -> Result<Vec<models::RuleQuotaSnapshot>, String> {
+    let config = state.config_store.get();
+    quota::fetch_group_quotas(&config, &group_id).await
+}
+
 fn create_tray(app: &AppHandle) -> Result<(), String> {
     let show_hide = MenuItem::with_id(app, "toggle-window", "Show/Hide AI Open Router", true, None::<&str>)
         .map_err(|e| format!("create tray menu failed: {e}"))?;
@@ -612,6 +632,8 @@ async fn main() {
             logs_clear,
             logs_stats_summary,
             logs_stats_clear,
+            quota_get_rule,
+            quota_get_group,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

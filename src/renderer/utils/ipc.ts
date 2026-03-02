@@ -8,6 +8,7 @@ import type {
   ProxyStatus,
   RemoteRulesPullResult,
   RemoteRulesUploadResult,
+  RuleQuotaSnapshot,
   SaveConfigResult,
   StatsSummaryResult,
 } from "@/types"
@@ -105,5 +106,13 @@ export const ipc = {
 
   clearLogsStats(): Promise<{ ok: boolean }> {
     return getInvoke()<{ ok: boolean }>("logs_stats_clear")
+  },
+
+  getRuleQuota(groupId: string, ruleId: string): Promise<RuleQuotaSnapshot> {
+    return getInvoke()<RuleQuotaSnapshot>("quota_get_rule", { groupId, ruleId })
+  },
+
+  getGroupQuotas(groupId: string): Promise<RuleQuotaSnapshot[]> {
+    return getInvoke()<RuleQuotaSnapshot[]>("quota_get_group", { groupId })
   },
 }
