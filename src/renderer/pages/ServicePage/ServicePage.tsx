@@ -5,7 +5,7 @@ import { Button, Input, Modal } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import { useProxyStore } from "@/store"
 import type { Group, ProxyConfig } from "@/types"
-import { resolveReachableServerBaseUrl } from "@/utils/serverAddress"
+import { resolveReachableServerBaseUrls } from "@/utils/serverAddress"
 import { RuleList } from "./RuleList"
 import styles from "./ServicePage.module.css"
 
@@ -85,10 +85,14 @@ export const ServicePage: React.FC = () => {
       groups: [...(config.groups ?? []), newGroup],
     }
 
-    await saveConfig(newConfig)
-    closeAddGroupModal()
-    setActiveGroupId(newGroup.id)
-    showToast(t("toast.groupCreated"), "success")
+    try {
+      await saveConfig(newConfig)
+      closeAddGroupModal()
+      setActiveGroupId(newGroup.id)
+      showToast(t("toast.groupCreated"), "success")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
   }
 
   const handleDeleteGroup = async () => {
@@ -97,10 +101,14 @@ export const ServicePage: React.FC = () => {
     const newGroups = config.groups.filter(g => g.id !== activeGroupId)
     const newConfig = { ...config, groups: newGroups }
 
-    await saveConfig(newConfig)
-    setActiveGroupId(newGroups.length > 0 ? newGroups[0].id : null)
-    setShowDeleteGroupModal(false)
-    showToast(t("toast.groupDeleted"), "success")
+    try {
+      await saveConfig(newConfig)
+      setActiveGroupId(newGroups.length > 0 ? newGroups[0].id : null)
+      setShowDeleteGroupModal(false)
+      showToast(t("toast.groupDeleted"), "success")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
   }
 
   const handleRequestDeleteRule = (ruleId: string) => {
@@ -151,17 +159,19 @@ export const ServicePage: React.FC = () => {
     })
 
     const newConfig = { ...config, groups: newGroups }
-    await saveConfig(newConfig)
-    setSelectedRuleId(null)
-    setShowDeleteRuleModal(false)
-    setPendingDeleteRuleId(null)
-    showToast(t("toast.ruleDeleted"), "success")
+    try {
+      await saveConfig(newConfig)
+      setSelectedRuleId(null)
+      setShowDeleteRuleModal(false)
+      setPendingDeleteRuleId(null)
+      showToast(t("toast.ruleDeleted"), "success")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
   }
 
-  const handleCopyEntryUrl = async () => {
-    if (!activeGroup) return
-
-    const url = `${getServerBaseUrl()}/oc/${activeGroup.id}`
+  const handleCopyEntryUrl = async (url: string) => {
+    if (!url) return
 
     try {
       await navigator.clipboard.writeText(url)
@@ -171,18 +181,19 @@ export const ServicePage: React.FC = () => {
     }
   }
 
-  const getEntryUrl = () => {
-    if (!activeGroup) return ""
-    return `${getServerBaseUrl()}/oc/${activeGroup.id}`
-  }
-
-  const getServerBaseUrl = () => {
-    return resolveReachableServerBaseUrl({
+  const serverBaseUrls = React.useMemo(() => {
+    return resolveReachableServerBaseUrls({
       statusAddress: status?.address,
+      statusLanAddress: status?.lanAddress,
       configHost: config?.server.host,
       configPort: config?.server.port,
     })
-  }
+  }, [status?.address, status?.lanAddress, config?.server.host, config?.server.port])
+
+  const entryUrls = React.useMemo(() => {
+    if (!activeGroup) return []
+    return serverBaseUrls.map(baseUrl => `${baseUrl}/oc/${activeGroup.id}`)
+  }, [activeGroup, serverBaseUrls])
 
   return (
     <div className={styles.servicePage}>
@@ -254,15 +265,22 @@ export const ServicePage: React.FC = () => {
                   </span>
                 </div>
                 <div className={styles.entryUrl}>
-                  <code>{getEntryUrl()}</code>
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    icon={Copy}
-                    onClick={handleCopyEntryUrl}
-                    title={t("servicePage.copyEntryUrl")}
-                    aria-label={t("servicePage.copyEntryUrl")}
-                  />
+                  <div className={styles.entryUrlList}>
+                    {entryUrls.map(url => (
+                      <div key={url} className={styles.entryUrlItem}>
+                        <code>{url}</code>
+                        <Button
+                          variant="ghost"
+                          size="small"
+                          icon={Copy}
+                          className={styles.entryUrlCopyButton}
+                          onClick={() => handleCopyEntryUrl(url)}
+                          title={t("servicePage.copyEntryUrl")}
+                          aria-label={`${t("servicePage.copyEntryUrl")}: ${url}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className={styles.groupActions}>

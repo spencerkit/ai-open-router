@@ -1,12 +1,15 @@
 import { RefreshCw, Trash2 } from "lucide-react"
 import type React from "react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button, Modal } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import { useProxyStore } from "@/store"
 import type { LogEntry } from "@/types"
+import { formatTokenMillions } from "@/utils/tokenFormat"
 import styles from "./LogsPage.module.css"
+
+const HOURS_FILTERS = [1, 6, 24, 168, 720, 2160] as const
 
 /**
  * LogsPage Component
@@ -15,10 +18,16 @@ import styles from "./LogsPage.module.css"
 export const LogsPage: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { logs, refreshLogs, clearLogs, loading, status } = useProxyStore()
+  const { logs, logsStats, refreshLogs, refreshLogsStats, clearLogs, loading, config } =
+    useProxyStore()
   const { showToast } = useLogs()
   const [statusFilter, setStatusFilter] = useState<"all" | LogEntry["status"]>("all")
+  const [ruleFilter, setRuleFilter] = useState("all")
+  const [ruleInputValue, setRuleInputValue] = useState("")
+  const [ruleDropdownOpen, setRuleDropdownOpen] = useState(false)
+  const [hoursFilter, setHoursFilter] = useState<number>(24)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const ruleComboboxRef = useRef<HTMLDivElement | null>(null)
   const statusFilters: Array<"all" | LogEntry["status"]> = [
     "all",
     "error",
@@ -27,9 +36,72 @@ export const LogsPage: React.FC = () => {
     "ok",
   ]
 
+  const ruleOptions = useMemo(() => {
+    const options: Array<{ key: string; label: string }> = [
+      { key: "all", label: t("logs.statsRuleAll") },
+    ]
+    for (const group of config?.groups || []) {
+      for (const rule of group.rules || []) {
+        options.push({
+          key: `${group.id}::${rule.id}`,
+          label: `${group.name || group.id}-${rule.name || rule.id}`,
+        })
+      }
+    }
+    return options
+  }, [config, t])
+
+  const visibleRuleOptions = useMemo(() => {
+    const keyword = ruleInputValue.trim().toLowerCase()
+    if (!keyword) {
+      return ruleOptions
+    }
+
+    return ruleOptions.filter(option => {
+      if (option.key === "all") return false
+      return option.label.toLowerCase().includes(keyword)
+    })
+  }, [ruleInputValue, ruleOptions])
+
+  useEffect(() => {
+    const selected = ruleOptions.find(option => option.key === ruleFilter)
+    if (selected?.key === "all") {
+      setRuleInputValue("")
+    } else {
+      setRuleInputValue(selected?.label ?? "")
+    }
+  }, [ruleFilter, ruleOptions])
+
+  useEffect(() => {
+    void refreshLogsStats(hoursFilter, ruleFilter === "all" ? undefined : ruleFilter)
+  }, [hoursFilter, refreshLogsStats, ruleFilter])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshLogsStats(hoursFilter, ruleFilter === "all" ? undefined : ruleFilter)
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [hoursFilter, refreshLogsStats, ruleFilter])
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!ruleComboboxRef.current) return
+      const target = event.target as Node
+      if (!ruleComboboxRef.current.contains(target)) {
+        setRuleDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick)
+    return () => document.removeEventListener("mousedown", handleOutsideClick)
+  }, [])
+
   const handleRefresh = async () => {
     try {
-      await refreshLogs()
+      await Promise.all([
+        refreshLogs(),
+        refreshLogsStats(hoursFilter, ruleFilter === "all" ? undefined : ruleFilter),
+      ])
       showToast(t("logs.refreshSuccess"), "success")
     } catch {
       showToast(t("logs.refreshError"), "error")
@@ -76,25 +148,26 @@ export const LogsPage: React.FC = () => {
     return orderedLogs.filter(log => log.status === statusFilter)
   }, [orderedLogs, statusFilter])
 
-  const logSummary = useMemo(() => {
-    const total = logs.length
-    const errorCount = logs.filter(log => log.status === "error").length
-    const okCount = logs.filter(log => log.status === "ok").length
-    const completed = logs.filter(log => log.durationMs > 0)
-    const avgDuration =
-      completed.length > 0
-        ? Math.round(completed.reduce((sum, log) => sum + log.durationMs, 0) / completed.length)
-        : 0
-    const successRate = total > 0 ? Math.round((okCount / total) * 100) : 0
-
-    return { total, errorCount, avgDuration, successRate }
-  }, [logs])
+  const totalRequests = logsStats?.requests ?? 0
+  const totalErrors = logsStats?.errors ?? 0
+  const successRate =
+    totalRequests > 0
+      ? Math.max(0, Math.round(((totalRequests - totalErrors) / totalRequests) * 100))
+      : 0
 
   const getStatusText = (status: LogEntry["status"]) => t(`logs.state.${status}`)
 
   const getFilterLabel = (filter: "all" | LogEntry["status"]) => {
     if (filter === "all") return t("logs.filterAll")
     return getStatusText(filter)
+  }
+
+  const getHoursLabel = (hours: number) => t(`logs.statsHours${hours}`)
+
+  const applyRuleOption = (option: { key: string; label: string }) => {
+    setRuleFilter(option.key)
+    setRuleInputValue(option.key === "all" ? "" : option.label)
+    setRuleDropdownOpen(false)
   }
 
   const renderLogEntry = (log: LogEntry) => {
@@ -177,9 +250,9 @@ export const LogsPage: React.FC = () => {
                 <span className={styles.label}>{t("logs.tokens")}:</span>
                 <span>
                   {t("logs.tokensCompact", {
-                    input: log.tokenUsage.inputTokens,
-                    output: log.tokenUsage.outputTokens,
-                    cacheRead: log.tokenUsage.cacheReadTokens,
+                    input: formatTokenMillions(log.tokenUsage.inputTokens),
+                    output: formatTokenMillions(log.tokenUsage.outputTokens),
+                    cacheRead: formatTokenMillions(log.tokenUsage.cacheReadTokens),
                   })}
                 </span>
               </div>
@@ -218,6 +291,9 @@ export const LogsPage: React.FC = () => {
             {t("logs.clear")}
           </Button>
         </div>
+      </div>
+
+      <div className={styles.filterRow}>
         <div className={styles.filterGroup}>
           {statusFilters.map(filter => (
             <button
@@ -231,6 +307,62 @@ export const LogsPage: React.FC = () => {
             </button>
           ))}
         </div>
+        <div className={styles.advancedFilterGroup}>
+          <div className={styles.ruleCombobox} ref={ruleComboboxRef}>
+            <input
+              className={styles.inlineInput}
+              type="text"
+              value={ruleInputValue}
+              onFocus={() => setRuleDropdownOpen(true)}
+              onChange={e => {
+                const next = e.target.value
+                setRuleInputValue(next)
+                setRuleDropdownOpen(true)
+                if (!next.trim()) {
+                  setRuleFilter("all")
+                }
+              }}
+              onKeyDown={e => {
+                if (e.key === "Escape") {
+                  setRuleDropdownOpen(false)
+                }
+                if (e.key === "Enter" && visibleRuleOptions.length > 0) {
+                  e.preventDefault()
+                  applyRuleOption(visibleRuleOptions[0])
+                }
+              }}
+              placeholder={t("logs.statsRuleAll")}
+            />
+            {ruleDropdownOpen && visibleRuleOptions.length > 0 && (
+              <div className={styles.ruleDropdown}>
+                {visibleRuleOptions.map(option => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={`${styles.ruleOption} ${ruleFilter === option.key ? styles.ruleOptionActive : ""}`}
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => applyRuleOption(option)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className={styles.selectWrap}>
+            <select
+              className={styles.inlineSelect}
+              value={hoursFilter}
+              onChange={e => setHoursFilter(Number(e.target.value))}
+            >
+              {HOURS_FILTERS.map(hours => (
+                <option key={hours} value={hours}>
+                  {getHoursLabel(hours)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       <div className={styles.metricsSection}>
@@ -238,21 +370,21 @@ export const LogsPage: React.FC = () => {
         <div className={styles.summaryGrid}>
           <div className={styles.summaryCard}>
             <span className={styles.summaryLabel}>{t("logs.totalRequests")}</span>
-            <strong className={styles.summaryValue}>{logSummary.total}</strong>
+            <strong className={styles.summaryValue}>{totalRequests}</strong>
           </div>
           <div className={styles.summaryCard}>
             <span className={styles.summaryLabel}>{t("logs.errorsCount")}</span>
             <strong className={`${styles.summaryValue} ${styles.summaryValueDanger}`}>
-              {logSummary.errorCount}
+              {totalErrors}
             </strong>
           </div>
           <div className={styles.summaryCard}>
             <span className={styles.summaryLabel}>{t("logs.successRate")}</span>
-            <strong className={styles.summaryValue}>{logSummary.successRate}%</strong>
+            <strong className={styles.summaryValue}>{successRate}%</strong>
           </div>
           <div className={styles.summaryCard}>
-            <span className={styles.summaryLabel}>{t("logs.avgDuration")}</span>
-            <strong className={styles.summaryValue}>{logSummary.avgDuration}ms</strong>
+            <span className={styles.summaryLabel}>{t("logs.statsTimeFilterLabel")}</span>
+            <strong className={styles.summaryValue}>{getHoursLabel(hoursFilter)}</strong>
           </div>
         </div>
       </div>
@@ -262,19 +394,27 @@ export const LogsPage: React.FC = () => {
         <div className={styles.summaryGrid}>
           <div className={styles.summaryCard}>
             <span className={styles.summaryLabel}>{t("logs.totalInputTokens")}</span>
-            <strong className={styles.summaryValue}>{status?.metrics.inputTokens ?? 0}</strong>
+            <strong className={styles.summaryValue}>
+              {formatTokenMillions(logsStats?.inputTokens ?? 0)}
+            </strong>
           </div>
           <div className={styles.summaryCard}>
             <span className={styles.summaryLabel}>{t("logs.totalOutputTokens")}</span>
-            <strong className={styles.summaryValue}>{status?.metrics.outputTokens ?? 0}</strong>
+            <strong className={styles.summaryValue}>
+              {formatTokenMillions(logsStats?.outputTokens ?? 0)}
+            </strong>
           </div>
           <div className={styles.summaryCard}>
             <span className={styles.summaryLabel}>{t("logs.totalCacheReadTokens")}</span>
-            <strong className={styles.summaryValue}>{status?.metrics.cacheReadTokens ?? 0}</strong>
+            <strong className={styles.summaryValue}>
+              {formatTokenMillions(logsStats?.cacheReadTokens ?? 0)}
+            </strong>
           </div>
           <div className={styles.summaryCard}>
             <span className={styles.summaryLabel}>{t("logs.totalCacheWriteTokens")}</span>
-            <strong className={styles.summaryValue}>{status?.metrics.cacheWriteTokens ?? 0}</strong>
+            <strong className={styles.summaryValue}>
+              {formatTokenMillions(logsStats?.cacheWriteTokens ?? 0)}
+            </strong>
           </div>
         </div>
       </div>

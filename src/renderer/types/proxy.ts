@@ -43,6 +43,7 @@ export interface Group {
 export interface ProxyStatus {
   running: boolean
   address: string | null
+  lanAddress?: string | null
   metrics: ProxyMetrics
 }
 

@@ -17,6 +17,9 @@ import type {
   LogEntry,
   ProxyConfig,
   ProxyStatus,
+  RemoteRulesPullResult,
+  RemoteRulesUploadResult,
+  StatsSummaryResult,
 } from "@/types"
 import { ipc } from "@/utils/ipc"
 
@@ -28,6 +31,7 @@ interface ProxyState {
   config: ProxyConfig | null
   status: ProxyStatus | null
   logs: LogEntry[]
+  logsStats: StatsSummaryResult | null
   activeGroupId: string | null
   loading: boolean
   error: string | null
@@ -40,12 +44,15 @@ interface ProxyState {
   init: () => Promise<void>
   refreshStatus: () => Promise<void>
   refreshLogs: () => Promise<void>
+  refreshLogsStats: (hours?: number, ruleKey?: string) => Promise<void>
   saveConfig: (config: ProxyConfig) => Promise<void>
   exportGroupsBackup: () => Promise<GroupBackupExportResult>
   exportGroupsToFolder: () => Promise<GroupBackupExportResult>
   exportGroupsToClipboard: () => Promise<GroupBackupExportResult>
   importGroupsBackup: () => Promise<GroupBackupImportResult>
   importGroupsFromJson: (jsonText: string) => Promise<GroupBackupImportResult>
+  remoteRulesUpload: (force?: boolean) => Promise<RemoteRulesUploadResult>
+  remoteRulesPull: (force?: boolean) => Promise<RemoteRulesPullResult>
   readClipboardText: () => Promise<ClipboardTextResult>
   setActiveGroupId: (groupId: string | null) => void
   clearLogs: () => Promise<void>
@@ -62,6 +69,22 @@ const STATUS_POLL_INTERVAL = 3000
 const LOGS_POLL_INTERVAL = 3000
 const MAX_LOGS = 100
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string" && message.trim()) {
+      return message
+    }
+  }
+  return fallback
+}
+
 /**
  * Create Zustand store for proxy state management
  */
@@ -70,6 +93,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   config: null,
   status: null,
   logs: [],
+  logsStats: null,
   activeGroupId: null,
   loading: false,
   error: null,
@@ -87,7 +111,11 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
 
       console.log("[Store] Fetching config and status...")
       // Fetch initial config and status in parallel
-      const [config, status] = await Promise.all([ipc.getConfig(), ipc.getStatus()])
+      const [config, status, logsStats] = await Promise.all([
+        ipc.getConfig(),
+        ipc.getStatus(),
+        ipc.getLogsStatsSummary(),
+      ])
 
       console.log("[Store] Config received:", config)
       console.log("[Store] Status received:", status)
@@ -95,6 +123,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       set({
         config,
         status,
+        logsStats,
         loading: false,
       })
 
@@ -139,6 +168,19 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   /**
+   * Refresh request/token stats summary from IPC
+   */
+  refreshLogsStats: async (hours?: number, ruleKey?: string) => {
+    try {
+      const logsStats = await ipc.getLogsStatsSummary(hours, ruleKey)
+      set({ logsStats, error: null })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to refresh logs stats"
+      set({ error: errorMessage })
+    }
+  },
+
+  /**
    * Save configuration via IPC
    * Updates local config with the result
    */
@@ -159,6 +201,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
         error: errorMessage,
         loading: false,
       })
+      throw new Error(errorMessage)
     }
   },
 
@@ -263,6 +306,44 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   /**
+   * Upload current groups/rules backup JSON to remote git repository
+   */
+  remoteRulesUpload: async (force?: boolean) => {
+    try {
+      set({ error: null })
+      return await ipc.remoteRulesUpload(force)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to upload remote rules"
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  /**
+   * Pull groups/rules backup JSON from remote git and replace local groups
+   */
+  remoteRulesPull: async (force?: boolean) => {
+    try {
+      set({ loading: true, error: null })
+      const result = await ipc.remoteRulesPull(force)
+      if (result.config && result.status) {
+        set({
+          config: result.config,
+          status: result.status,
+          loading: false,
+        })
+      } else {
+        set({ loading: false })
+      }
+      return result
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to pull remote rules"
+      set({ error: errorMessage, loading: false })
+      throw error
+    }
+  },
+
+  /**
    * Read plain text from system clipboard via main process
    */
   readClipboardText: async () => {
@@ -351,9 +432,9 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       const status = await ipc.startServer()
       set({ status, loading: false })
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to start server"
+      const errorMessage = getErrorMessage(error, "Failed to start server")
       set({ loading: false })
-      throw error instanceof Error ? error : new Error(errorMessage)
+      throw new Error(errorMessage)
     }
   },
 
@@ -366,9 +447,9 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       const status = await ipc.stopServer()
       set({ status, loading: false })
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to stop server"
+      const errorMessage = getErrorMessage(error, "Failed to stop server")
       set({ loading: false })
-      throw error instanceof Error ? error : new Error(errorMessage)
+      throw new Error(errorMessage)
     }
   },
 }))

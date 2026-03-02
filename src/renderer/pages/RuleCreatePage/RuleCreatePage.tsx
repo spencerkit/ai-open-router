@@ -123,9 +123,13 @@ export const RuleCreatePage: React.FC = () => {
       }),
     }
 
-    await saveConfig(newConfig)
-    showToast(t("toast.ruleCreated"), "success")
-    navigate("/")
+    try {
+      await saveConfig(newConfig)
+      showToast(t("toast.ruleCreated"), "success")
+      navigate("/")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
   }
 
   const handleCancel = () => {

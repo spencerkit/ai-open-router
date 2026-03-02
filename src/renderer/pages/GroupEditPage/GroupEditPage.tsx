@@ -97,9 +97,13 @@ export const GroupEditPage: React.FC = () => {
       }),
     }
 
-    await saveConfig(nextConfig)
-    showToast(t("toast.groupUpdated"), "success")
-    navigate("/")
+    try {
+      await saveConfig(nextConfig)
+      showToast(t("toast.groupUpdated"), "success")
+      navigate("/")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
   }
 
   if (loading) {
@@ -146,6 +150,7 @@ export const GroupEditPage: React.FC = () => {
 
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>{t("groupEditPage.sectionModels")}</h2>
+          <p className={styles.hint}>{t("groupEditPage.modelMatchHint")}</p>
 
           <div className={styles.modelList}>
             {models.length === 0 ? (

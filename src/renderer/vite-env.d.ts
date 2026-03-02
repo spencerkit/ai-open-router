@@ -1,16 +1,5 @@
 /// <reference types="vite/client" />
 
-import type {
-  ProxyConfig,
-  ProxyStatus,
-  LogEntry,
-  SaveConfigResult,
-  GroupBackupExportResult,
-  GroupBackupImportResult,
-  ClipboardTextResult,
-  AppInfo,
-} from "@/types"
-
 declare global {
   interface ImportMetaEnv {
     readonly VITE_APP_TITLE?: string
@@ -21,30 +10,22 @@ declare global {
     readonly env: ImportMetaEnv
   }
 
-  // IPC types based on preload.js exposure
-  interface ProxyApp {
-    // App status operations
-    getAppInfo: () => Promise<AppInfo>
-    getStatus: () => Promise<ProxyStatus>
-    readClipboardText: () => Promise<ClipboardTextResult>
-    startServer: () => Promise<ProxyStatus>
-    stopServer: () => Promise<ProxyStatus>
+  interface TauriCoreNamespace {
+    invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>
+  }
 
-    // Config operations
-    getConfig: () => Promise<ProxyConfig>
-    saveConfig: (config: ProxyConfig) => Promise<SaveConfigResult>
-    exportGroupsBackup: () => Promise<GroupBackupExportResult>
-    exportGroupsToFolder: () => Promise<GroupBackupExportResult>
-    exportGroupsToClipboard: () => Promise<GroupBackupExportResult>
-    importGroupsBackup: () => Promise<GroupBackupImportResult>
-    importGroupsFromJson: (jsonText: string) => Promise<GroupBackupImportResult>
+  interface TauriNamespace {
+    core?: TauriCoreNamespace
+  }
 
-    // Logs operations
-    listLogs: (max?: number) => Promise<LogEntry[]>
-    clearLogs: () => Promise<{ ok: boolean }>
+  interface TauriInternalsNamespace {
+    invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>
   }
 
   interface Window {
-    proxyApp: ProxyApp
+    __TAURI__?: TauriNamespace
+    __TAURI_INTERNALS__?: TauriInternalsNamespace
   }
 }
+
+export {}

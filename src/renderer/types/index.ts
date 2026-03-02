@@ -11,6 +11,7 @@ export type {
   LocaleCode,
   LocaleMode,
   LoggingConfig,
+  RemoteGitConfig,
   ServerConfig,
   ThemeMode,
   UIConfig,
@@ -31,7 +32,7 @@ export type {
   TokenUsage,
 } from "./proxy"
 
-import type { CompatConfig, LoggingConfig, ServerConfig, UIConfig } from "./config"
+import type { CompatConfig, LoggingConfig, RemoteGitConfig, ServerConfig, UIConfig } from "./config"
 import type { Group, ProxyStatus } from "./proxy"
 
 /**
@@ -43,6 +44,7 @@ export interface ProxyConfig {
   compat: CompatConfig
   logging: LoggingConfig
   ui: UIConfig
+  remoteGit: RemoteGitConfig
   groups: Group[]
 }
 
@@ -68,12 +70,68 @@ export interface GroupBackupExportResult {
 export interface GroupBackupImportResult {
   ok: boolean
   canceled: boolean
-  source?: "file" | "json"
+  source?: "file" | "json" | "remote"
   filePath?: string
   importedGroupCount?: number
   config?: ProxyConfig
   restarted?: boolean
   status?: ProxyStatus
+}
+
+export interface RemoteRulesUploadResult {
+  ok: boolean
+  changed: boolean
+  branch: string
+  filePath: string
+  groupCount: number
+  needsConfirmation: boolean
+  warning?: string
+  localUpdatedAt?: string
+  remoteUpdatedAt?: string
+}
+
+export interface RemoteRulesPullResult {
+  ok: boolean
+  branch: string
+  filePath: string
+  importedGroupCount?: number
+  config?: ProxyConfig
+  restarted?: boolean
+  status?: ProxyStatus
+  needsConfirmation: boolean
+  warning?: string
+  localUpdatedAt?: string
+  remoteUpdatedAt?: string
+}
+
+export interface StatsRuleOption {
+  key: string
+  label: string
+  groupId: string
+  ruleId: string
+}
+
+export interface HourlyStatsPoint {
+  hour: string
+  requests: number
+  errors: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
+export interface StatsSummaryResult {
+  hours: number
+  ruleKey?: string | null
+  requests: number
+  errors: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  hourly: HourlyStatsPoint[]
+  options: StatsRuleOption[]
 }
 
 export interface ClipboardTextResult {

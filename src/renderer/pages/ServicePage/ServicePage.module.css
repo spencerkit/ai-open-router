@@ -251,7 +251,7 @@
 
 .entryUrl {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-2);
   min-width: 0;
   font-family: var(--font-mono);
@@ -262,11 +262,30 @@
   border-radius: var(--radius-sm);
 }
 
+.entryUrlList {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.entryUrlItem {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
 .entryUrl code {
   flex: 1;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.entryUrlCopyButton {
+  flex-shrink: 0;
 }
 
 .groupActions {
@@ -654,6 +673,18 @@
 
   .entryUrl {
     flex-wrap: wrap;
+  }
+
+  .entryUrlList {
+    width: 100%;
+  }
+
+  .entryUrlItem {
+    align-items: flex-start;
+  }
+
+  .entryUrlCopyButton {
+    margin-top: 1px;
   }
 
   .entryUrl code {

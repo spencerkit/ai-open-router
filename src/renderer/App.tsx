@@ -13,7 +13,7 @@ import {
   SettingsPage,
 } from "@/pages"
 import { useProxyStore } from "@/store"
-import { resolveReachableServerBaseUrl } from "@/utils/serverAddress"
+import { formatServerAddressForDisplay, resolveReachableServerBaseUrls } from "@/utils/serverAddress"
 
 /**
  * Main App Component
@@ -57,13 +57,18 @@ const App: React.FC = () => {
   }
 
   const isRunning = status?.running ?? false
-  const serverAddress = status
-    ? resolveReachableServerBaseUrl({
+  const serverAddresses = status
+    ? resolveReachableServerBaseUrls({
         statusAddress: status.address,
+        statusLanAddress: status.lanAddress,
         configHost: config?.server.host,
         configPort: config?.server.port,
       })
-    : undefined
+    : []
+  const serverAddress =
+    serverAddresses.length > 0
+      ? serverAddresses.map(address => formatServerAddressForDisplay(address)).join(" ; ")
+      : undefined
 
   const handleStartServer = useCallback(async () => {
     try {
