@@ -73,12 +73,16 @@ export const ipc = {
     return getInvoke()<GroupBackupImportResult>("config_import_groups_json", { jsonText })
   },
 
-  remoteRulesUpload(): Promise<RemoteRulesUploadResult> {
-    return getInvoke()<RemoteRulesUploadResult>("config_remote_rules_upload")
+  remoteRulesUpload(force?: boolean): Promise<RemoteRulesUploadResult> {
+    const args: Record<string, unknown> = {}
+    if (typeof force === "boolean") args.force = force
+    return getInvoke()<RemoteRulesUploadResult>("config_remote_rules_upload", args)
   },
 
-  remoteRulesPull(): Promise<RemoteRulesPullResult> {
-    return getInvoke()<RemoteRulesPullResult>("config_remote_rules_pull")
+  remoteRulesPull(force?: boolean): Promise<RemoteRulesPullResult> {
+    const args: Record<string, unknown> = {}
+    if (typeof force === "boolean") args.force = force
+    return getInvoke()<RemoteRulesPullResult>("config_remote_rules_pull", args)
   },
 
   listLogs(max?: number): Promise<LogEntry[]> {

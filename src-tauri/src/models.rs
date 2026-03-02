@@ -200,6 +200,10 @@ pub struct RemoteRulesUploadResult {
     pub branch: String,
     pub file_path: String,
     pub group_count: usize,
+    pub needs_confirmation: bool,
+    pub warning: Option<String>,
+    pub local_updated_at: Option<String>,
+    pub remote_updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -208,10 +212,14 @@ pub struct RemoteRulesPullResult {
     pub ok: bool,
     pub branch: String,
     pub file_path: String,
-    pub imported_group_count: usize,
-    pub config: ProxyConfig,
-    pub restarted: bool,
-    pub status: ProxyStatus,
+    pub imported_group_count: Option<usize>,
+    pub config: Option<ProxyConfig>,
+    pub restarted: Option<bool>,
+    pub status: Option<ProxyStatus>,
+    pub needs_confirmation: bool,
+    pub warning: Option<String>,
+    pub local_updated_at: Option<String>,
+    pub remote_updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

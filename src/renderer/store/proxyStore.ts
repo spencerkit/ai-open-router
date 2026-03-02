@@ -51,8 +51,8 @@ interface ProxyState {
   exportGroupsToClipboard: () => Promise<GroupBackupExportResult>
   importGroupsBackup: () => Promise<GroupBackupImportResult>
   importGroupsFromJson: (jsonText: string) => Promise<GroupBackupImportResult>
-  remoteRulesUpload: () => Promise<RemoteRulesUploadResult>
-  remoteRulesPull: () => Promise<RemoteRulesPullResult>
+  remoteRulesUpload: (force?: boolean) => Promise<RemoteRulesUploadResult>
+  remoteRulesPull: (force?: boolean) => Promise<RemoteRulesPullResult>
   readClipboardText: () => Promise<ClipboardTextResult>
   setActiveGroupId: (groupId: string | null) => void
   clearLogs: () => Promise<void>
@@ -308,10 +308,10 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   /**
    * Upload current groups/rules backup JSON to remote git repository
    */
-  remoteRulesUpload: async () => {
+  remoteRulesUpload: async (force?: boolean) => {
     try {
       set({ error: null })
-      return await ipc.remoteRulesUpload()
+      return await ipc.remoteRulesUpload(force)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to upload remote rules"
       set({ error: errorMessage })
@@ -322,15 +322,19 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   /**
    * Pull groups/rules backup JSON from remote git and replace local groups
    */
-  remoteRulesPull: async () => {
+  remoteRulesPull: async (force?: boolean) => {
     try {
       set({ loading: true, error: null })
-      const result = await ipc.remoteRulesPull()
-      set({
-        config: result.config,
-        status: result.status,
-        loading: false,
-      })
+      const result = await ipc.remoteRulesPull(force)
+      if (result.config && result.status) {
+        set({
+          config: result.config,
+          status: result.status,
+          loading: false,
+        })
+      } else {
+        set({ loading: false })
+      }
       return result
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to pull remote rules"

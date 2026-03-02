@@ -282,44 +282,39 @@ export const LogsPage: React.FC = () => {
               {getFilterLabel(filter)}
             </button>
           ))}
-        </div>
-      </div>
-
-      <div className={styles.statsFilterRow}>
-        <div className={styles.statsFilterItem}>
-          <span>{t("logs.statsRuleFilterLabel")}</span>
-          <input
-            className={styles.statsInput}
-            type="text"
-            value={ruleSearchText}
-            onChange={e => setRuleSearchText(e.target.value)}
-            placeholder={t("logs.statsRuleSearchPlaceholder")}
-          />
-          <select
-            className={styles.statsSelect}
-            value={ruleFilter}
-            onChange={e => setRuleFilter(e.target.value)}
-          >
-            {visibleRuleOptions.map(option => (
-              <option key={option.key} value={option.key}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className={styles.statsFilterItem}>
-          <span>{t("logs.statsTimeFilterLabel")}</span>
-          <select
-            className={styles.statsSelect}
-            value={hoursFilter}
-            onChange={e => setHoursFilter(Number(e.target.value))}
-          >
-            {HOURS_FILTERS.map(hours => (
-              <option key={hours} value={hours}>
-                {getHoursLabel(hours)}
-              </option>
-            ))}
-          </select>
+          <div className={styles.inlineFilterTools}>
+            <div className={styles.ruleFilterCombo}>
+              <input
+                className={styles.inlineInput}
+                type="text"
+                value={ruleSearchText}
+                onChange={e => setRuleSearchText(e.target.value)}
+                placeholder={t("logs.statsRuleSearchPlaceholder")}
+              />
+              <select
+                className={styles.inlineSelect}
+                value={ruleFilter}
+                onChange={e => setRuleFilter(e.target.value)}
+              >
+                {visibleRuleOptions.map(option => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <select
+              className={styles.inlineSelect}
+              value={hoursFilter}
+              onChange={e => setHoursFilter(Number(e.target.value))}
+            >
+              {HOURS_FILTERS.map(hours => (
+                <option key={hours} value={hours}>
+                  {getHoursLabel(hours)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

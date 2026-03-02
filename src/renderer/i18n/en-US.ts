@@ -165,6 +165,10 @@ export const enUS = {
     remoteUploadNoChange: "Remote rules are already up to date",
     remotePullSuccess: "Updated {{count}} groups from remote",
     remoteNotConfigured: "Please configure remote repository info first",
+    remoteUploadConflict:
+      "Remote rules are newer (remote: {{remote}}, local: {{local}}). Continue upload to overwrite remote?",
+    remotePullConflict:
+      "Local rules are newer (local: {{local}}, remote: {{remote}}). Continue update to overwrite local?",
     backupExportSuccess: "Exported {{count}} groups",
     backupExportFolderSuccess: "Exported {{count}} groups to folder",
     backupExportClipboardSuccess: "Copied {{count}} groups to clipboard",

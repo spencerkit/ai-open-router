@@ -1,4 +1,6 @@
 use crate::models::{RemoteGitConfig, RemoteRulesUploadResult};
+use chrono::{DateTime, Utc};
+use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use url::Url;
@@ -31,9 +33,7 @@ impl Drop for TempRepoGuard {
 }
 
 fn run_git(cwd: &Path, args: &[&str], context: &str) -> Result<String, String> {
-    let output = Command::new("git")
-        .current_dir(cwd)
-        .args(args)
+    let output = git_command(cwd, args)
         .env("GIT_TERMINAL_PROMPT", "0")
         .output()
         .map_err(|e| format!("{context}: {e}"))?;
@@ -50,12 +50,22 @@ fn run_git(cwd: &Path, args: &[&str], context: &str) -> Result<String, String> {
 }
 
 fn run_git_status(cwd: &Path, args: &[&str], context: &str) -> Result<std::process::ExitStatus, String> {
-    Command::new("git")
-        .current_dir(cwd)
-        .args(args)
+    git_command(cwd, args)
         .env("GIT_TERMINAL_PROMPT", "0")
         .status()
         .map_err(|e| format!("{context}: {e}"))
+}
+
+fn git_command(cwd: &Path, args: &[&str]) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(cwd).args(args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
 }
 
 fn authenticated_repo_url(repo_url: &str, token: &str) -> Result<String, String> {
@@ -153,6 +163,8 @@ pub fn upload_groups_json_to_remote(
     remote: &RemoteGitConfig,
     json_text: &str,
     group_count: usize,
+    local_updated_at: Option<String>,
+    force: bool,
 ) -> Result<RemoteRulesUploadResult, String> {
     require_remote_ready(remote)?;
     let branch = remote.branch.trim().to_string();
@@ -160,7 +172,28 @@ pub fn upload_groups_json_to_remote(
     let tmp_repo = TempRepoGuard::new(app_data_dir.join("remote-sync-tmp"))?;
 
     init_repo(tmp_repo.path(), &auth_repo_url)?;
-    let _ = checkout_branch(tmp_repo.path(), &branch, true)?;
+    let found_branch = checkout_branch(tmp_repo.path(), &branch, true)?;
+
+    let remote_updated_at = if found_branch {
+        read_remote_exported_at(tmp_repo.path()).ok().flatten()
+    } else {
+        None
+    };
+
+    if !force && is_local_older(local_updated_at.as_deref(), remote_updated_at.as_deref()) {
+        return Ok(RemoteRulesUploadResult {
+            ok: true,
+            changed: false,
+            branch,
+            file_path: REMOTE_RULES_FILE_PATH.to_string(),
+            group_count,
+            needs_confirmation: true,
+            warning: Some("remote_newer_than_local".to_string()),
+            local_updated_at,
+            remote_updated_at,
+        });
+    }
+
     let _ = write_remote_rules_file(tmp_repo.path(), json_text)?;
 
     run_git(
@@ -198,6 +231,10 @@ pub fn upload_groups_json_to_remote(
         branch,
         file_path: REMOTE_RULES_FILE_PATH.to_string(),
         group_count,
+        needs_confirmation: false,
+        warning: None,
+        local_updated_at,
+        remote_updated_at,
     })
 }
 
@@ -206,11 +243,44 @@ pub fn remote_rules_file_path() -> &'static str {
 }
 
 pub fn has_remote_git_binary() -> bool {
-    Command::new("git")
-        .arg("--version")
+    let mut cmd = Command::new("git");
+    cmd.arg("--version")
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
         .status()
         .map(|status| status.success())
         .unwrap_or(false)
+}
+
+pub fn read_remote_exported_at(repo_root: &Path) -> Result<Option<String>, String> {
+    let file = repo_root.join(REMOTE_RULES_FILE_PATH);
+    if !file.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(file).map_err(|e| format!("read remote rules file failed: {e}"))?;
+    let parsed = serde_json::from_str::<Value>(&raw).map_err(|e| format!("parse remote rules file failed: {e}"))?;
+    Ok(parsed
+        .get("exportedAt")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string()))
+}
+
+fn parse_ts(ts: &str) -> Option<DateTime<Utc>> {
+    chrono::DateTime::parse_from_rfc3339(ts)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+fn is_local_older(local: Option<&str>, remote: Option<&str>) -> bool {
+    match (local.and_then(parse_ts), remote.and_then(parse_ts)) {
+        (Some(local_dt), Some(remote_dt)) => local_dt < remote_dt,
+        _ => false,
+    }
 }

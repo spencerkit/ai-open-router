@@ -39,47 +39,49 @@
   gap: var(--sp-2);
 }
 
-.statsFilterRow {
+.inlineFilterTools {
   display: flex;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-left: var(--sp-1);
 }
 
-.statsFilterItem {
-  display: grid;
-  gap: 6px;
-  min-width: 220px;
+.ruleFilterCombo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.statsFilterItem span {
+.inlineSelect {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
   font-size: var(--text-xs);
-  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  height: 32px;
+  padding: 0 10px;
+  min-width: 160px;
 }
 
-.statsSelect {
+.inlineInput {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-base);
   color: var(--text-primary);
-  font-size: var(--text-sm);
-  padding: 8px 10px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  height: 32px;
+  padding: 0 10px;
+  width: 180px;
 }
 
-.statsInput {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  padding: 8px 10px;
-}
-
-.statsInput:focus-visible {
+.inlineInput:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
   outline-offset: 1px;
 }
 
-.statsSelect:focus-visible {
+.inlineSelect:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
   outline-offset: 1px;
 }
@@ -98,9 +100,11 @@
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--text-xs);
+  font-family: var(--font-mono);
   font-weight: var(--weight-medium);
   border-radius: var(--radius-sm);
-  padding: var(--sp-2) var(--sp-3);
+  height: 32px;
+  padding: 0 var(--sp-3);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -365,11 +369,23 @@
     overflow-x: auto;
   }
 
-  .summaryGrid {
-    grid-template-columns: 1fr;
+  .inlineFilterTools {
+    margin-left: 0;
   }
 
-  .statsFilterItem {
-    min-width: 100%;
+  .ruleFilterCombo {
+    min-width: 0;
+  }
+
+  .inlineInput {
+    width: 140px;
+  }
+
+  .inlineSelect {
+    min-width: 120px;
+  }
+
+  .summaryGrid {
+    grid-template-columns: 1fr;
   }
 }

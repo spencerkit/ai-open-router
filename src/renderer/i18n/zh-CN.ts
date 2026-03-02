@@ -160,6 +160,10 @@ export const zhCN = {
     remoteUploadNoChange: "远端规则已是最新，无需上传",
     remotePullSuccess: "已从远端更新 {{count}} 个分组",
     remoteNotConfigured: "请先配置远端仓库信息",
+    remoteUploadConflict:
+      "检测到云端规则时间更新（云端：{{remote}}，本地：{{local}}）。继续上传会覆盖云端内容，是否继续？",
+    remotePullConflict:
+      "检测到本地规则时间更新（本地：{{local}}，云端：{{remote}}）。继续更新会覆盖本地内容，是否继续？",
     backupExportSuccess: "已导出 {{count}} 个分组",
     backupExportFolderSuccess: "已导出 {{count}} 个分组到文件夹",
     backupExportClipboardSuccess: "已复制 {{count}} 个分组到剪贴板",

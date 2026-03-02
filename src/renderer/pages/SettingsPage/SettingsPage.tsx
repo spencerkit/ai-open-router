@@ -262,6 +262,12 @@ export const SettingsPage: React.FC = () => {
     }
   }
 
+  const formatSyncTime = (value?: string) => {
+    if (!value) return "-"
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+  }
+
   const handleRemoteUpload = async () => {
     if (!remoteIsConfigured) {
       showToast(t("settings.remoteNotConfigured"), "error")
@@ -271,7 +277,17 @@ export const SettingsPage: React.FC = () => {
 
     try {
       setRemoteSyncing(true)
-      const result = await remoteRulesUpload()
+      let result = await remoteRulesUpload()
+      if (result.needsConfirmation) {
+        const confirmed = window.confirm(
+          t("settings.remoteUploadConflict", {
+            local: formatSyncTime(result.localUpdatedAt),
+            remote: formatSyncTime(result.remoteUpdatedAt),
+          })
+        )
+        if (!confirmed) return
+        result = await remoteRulesUpload(true)
+      }
       showToast(
         result.changed ? t("settings.remoteUploadSuccess") : t("settings.remoteUploadNoChange"),
         "success"
@@ -292,8 +308,21 @@ export const SettingsPage: React.FC = () => {
 
     try {
       setRemoteSyncing(true)
-      const result = await remoteRulesPull()
-      showToast(t("settings.remotePullSuccess", { count: result.importedGroupCount }), "success")
+      let result = await remoteRulesPull()
+      if (result.needsConfirmation) {
+        const confirmed = window.confirm(
+          t("settings.remotePullConflict", {
+            local: formatSyncTime(result.localUpdatedAt),
+            remote: formatSyncTime(result.remoteUpdatedAt),
+          })
+        )
+        if (!confirmed) return
+        result = await remoteRulesPull(true)
+      }
+      showToast(
+        t("settings.remotePullSuccess", { count: result.importedGroupCount || 0 }),
+        "success"
+      )
     } catch (error) {
       showToast(t("errors.operationFailed", { message: String(error) }), "error")
     } finally {

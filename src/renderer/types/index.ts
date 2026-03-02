@@ -84,16 +84,24 @@ export interface RemoteRulesUploadResult {
   branch: string
   filePath: string
   groupCount: number
+  needsConfirmation: boolean
+  warning?: string
+  localUpdatedAt?: string
+  remoteUpdatedAt?: string
 }
 
 export interface RemoteRulesPullResult {
   ok: boolean
   branch: string
   filePath: string
-  importedGroupCount: number
-  config: ProxyConfig
-  restarted: boolean
-  status: ProxyStatus
+  importedGroupCount?: number
+  config?: ProxyConfig
+  restarted?: boolean
+  status?: ProxyStatus
+  needsConfirmation: boolean
+  warning?: string
+  localUpdatedAt?: string
+  remoteUpdatedAt?: string
 }
 
 export interface StatsRuleOption {
