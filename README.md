@@ -3,6 +3,7 @@
 Desktop proxy service for bidirectional routing between OpenAI-compatible APIs and Anthropic APIs.
 
 中文文档: [docs/zh/README.md](docs/zh/README.md)
+发布流程: [docs/release-process.md](docs/release-process.md)
 
 ## Overview
 
@@ -186,8 +187,54 @@ For each request:
 ```bash
 npm run check
 npm run test
+npm run test:rust
 npm run ci
 ```
+
+## Debug Guide
+
+```bash
+# run desktop app in dev mode
+npm start
+
+# run frontend only
+npm run dev
+
+# check local proxy health
+curl http://localhost:8899/healthz
+curl http://localhost:8899/metrics-lite
+
+# verify version consistency before release
+npm run version:check
+
+# dry-run release planning (no file changes)
+npm run release:plan
+```
+
+Debug checklist:
+- If proxy requests fail, check app Logs page first, then `GET /healthz` and `GET /metrics-lite`.
+- If tests fail, run `npm test` and `npm run test:rust` separately to isolate JS vs Rust failures.
+- If CI fails only on release logic, run `npm run release:plan -- --from-tag <tag>` locally.
+- If release notes are empty, ensure `CHANGELOG.md` contains a `## vX.Y.Z - YYYY-MM-DD` section.
+
+## Release Quick Start
+
+```bash
+# 1) preview next version and changelog section
+npm run release:plan -- --from-tag v0.2.1
+
+# 2) generate version bump + changelog
+npm run release:prepare -- --from-tag v0.2.1
+
+# 3) commit release changes and open PR
+git checkout -b release/vX.Y.Z
+git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json CHANGELOG.md
+git commit -m "chore(release): vX.Y.Z"
+
+# 4) merge PR to main (CI will auto-create tag vX.Y.Z and trigger Release Build)
+```
+
+For complete release flow, see [docs/release-process.md](docs/release-process.md).
 
 ## Build Commands
 

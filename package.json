@@ -20,6 +20,10 @@
     "tauri:build:win": "CARGO_TARGET_DIR=\"$PWD/dist/target\" cargo tauri build --target x86_64-pc-windows-gnu && npm run tauri:collect",
     "test": "node --require ./scripts/register-ts.js --test",
     "test:ci": "node --require ./scripts/register-ts.js --test --test-timeout=30000",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "version:check": "node ./scripts/check-version-sync.js",
+    "release:plan": "bash ./scripts/release-runner.sh --dry-run --bump auto",
+    "release:prepare": "bash ./scripts/release-runner.sh --bump auto",
     "prepare": "husky install"
   },
   "engines": {

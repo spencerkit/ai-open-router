@@ -1377,3 +1377,105 @@ fn should_capture_body(state: &ServiceState) -> bool {
         .map(|cfg| cfg.logging.capture_body)
         .unwrap_or(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_token_usage, StreamTokenAccumulator};
+    use serde_json::json;
+
+    #[test]
+    fn extract_token_usage_reads_nested_response_usage_payload() {
+        let payload = json!({
+            "response": {
+                "usage": {
+                    "input_tokens": 44,
+                    "output_tokens": 12,
+                    "cache_read_input_tokens": 9
+                }
+            }
+        });
+
+        let usage = extract_token_usage(&payload).expect("usage should exist");
+        assert_eq!(usage.input_tokens, 44);
+        assert_eq!(usage.output_tokens, 12);
+        assert_eq!(usage.cache_read_tokens, 9);
+        assert_eq!(usage.cache_write_tokens, 0);
+    }
+
+    #[test]
+    fn extract_token_usage_maps_openai_prompt_and_cache_fields() {
+        let payload = json!({
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "prompt_tokens_details": {
+                    "cached_tokens": 30,
+                    "cache_creation_tokens": 5
+                }
+            }
+        });
+
+        let usage = extract_token_usage(&payload).expect("usage should exist");
+        assert_eq!(usage.input_tokens, 100);
+        assert_eq!(usage.output_tokens, 20);
+        assert_eq!(usage.cache_read_tokens, 30);
+        assert_eq!(usage.cache_write_tokens, 5);
+    }
+
+    #[test]
+    fn extract_token_usage_reads_message_and_delta_usage_payloads() {
+        let message_payload = json!({
+            "message": {
+                "usage": {
+                    "input_tokens": 7,
+                    "output_tokens": 3
+                }
+            }
+        });
+        let delta_payload = json!({
+            "delta": {
+                "usage": {
+                    "input_tokens": 11,
+                    "output_tokens": 4
+                }
+            }
+        });
+
+        let message_usage = extract_token_usage(&message_payload).expect("message usage should exist");
+        assert_eq!(message_usage.input_tokens, 7);
+        assert_eq!(message_usage.output_tokens, 3);
+
+        let delta_usage = extract_token_usage(&delta_payload).expect("delta usage should exist");
+        assert_eq!(delta_usage.input_tokens, 11);
+        assert_eq!(delta_usage.output_tokens, 4);
+    }
+
+    #[test]
+    fn stream_token_accumulator_aggregates_usage_from_chunked_sse() {
+        let mut acc = StreamTokenAccumulator::default();
+        acc.consume_chunk(
+            b"event: message_delta\ndata: {\"usage\":{\"input_tokens\":7,\"output_tokens\":3}}\n\n",
+        );
+        acc.consume_chunk(
+            b"data: {\"usage\":{\"input_tokens\":9,\"output_tokens\":3,\"cache_read_input_tokens\":1}}\n",
+        );
+        acc.consume_chunk(
+            b"\ndata: {\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":4,\"prompt_tokens_details\":{\"cache_creation_tokens\":2}}}\n\n",
+        );
+        acc.consume_chunk(b"data: [DONE]\n\n");
+
+        let usage = acc.into_token_usage().expect("usage should be captured");
+        assert_eq!(usage.input_tokens, 12);
+        assert_eq!(usage.output_tokens, 4);
+        assert_eq!(usage.cache_read_tokens, 1);
+        assert_eq!(usage.cache_write_tokens, 2);
+    }
+
+    #[test]
+    fn stream_token_accumulator_returns_none_when_usage_missing() {
+        let mut acc = StreamTokenAccumulator::default();
+        acc.consume_chunk(b"event: ping\ndata: hello\n\n");
+        acc.consume_chunk(b": keep-alive\n\n");
+        assert!(acc.into_token_usage().is_none());
+    }
+}

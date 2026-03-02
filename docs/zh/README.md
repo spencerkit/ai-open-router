@@ -186,8 +186,56 @@ Authorization: Bearer <server.localBearerToken>
 ```bash
 npm run check
 npm run test
+npm run test:rust
 npm run ci
 ```
+
+发布流程请参考：`docs/release-process.md`
+
+## 调试指南
+
+```bash
+# 启动桌面开发模式
+npm start
+
+# 仅启动前端
+npm run dev
+
+# 检查本地代理状态
+curl http://localhost:8899/healthz
+curl http://localhost:8899/metrics-lite
+
+# 发布前校验版本一致性
+npm run version:check
+
+# 发布规划 dry-run（不改文件）
+npm run release:plan
+```
+
+排查建议：
+- 请求异常时先看应用内日志页，再检查 `GET /healthz` 与 `GET /metrics-lite`。
+- 测试失败时拆分执行 `npm test` 与 `npm run test:rust`，先定位 JS 还是 Rust。
+- 若仅发布相关 CI 失败，本地先运行 `npm run release:plan -- --from-tag <tag>` 复现。
+- 若发布说明为空，确认 `CHANGELOG.md` 中存在 `## vX.Y.Z - YYYY-MM-DD` 小节。
+
+## 发布速查
+
+```bash
+# 1) 预览版本号和 changelog（建议指定基线 tag）
+npm run release:plan -- --from-tag v0.2.1
+
+# 2) 生成版本升级与 changelog
+npm run release:prepare -- --from-tag v0.2.1
+
+# 3) 提交发布变更并发起 PR
+git checkout -b release/vX.Y.Z
+git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json CHANGELOG.md
+git commit -m "chore(release): vX.Y.Z"
+
+# 4) 合并到 main（CI 会自动创建 vX.Y.Z tag 并触发 Release Build）
+```
+
+完整流程见：`docs/release-process.md`
 
 ## 打包命令
 
