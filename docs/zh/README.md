@@ -186,7 +186,6 @@ Authorization: Bearer <server.localBearerToken>
 ```bash
 npm run check
 npm run test
-npm run test:rust
 npm run ci
 ```
 
@@ -214,7 +213,7 @@ npm run release:plan
 
 排查建议：
 - 请求异常时先看应用内日志页，再检查 `GET /healthz` 与 `GET /metrics-lite`。
-- 测试失败时拆分执行 `npm test` 与 `npm run test:rust`，先定位 JS 还是 Rust。
+- 测试失败时执行 `npm run test:rust` 直接验证后端单测。
 - 若仅发布相关 CI 失败，本地先运行 `npm run release:plan -- --from-tag <tag>` 复现。
 - 若发布说明为空，确认 `CHANGELOG.md` 中存在 `## vX.Y.Z - YYYY-MM-DD` 小节。
 

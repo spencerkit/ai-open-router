@@ -2,6 +2,7 @@ use crate::log_store::LogStore;
 use crate::mappers::{
     map_anthropic_to_openai_request, map_anthropic_to_openai_response,
     map_openai_chat_to_responses, map_openai_to_anthropic_request, map_openai_to_anthropic_response,
+    normalize_openai_request,
 };
 use crate::models::{
     default_metrics, Group, LogEntry, LogEntryError, ProxyConfig, ProxyMetrics, ProxyStatus,
@@ -1043,9 +1044,22 @@ fn build_upstream_body(
     };
     with_model["model"] = json!(target_model);
 
+    let normalized_for_bridge = if matches!(entry.protocol, EntryProtocol::Openai)
+        && entry.endpoint == EntryEndpoint::Responses
+        && matches!(downstream, RuleProtocol::Anthropic)
+    {
+        normalize_openai_request("/v1/responses", &with_model)
+    } else {
+        with_model.clone()
+    };
+
     match (entry.protocol, downstream) {
         (EntryProtocol::Openai, RuleProtocol::Anthropic) => {
-            map_openai_to_anthropic_request(&with_model, config.compat.strict_mode, target_model)
+            map_openai_to_anthropic_request(
+                &normalized_for_bridge,
+                config.compat.strict_mode,
+                target_model,
+            )
         }
         (EntryProtocol::Anthropic, RuleProtocol::Openai) => {
             map_anthropic_to_openai_request(&with_model, config.compat.strict_mode, target_model)
@@ -1380,8 +1394,13 @@ fn should_capture_body(state: &ServiceState) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_token_usage, StreamTokenAccumulator};
+    use super::{
+        build_upstream_body, extract_token_usage, resolve_target_model, EntryEndpoint,
+        EntryProtocol, PathEntry, StreamTokenAccumulator,
+    };
+    use crate::models::{default_config, Group, Rule, RuleProtocol};
     use serde_json::json;
+    use std::collections::HashMap;
 
     #[test]
     fn extract_token_usage_reads_nested_response_usage_payload() {
@@ -1477,5 +1496,77 @@ mod tests {
         acc.consume_chunk(b"event: ping\ndata: hello\n\n");
         acc.consume_chunk(b": keep-alive\n\n");
         assert!(acc.into_token_usage().is_none());
+    }
+
+    #[test]
+    fn resolve_target_model_uses_group_and_rule_mapping() {
+        let mut mappings = HashMap::new();
+        mappings.insert("m1".to_string(), "gpt-x".to_string());
+        let rule = Rule {
+            id: "r1".to_string(),
+            name: "rule".to_string(),
+            protocol: RuleProtocol::Openai,
+            token: "t".to_string(),
+            api_address: "https://api.example.com".to_string(),
+            default_model: "fallback".to_string(),
+            model_mappings: mappings,
+        };
+        let group = Group {
+            id: "g1".to_string(),
+            name: "Group".to_string(),
+            models: vec!["m1".to_string()],
+            active_rule_id: Some("r1".to_string()),
+            rules: vec![rule.clone()],
+        };
+
+        let model = resolve_target_model(&rule, &group, &json!({ "model": "m1" }));
+        assert_eq!(model, "gpt-x");
+    }
+
+    #[test]
+    fn resolve_target_model_falls_back_to_default_model_when_unmatched() {
+        let rule = Rule {
+            id: "r1".to_string(),
+            name: "rule".to_string(),
+            protocol: RuleProtocol::Openai,
+            token: "t".to_string(),
+            api_address: "https://api.example.com".to_string(),
+            default_model: "fallback".to_string(),
+            model_mappings: HashMap::new(),
+        };
+        let group = Group {
+            id: "g1".to_string(),
+            name: "Group".to_string(),
+            models: vec!["m1".to_string()],
+            active_rule_id: Some("r1".to_string()),
+            rules: vec![rule.clone()],
+        };
+
+        let model = resolve_target_model(&rule, &group, &json!({ "model": "unknown" }));
+        assert_eq!(model, "fallback");
+    }
+
+    #[test]
+    fn build_upstream_body_normalizes_openai_responses_for_anthropic_bridge() {
+        let config = default_config();
+        let entry = PathEntry {
+            protocol: EntryProtocol::Openai,
+            endpoint: EntryEndpoint::Responses,
+        };
+        let out = build_upstream_body(
+            &config,
+            &entry,
+            &RuleProtocol::Anthropic,
+            &json!({
+                "model": "gpt-4.1",
+                "input": "hello from responses"
+            }),
+            "claude-3-7-sonnet",
+        )
+        .expect("mapping should succeed");
+
+        assert_eq!(out["model"], "claude-3-7-sonnet");
+        assert_eq!(out["messages"][0]["role"], "user");
+        assert_eq!(out["messages"][0]["content"][0]["text"], "hello from responses");
     }
 }

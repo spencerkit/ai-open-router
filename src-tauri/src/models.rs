@@ -390,3 +390,58 @@ pub fn validate_config(config: &ProxyConfig) -> Result<(), String> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{default_config, validate_config, Group, Rule, RuleProtocol};
+    use std::collections::HashMap;
+
+    #[test]
+    fn default_config_validates() {
+        let cfg = default_config();
+        let result = validate_config(&cfg);
+        assert!(result.is_ok());
+        assert!(!cfg.logging.capture_body);
+    }
+
+    #[test]
+    fn invalid_config_returns_error() {
+        let mut cfg = default_config();
+        cfg.server.host = String::new();
+
+        let err = validate_config(&cfg).expect_err("validation should fail");
+        assert!(err.contains("server.host"));
+    }
+
+    #[test]
+    fn group_active_rule_must_exist() {
+        let mut cfg = default_config();
+        cfg.groups = vec![Group {
+            id: "g1".to_string(),
+            name: "demo".to_string(),
+            models: vec!["a1".to_string()],
+            active_rule_id: Some("not_exists".to_string()),
+            rules: vec![Rule {
+                id: "r1".to_string(),
+                name: "rule-1".to_string(),
+                protocol: RuleProtocol::Anthropic,
+                token: "t1".to_string(),
+                api_address: "https://api.example.com".to_string(),
+                default_model: "m1".to_string(),
+                model_mappings: HashMap::new(),
+            }],
+        }];
+
+        let err = validate_config(&cfg).expect_err("validation should fail");
+        assert!(err.contains("group.activeRuleId"));
+    }
+
+    #[test]
+    fn ui_theme_must_be_valid() {
+        let mut cfg = default_config();
+        cfg.ui.theme = "system".to_string();
+
+        let err = validate_config(&cfg).expect_err("validation should fail");
+        assert!(err.contains("ui.theme"));
+    }
+}

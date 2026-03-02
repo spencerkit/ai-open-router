@@ -187,7 +187,6 @@ For each request:
 ```bash
 npm run check
 npm run test
-npm run test:rust
 npm run ci
 ```
 
@@ -213,7 +212,7 @@ npm run release:plan
 
 Debug checklist:
 - If proxy requests fail, check app Logs page first, then `GET /healthz` and `GET /metrics-lite`.
-- If tests fail, run `npm test` and `npm run test:rust` separately to isolate JS vs Rust failures.
+- If tests fail, run `npm run test:rust` to verify backend unit tests directly.
 - If CI fails only on release logic, run `npm run release:plan -- --from-tag <tag>` locally.
 - If release notes are empty, ensure `CHANGELOG.md` contains a `## vX.Y.Z - YYYY-MM-DD` section.
 
