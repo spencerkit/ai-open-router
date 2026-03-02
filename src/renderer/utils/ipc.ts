@@ -6,7 +6,10 @@ import type {
   LogEntry,
   ProxyConfig,
   ProxyStatus,
+  RemoteRulesPullResult,
+  RemoteRulesUploadResult,
   SaveConfigResult,
+  StatsSummaryResult,
 } from "@/types"
 
 type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>
@@ -70,6 +73,14 @@ export const ipc = {
     return getInvoke()<GroupBackupImportResult>("config_import_groups_json", { jsonText })
   },
 
+  remoteRulesUpload(): Promise<RemoteRulesUploadResult> {
+    return getInvoke()<RemoteRulesUploadResult>("config_remote_rules_upload")
+  },
+
+  remoteRulesPull(): Promise<RemoteRulesPullResult> {
+    return getInvoke()<RemoteRulesPullResult>("config_remote_rules_pull")
+  },
+
   listLogs(max?: number): Promise<LogEntry[]> {
     if (typeof max === "number") {
       return getInvoke()<LogEntry[]>("logs_list", { max })
@@ -79,5 +90,12 @@ export const ipc = {
 
   clearLogs(): Promise<{ ok: boolean }> {
     return getInvoke()<{ ok: boolean }>("logs_clear")
+  },
+
+  getLogsStatsSummary(hours?: number, ruleKey?: string): Promise<StatsSummaryResult> {
+    const args: Record<string, unknown> = {}
+    if (typeof hours === "number") args.hours = hours
+    if (typeof ruleKey === "string") args.ruleKey = ruleKey
+    return getInvoke()<StatsSummaryResult>("logs_stats_summary", args)
   },
 }

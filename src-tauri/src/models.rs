@@ -35,6 +35,14 @@ pub struct UiConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteGitConfig {
+    pub repo_url: String,
+    pub token: String,
+    pub branch: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RuleProtocol {
     Openai,
@@ -73,6 +81,8 @@ pub struct ProxyConfig {
     pub compat: CompatConfig,
     pub logging: LoggingConfig,
     pub ui: UiConfig,
+    #[serde(default = "default_remote_git_config")]
+    pub remote_git: RemoteGitConfig,
     #[serde(default)]
     pub groups: Vec<Group>,
 }
@@ -183,6 +193,64 @@ pub struct GroupBackupImportResult {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteRulesUploadResult {
+    pub ok: bool,
+    pub changed: bool,
+    pub branch: String,
+    pub file_path: String,
+    pub group_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteRulesPullResult {
+    pub ok: bool,
+    pub branch: String,
+    pub file_path: String,
+    pub imported_group_count: usize,
+    pub config: ProxyConfig,
+    pub restarted: bool,
+    pub status: ProxyStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatsRuleOption {
+    pub key: String,
+    pub label: String,
+    pub group_id: String,
+    pub rule_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HourlyStatsPoint {
+    pub hour: String,
+    pub requests: u64,
+    pub errors: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatsSummaryResult {
+    pub hours: u32,
+    pub rule_key: Option<String>,
+    pub requests: u64,
+    pub errors: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+    pub hourly: Vec<HourlyStatsPoint>,
+    pub options: Vec<StatsRuleOption>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ClipboardTextResult {
     pub text: String,
 }
@@ -200,6 +268,14 @@ pub struct GroupsBackupPayload {
     pub version: u8,
     pub exported_at: String,
     pub groups: Vec<Group>,
+}
+
+pub fn default_remote_git_config() -> RemoteGitConfig {
+    RemoteGitConfig {
+        repo_url: String::new(),
+        token: String::new(),
+        branch: "main".to_string(),
+    }
 }
 
 pub fn default_config() -> ProxyConfig {
@@ -230,6 +306,7 @@ pub fn default_config() -> ProxyConfig {
             launch_on_startup: false,
             close_to_tray: true,
         },
+        remote_git: default_remote_git_config(),
         groups: vec![],
     }
 }
@@ -266,6 +343,9 @@ pub fn validate_config(config: &ProxyConfig) -> Result<(), String> {
     }
     if config.ui.locale_mode != "auto" && config.ui.locale_mode != "manual" {
         return Err("ui.localeMode must be auto|manual".into());
+    }
+    if config.remote_git.branch.trim().is_empty() {
+        return Err("remoteGit.branch must be non-empty".into());
     }
 
     for group in &config.groups {

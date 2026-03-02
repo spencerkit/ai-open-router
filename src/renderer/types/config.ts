@@ -39,3 +39,9 @@ export interface UIConfig {
   launchOnStartup: boolean
   closeToTray: boolean
 }
+
+export interface RemoteGitConfig {
+  repoUrl: string
+  token: string
+  branch: string
+}

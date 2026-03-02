@@ -85,10 +85,14 @@ export const ServicePage: React.FC = () => {
       groups: [...(config.groups ?? []), newGroup],
     }
 
-    await saveConfig(newConfig)
-    closeAddGroupModal()
-    setActiveGroupId(newGroup.id)
-    showToast(t("toast.groupCreated"), "success")
+    try {
+      await saveConfig(newConfig)
+      closeAddGroupModal()
+      setActiveGroupId(newGroup.id)
+      showToast(t("toast.groupCreated"), "success")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
   }
 
   const handleDeleteGroup = async () => {
@@ -97,10 +101,14 @@ export const ServicePage: React.FC = () => {
     const newGroups = config.groups.filter(g => g.id !== activeGroupId)
     const newConfig = { ...config, groups: newGroups }
 
-    await saveConfig(newConfig)
-    setActiveGroupId(newGroups.length > 0 ? newGroups[0].id : null)
-    setShowDeleteGroupModal(false)
-    showToast(t("toast.groupDeleted"), "success")
+    try {
+      await saveConfig(newConfig)
+      setActiveGroupId(newGroups.length > 0 ? newGroups[0].id : null)
+      setShowDeleteGroupModal(false)
+      showToast(t("toast.groupDeleted"), "success")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
   }
 
   const handleRequestDeleteRule = (ruleId: string) => {
@@ -151,11 +159,15 @@ export const ServicePage: React.FC = () => {
     })
 
     const newConfig = { ...config, groups: newGroups }
-    await saveConfig(newConfig)
-    setSelectedRuleId(null)
-    setShowDeleteRuleModal(false)
-    setPendingDeleteRuleId(null)
-    showToast(t("toast.ruleDeleted"), "success")
+    try {
+      await saveConfig(newConfig)
+      setSelectedRuleId(null)
+      setShowDeleteRuleModal(false)
+      setPendingDeleteRuleId(null)
+      showToast(t("toast.ruleDeleted"), "success")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
   }
 
   const handleCopyEntryUrl = async (url: string) => {
@@ -169,19 +181,19 @@ export const ServicePage: React.FC = () => {
     }
   }
 
-  const getServerBaseUrls = () => {
+  const serverBaseUrls = React.useMemo(() => {
     return resolveReachableServerBaseUrls({
       statusAddress: status?.address,
       statusLanAddress: status?.lanAddress,
       configHost: config?.server.host,
       configPort: config?.server.port,
     })
-  }
+  }, [status?.address, status?.lanAddress, config?.server.host, config?.server.port])
 
   const entryUrls = React.useMemo(() => {
     if (!activeGroup) return []
-    return getServerBaseUrls().map(baseUrl => `${baseUrl}/oc/${activeGroup.id}`)
-  }, [activeGroup, status?.address, status?.lanAddress, config?.server.host, config?.server.port])
+    return serverBaseUrls.map(baseUrl => `${baseUrl}/oc/${activeGroup.id}`)
+  }, [activeGroup, serverBaseUrls])
 
   return (
     <div className={styles.servicePage}>

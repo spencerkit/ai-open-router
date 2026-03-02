@@ -6,6 +6,7 @@ import { Button } from "@/components"
 import { useTranslation } from "@/hooks"
 import { useProxyStore } from "@/store"
 import type { LogEntry } from "@/types"
+import { formatTokenMillions } from "@/utils/tokenFormat"
 import styles from "./LogDetailPage.module.css"
 
 function toText(value: unknown, emptyText: string): string {
@@ -168,19 +169,19 @@ export const LogDetailPage: React.FC = () => {
             <div className={styles.tokenGrid}>
               <div className={styles.tokenCard}>
                 <span>{t("logs.tokenInput")}</span>
-                <strong>{log.tokenUsage?.inputTokens ?? 0}</strong>
+                <strong>{formatTokenMillions(log.tokenUsage?.inputTokens ?? 0)}</strong>
               </div>
               <div className={styles.tokenCard}>
                 <span>{t("logs.tokenOutput")}</span>
-                <strong>{log.tokenUsage?.outputTokens ?? 0}</strong>
+                <strong>{formatTokenMillions(log.tokenUsage?.outputTokens ?? 0)}</strong>
               </div>
               <div className={styles.tokenCard}>
                 <span>{t("logs.tokenCacheRead")}</span>
-                <strong>{log.tokenUsage?.cacheReadTokens ?? 0}</strong>
+                <strong>{formatTokenMillions(log.tokenUsage?.cacheReadTokens ?? 0)}</strong>
               </div>
               <div className={styles.tokenCard}>
                 <span>{t("logs.tokenCacheWrite")}</span>
-                <strong>{log.tokenUsage?.cacheWriteTokens ?? 0}</strong>
+                <strong>{formatTokenMillions(log.tokenUsage?.cacheWriteTokens ?? 0)}</strong>
               </div>
             </div>
           </div>

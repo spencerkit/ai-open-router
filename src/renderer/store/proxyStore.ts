@@ -17,6 +17,9 @@ import type {
   LogEntry,
   ProxyConfig,
   ProxyStatus,
+  RemoteRulesPullResult,
+  RemoteRulesUploadResult,
+  StatsSummaryResult,
 } from "@/types"
 import { ipc } from "@/utils/ipc"
 
@@ -28,6 +31,7 @@ interface ProxyState {
   config: ProxyConfig | null
   status: ProxyStatus | null
   logs: LogEntry[]
+  logsStats: StatsSummaryResult | null
   activeGroupId: string | null
   loading: boolean
   error: string | null
@@ -40,12 +44,15 @@ interface ProxyState {
   init: () => Promise<void>
   refreshStatus: () => Promise<void>
   refreshLogs: () => Promise<void>
+  refreshLogsStats: (hours?: number, ruleKey?: string) => Promise<void>
   saveConfig: (config: ProxyConfig) => Promise<void>
   exportGroupsBackup: () => Promise<GroupBackupExportResult>
   exportGroupsToFolder: () => Promise<GroupBackupExportResult>
   exportGroupsToClipboard: () => Promise<GroupBackupExportResult>
   importGroupsBackup: () => Promise<GroupBackupImportResult>
   importGroupsFromJson: (jsonText: string) => Promise<GroupBackupImportResult>
+  remoteRulesUpload: () => Promise<RemoteRulesUploadResult>
+  remoteRulesPull: () => Promise<RemoteRulesPullResult>
   readClipboardText: () => Promise<ClipboardTextResult>
   setActiveGroupId: (groupId: string | null) => void
   clearLogs: () => Promise<void>
@@ -86,6 +93,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   config: null,
   status: null,
   logs: [],
+  logsStats: null,
   activeGroupId: null,
   loading: false,
   error: null,
@@ -103,7 +111,11 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
 
       console.log("[Store] Fetching config and status...")
       // Fetch initial config and status in parallel
-      const [config, status] = await Promise.all([ipc.getConfig(), ipc.getStatus()])
+      const [config, status, logsStats] = await Promise.all([
+        ipc.getConfig(),
+        ipc.getStatus(),
+        ipc.getLogsStatsSummary(),
+      ])
 
       console.log("[Store] Config received:", config)
       console.log("[Store] Status received:", status)
@@ -111,6 +123,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       set({
         config,
         status,
+        logsStats,
         loading: false,
       })
 
@@ -155,6 +168,19 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   /**
+   * Refresh request/token stats summary from IPC
+   */
+  refreshLogsStats: async (hours?: number, ruleKey?: string) => {
+    try {
+      const logsStats = await ipc.getLogsStatsSummary(hours, ruleKey)
+      set({ logsStats, error: null })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to refresh logs stats"
+      set({ error: errorMessage })
+    }
+  },
+
+  /**
    * Save configuration via IPC
    * Updates local config with the result
    */
@@ -175,6 +201,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
         error: errorMessage,
         loading: false,
       })
+      throw new Error(errorMessage)
     }
   },
 
@@ -274,6 +301,40 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
         error: errorMessage,
         loading: false,
       })
+      throw error
+    }
+  },
+
+  /**
+   * Upload current groups/rules backup JSON to remote git repository
+   */
+  remoteRulesUpload: async () => {
+    try {
+      set({ error: null })
+      return await ipc.remoteRulesUpload()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to upload remote rules"
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  /**
+   * Pull groups/rules backup JSON from remote git and replace local groups
+   */
+  remoteRulesPull: async () => {
+    try {
+      set({ loading: true, error: null })
+      const result = await ipc.remoteRulesPull()
+      set({
+        config: result.config,
+        status: result.status,
+        loading: false,
+      })
+      return result
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to pull remote rules"
+      set({ error: errorMessage, loading: false })
       throw error
     }
   },

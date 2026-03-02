@@ -39,6 +39,51 @@
   gap: var(--sp-2);
 }
 
+.statsFilterRow {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.statsFilterItem {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.statsFilterItem span {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.statsSelect {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  padding: 8px 10px;
+}
+
+.statsInput {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  padding: 8px 10px;
+}
+
+.statsInput:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.statsSelect:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
 .filterGroup {
   display: flex;
   align-items: center;
@@ -322,5 +367,9 @@
 
   .summaryGrid {
     grid-template-columns: 1fr;
+  }
+
+  .statsFilterItem {
+    min-width: 100%;
   }
 }

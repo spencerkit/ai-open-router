@@ -123,11 +123,20 @@ struct PartialUiConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct PartialRemoteGitConfig {
+    repo_url: Option<String>,
+    token: Option<String>,
+    branch: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct PartialProxyConfig {
     server: Option<PartialServerConfig>,
     compat: Option<PartialCompatConfig>,
     logging: Option<PartialLoggingConfig>,
     ui: Option<PartialUiConfig>,
+    remote_git: Option<PartialRemoteGitConfig>,
     groups: Option<serde_json::Value>,
 }
 
@@ -225,6 +234,24 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
                 .as_ref()
                 .and_then(|u| u.close_to_tray)
                 .unwrap_or(defaults.ui.close_to_tray),
+        },
+        remote_git: crate::models::RemoteGitConfig {
+            repo_url: partial
+                .remote_git
+                .as_ref()
+                .and_then(|r| r.repo_url.clone())
+                .unwrap_or(defaults.remote_git.repo_url),
+            token: partial
+                .remote_git
+                .as_ref()
+                .and_then(|r| r.token.clone())
+                .unwrap_or(defaults.remote_git.token),
+            branch: partial
+                .remote_git
+                .as_ref()
+                .and_then(|r| r.branch.clone())
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or(defaults.remote_git.branch),
         },
         groups,
     })

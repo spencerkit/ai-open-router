@@ -6,17 +6,24 @@ mod log_store;
 mod mappers;
 mod models;
 mod proxy;
+mod remote_sync;
+mod stats_store;
 
 use backup::{backup_default_file_name, create_groups_backup_payload, extract_groups_from_import_payload};
 use config_store::ConfigStore;
 use log_store::LogStore;
 use models::{
-    AppInfo, ClipboardTextResult, GroupBackupExportResult, GroupBackupImportResult, SaveConfigResult,
+    AppInfo, ClipboardTextResult, GroupBackupExportResult, GroupBackupImportResult,
+    RemoteRulesPullResult, RemoteRulesUploadResult, SaveConfigResult, StatsSummaryResult,
 };
 use proxy::ProxyRuntime;
+use remote_sync::{
+    has_remote_git_binary, pull_groups_json_from_remote, remote_rules_file_path,
+    upload_groups_json_to_remote,
+};
 use serde_json::{json, Value};
-use std::path::PathBuf;
 use std::sync::Arc;
+use stats_store::StatsStore;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -198,12 +205,10 @@ async fn config_export_groups_clipboard(
     })
 }
 
-async fn import_groups_and_save(
+async fn import_groups_to_config(
     state: &SharedState,
     parsed: Value,
-    source: &str,
-    file_path: Option<String>,
-) -> Result<GroupBackupImportResult, String> {
+) -> Result<(usize, models::ProxyConfig, bool, models::ProxyStatus), String> {
     let groups = extract_groups_from_import_payload(&parsed)?;
     let prev = state.config_store.get();
     let mut next = prev.clone();
@@ -212,12 +217,23 @@ async fn import_groups_and_save(
     let saved = state.config_store.save_config(next)?;
     let (restarted, status) = sync_runtime_config(state, prev, saved.clone()).await?;
 
+    Ok((groups.len(), saved, restarted, status))
+}
+
+async fn import_groups_and_save(
+    state: &SharedState,
+    parsed: Value,
+    source: &str,
+    file_path: Option<String>,
+) -> Result<GroupBackupImportResult, String> {
+    let (groups_len, saved, restarted, status) = import_groups_to_config(state, parsed).await?;
+
     Ok(GroupBackupImportResult {
         ok: true,
         canceled: false,
         source: Some(source.to_string()),
         file_path,
-        imported_group_count: Some(groups.len()),
+        imported_group_count: Some(groups_len),
         config: Some(saved),
         restarted: Some(restarted),
         status: Some(status),
@@ -277,6 +293,62 @@ async fn config_import_groups_json(
 }
 
 #[tauri::command]
+async fn config_remote_rules_upload(
+    state: State<'_, SharedState>,
+    app: AppHandle,
+) -> Result<RemoteRulesUploadResult, String> {
+    if !has_remote_git_binary() {
+        return Err("git is not available in current environment".to_string());
+    }
+
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("resolve app_data_dir failed: {e}"))?;
+    let current = state.config_store.get();
+    let backup_payload = create_groups_backup_payload(&current.groups);
+    let json_text = serde_json::to_string_pretty(&backup_payload)
+        .map_err(|e| format!("serialize backup failed: {e}"))?;
+
+    upload_groups_json_to_remote(
+        app_data_dir.as_path(),
+        &current.remote_git,
+        &json_text,
+        current.groups.len(),
+    )
+}
+
+#[tauri::command]
+async fn config_remote_rules_pull(
+    state: State<'_, SharedState>,
+    app: AppHandle,
+) -> Result<RemoteRulesPullResult, String> {
+    if !has_remote_git_binary() {
+        return Err("git is not available in current environment".to_string());
+    }
+
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("resolve app_data_dir failed: {e}"))?;
+    let current = state.config_store.get();
+    let json_text = pull_groups_json_from_remote(app_data_dir.as_path(), &current.remote_git)?;
+    let parsed = serde_json::from_str::<Value>(&json_text)
+        .map_err(|_| "Invalid JSON in remote rules file".to_string())?;
+    let (groups_len, saved, restarted, status) = import_groups_to_config(&state, parsed).await?;
+
+    Ok(RemoteRulesPullResult {
+        ok: true,
+        branch: current.remote_git.branch.trim().to_string(),
+        file_path: remote_rules_file_path().to_string(),
+        imported_group_count: groups_len,
+        config: saved,
+        restarted,
+        status,
+    })
+}
+
+#[tauri::command]
 async fn app_read_clipboard_text(app: AppHandle) -> Result<ClipboardTextResult, String> {
     let text = app
         .clipboard()
@@ -294,6 +366,15 @@ async fn logs_list(state: State<'_, SharedState>, max: Option<usize>) -> Result<
 async fn logs_clear(state: State<'_, SharedState>) -> Result<serde_json::Value, String> {
     state.runtime.clear_logs();
     Ok(json!({ "ok": true }))
+}
+
+#[tauri::command]
+async fn logs_stats_summary(
+    state: State<'_, SharedState>,
+    hours: Option<u32>,
+    rule_key: Option<String>,
+) -> Result<StatsSummaryResult, String> {
+    Ok(state.runtime.stats_summary(hours, rule_key))
 }
 
 fn create_tray(app: &AppHandle) -> Result<(), String> {
@@ -399,12 +480,19 @@ async fn main() {
             std::fs::create_dir_all(&app_data_dir)
                 .map_err(|e| format!("create app data dir failed: {e}"))?;
 
-            let config_path = PathBuf::from(app_data_dir).join("config.json");
+            let config_path = app_data_dir.join("config.json");
             let config_store = ConfigStore::new(config_path);
             let _ = config_store.initialize();
 
             let log_store = LogStore::new(100);
-            let runtime = ProxyRuntime::new(config_store.shared_config(), log_store.clone())?;
+            let stats_path = app_data_dir.join("request-stats.json");
+            let stats_store = StatsStore::new(stats_path);
+            let _ = stats_store.initialize();
+            let runtime = ProxyRuntime::new(
+                config_store.shared_config(),
+                log_store.clone(),
+                stats_store.clone(),
+            )?;
 
             let state = Arc::new(AppState {
                 app_info: AppInfo {
@@ -456,9 +544,12 @@ async fn main() {
             config_export_groups_clipboard,
             config_import_groups,
             config_import_groups_json,
+            config_remote_rules_upload,
+            config_remote_rules_pull,
             app_read_clipboard_text,
             logs_list,
             logs_clear,
+            logs_stats_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

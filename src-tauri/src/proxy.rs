@@ -7,6 +7,7 @@ use crate::models::{
     default_metrics, Group, LogEntry, LogEntryError, ProxyConfig, ProxyMetrics, ProxyStatus,
     Rule, RuleProtocol, TokenUsage,
 };
+use crate::stats_store::StatsStore;
 use axum::body::{to_bytes, Body};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, Method, StatusCode};
@@ -37,6 +38,7 @@ pub struct ProxyRuntime {
 struct ProxyRuntimeInner {
     config: Arc<RwLock<ProxyConfig>>,
     log_store: LogStore,
+    stats_store: StatsStore,
     metrics: Arc<RwLock<ProxyMetrics>>,
     server: Mutex<Option<RunningServer>>,
     client: Client,
@@ -53,6 +55,7 @@ struct RunningServer {
 struct ServiceState {
     config: Arc<RwLock<ProxyConfig>>,
     log_store: LogStore,
+    stats_store: StatsStore,
     metrics: Arc<RwLock<ProxyMetrics>>,
     client: Client,
 }
@@ -137,7 +140,11 @@ async fn bind_proxy_listener(host: &str, port: u16) -> Result<(TcpListener, Stri
 }
 
 impl ProxyRuntime {
-    pub fn new(config: Arc<RwLock<ProxyConfig>>, log_store: LogStore) -> Result<Self, String> {
+    pub fn new(
+        config: Arc<RwLock<ProxyConfig>>,
+        log_store: LogStore,
+        stats_store: StatsStore,
+    ) -> Result<Self, String> {
         let client = Client::builder()
             .timeout(std::time::Duration::from_millis(REQUEST_TIMEOUT_MS))
             .build()
@@ -147,6 +154,7 @@ impl ProxyRuntime {
             inner: Arc::new(ProxyRuntimeInner {
                 config,
                 log_store,
+                stats_store,
                 metrics: Arc::new(RwLock::new(default_metrics())),
                 server: Mutex::new(None),
                 client,
@@ -172,6 +180,7 @@ impl ProxyRuntime {
         let service_state = ServiceState {
             config: self.inner.config.clone(),
             log_store: self.inner.log_store.clone(),
+            stats_store: self.inner.stats_store.clone(),
             metrics: self.inner.metrics.clone(),
             client: self.inner.client.clone(),
         };
@@ -275,6 +284,14 @@ impl ProxyRuntime {
 
     pub fn clear_logs(&self) {
         self.inner.log_store.clear();
+    }
+
+    pub fn stats_summary(
+        &self,
+        hours: Option<u32>,
+        rule_key: Option<String>,
+    ) -> crate::models::StatsSummaryResult {
+        self.inner.stats_store.summarize(hours, rule_key)
     }
 
     fn is_running(&self) -> bool {
@@ -505,6 +522,7 @@ async fn handle_proxy_request(
         .get("stream")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let capture_body = config.logging.capture_body;
 
     increment_requests(&state.metrics, stream);
 
@@ -591,6 +609,7 @@ async fn handle_proxy_request(
             None,
             started.elapsed().as_millis() as u64,
             "ok",
+            capture_body,
         );
 
         update_latency(&state.metrics, started.elapsed().as_millis() as u64);
@@ -683,6 +702,7 @@ async fn handle_proxy_request(
         token_usage,
         started.elapsed().as_millis() as u64,
         "ok",
+        capture_body,
     );
 
     resp
@@ -850,16 +870,46 @@ fn resolve_target_model(rule: &Rule, group: &Group, request_body: &Value) -> Str
         .filter(|s| !s.is_empty());
 
     if let Some(model) = requested {
-        if group.models.iter().any(|m| m == &model) {
+        if let Some(matched_model) = find_group_model_match(group, &model) {
             return rule
                 .model_mappings
                 .get(&model)
                 .cloned()
+                .or_else(|| rule.model_mappings.get(matched_model).cloned())
                 .unwrap_or(model);
         }
     }
 
     rule.default_model.clone()
+}
+
+fn find_group_model_match<'a>(group: &'a Group, requested: &str) -> Option<&'a str> {
+    let mut best: Option<&str> = None;
+    for model in &group.models {
+        let candidate = model.trim();
+        if candidate.is_empty() {
+            continue;
+        }
+        if !is_model_match(candidate, requested) {
+            continue;
+        }
+        if best.map(|curr| candidate.len() > curr.len()).unwrap_or(true) {
+            best = Some(candidate);
+        }
+    }
+    best
+}
+
+fn is_model_match(candidate: &str, requested: &str) -> bool {
+    if candidate == requested {
+        return true;
+    }
+
+    if let Some(prefix) = candidate.strip_suffix('*') {
+        return !prefix.is_empty() && requested.starts_with(prefix);
+    }
+
+    requested.starts_with(candidate) && requested.as_bytes().get(candidate.len()) == Some(&b'-')
 }
 
 fn build_upstream_body(
@@ -1092,7 +1142,8 @@ fn log_simple(
     response_body: Option<Value>,
     error: Option<LogEntryError>,
 ) {
-    state.log_store.append(LogEntry {
+    let capture_body = should_capture_body(state);
+    let entry = LogEntry {
         timestamp: Utc::now().to_rfc3339(),
         trace_id,
         phase: "request_chain".to_string(),
@@ -1116,13 +1167,15 @@ fn log_simple(
         response_headers: None,
         request_body: None,
         forward_request_body: None,
-        response_body,
+        response_body: if capture_body { response_body } else { None },
         token_usage: None,
         http_status,
         upstream_status: None,
         duration_ms: 0,
         error,
-    });
+    };
+    state.log_store.append(entry.clone());
+    state.stats_store.append_log(&entry);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1147,6 +1200,7 @@ fn finalize_log(
     token_usage: Option<TokenUsage>,
     duration_ms: u64,
     status: &str,
+    capture_body: bool,
 ) {
     let direction = match (&entry.protocol, &rule.protocol) {
         (EntryProtocol::Openai, RuleProtocol::Anthropic) => Some("oc".to_string()),
@@ -1154,7 +1208,7 @@ fn finalize_log(
         _ => None,
     };
 
-    state.log_store.append(LogEntry {
+    let entry = LogEntry {
         timestamp: Utc::now().to_rfc3339(),
         trace_id: trace_id.to_string(),
         phase: "request_chain".to_string(),
@@ -1182,13 +1236,23 @@ fn finalize_log(
         forward_request_headers: None,
         upstream_response_headers: upstream_headers,
         response_headers,
-        request_body,
-        forward_request_body,
-        response_body,
+        request_body: if capture_body { request_body } else { None },
+        forward_request_body: if capture_body { forward_request_body } else { None },
+        response_body: if capture_body { response_body } else { None },
         token_usage,
         http_status,
         upstream_status,
         duration_ms,
         error: None,
-    });
+    };
+    state.log_store.append(entry.clone());
+    state.stats_store.append_log(&entry);
+}
+
+fn should_capture_body(state: &ServiceState) -> bool {
+    state
+        .config
+        .read()
+        .map(|cfg| cfg.logging.capture_body)
+        .unwrap_or(false)
 }

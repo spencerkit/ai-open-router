@@ -1,25 +1,27 @@
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button, Input, Modal, Switch } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import { useProxyStore } from "@/store"
-import type {
-  AppInfo,
-  CompatConfig,
-  LocaleCode,
-  LocaleMode,
-  LoggingConfig,
-  ProxyConfig,
-  ServerConfig,
-  ThemeMode,
-  UIConfig,
-} from "@/types"
+import type { AppInfo, LocaleCode, ProxyConfig, ThemeMode } from "@/types"
 import { ipc } from "@/utils/ipc"
-import { normalizeLocaleMode, resolveEffectiveLocale } from "@/utils/locale"
+import { resolveEffectiveLocale } from "@/utils/locale"
 import styles from "./SettingsPage.module.css"
 
 type ImportSource = "file" | "clipboard"
 type ExportTarget = "folder" | "clipboard"
+
+function buildImmediateConfig(config: ProxyConfig, next: Partial<ProxyConfig>): ProxyConfig {
+  return {
+    ...config,
+    ...next,
+    server: {
+      ...config.server,
+      ...(next.server || {}),
+      port: config.server.port,
+    },
+  }
+}
 
 /**
  * SettingsPage Component
@@ -34,6 +36,8 @@ export const SettingsPage: React.FC = () => {
     exportGroupsToClipboard,
     importGroupsBackup,
     importGroupsFromJson,
+    remoteRulesPull,
+    remoteRulesUpload,
     readClipboardText,
     loading,
   } = useProxyStore()
@@ -46,7 +50,9 @@ export const SettingsPage: React.FC = () => {
   const [closeToTray, setCloseToTray] = useState(true)
   const [theme, setTheme] = useState<ThemeMode>("light")
   const [locale, setLocale] = useState<LocaleCode>("en-US")
-  const [localeMode, setLocaleMode] = useState<LocaleMode>("auto")
+  const [remoteRepoUrl, setRemoteRepoUrl] = useState("")
+  const [remoteToken, setRemoteToken] = useState("")
+  const [remoteBranch, setRemoteBranch] = useState("main")
   const [portError, setPortError] = useState("")
   const [showImportModal, setShowImportModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -56,28 +62,33 @@ export const SettingsPage: React.FC = () => {
   const [importJsonText, setImportJsonText] = useState("")
   const [readingClipboard, setReadingClipboard] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [remoteSyncing, setRemoteSyncing] = useState(false)
   const [aboutLoading, setAboutLoading] = useState(false)
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
 
   // Load initial values from config
   useEffect(() => {
-    if (config) {
-      setPortText(String(config.server.port))
-      setStrictMode(config.compat.strictMode)
-      setDetailedLogs(!!config.logging.captureBody)
-      setLaunchOnStartup(config.ui.launchOnStartup)
-      setCloseToTray(config.ui.closeToTray ?? true)
-      setTheme(config.ui.theme)
-      setLocale(
-        resolveEffectiveLocale({
-          locale: config.ui.locale,
-          localeMode: config.ui.localeMode,
-          systemLanguage: navigator.language,
-        })
-      )
-      setLocaleMode(normalizeLocaleMode(config.ui.localeMode, config.ui.locale))
+    if (!config) return
+    const currentPort = String(config.server.port)
+    if (portText === "" || portText === currentPort) {
+      setPortText(currentPort)
     }
-  }, [config])
+    setStrictMode(config.compat.strictMode)
+    setDetailedLogs(!!config.logging.captureBody)
+    setLaunchOnStartup(config.ui.launchOnStartup)
+    setCloseToTray(config.ui.closeToTray ?? true)
+    setTheme(config.ui.theme)
+    setLocale(
+      resolveEffectiveLocale({
+        locale: config.ui.locale,
+        localeMode: config.ui.localeMode,
+        systemLanguage: navigator.language,
+      })
+    )
+    setRemoteRepoUrl(config.remoteGit.repoUrl ?? "")
+    setRemoteToken(config.remoteGit.token ?? "")
+    setRemoteBranch(config.remoteGit.branch || "main")
+  }, [config, portText])
 
   const validatePort = (value: string): boolean => {
     if (!/^\d+$/.test(value)) {
@@ -106,74 +117,67 @@ export const SettingsPage: React.FC = () => {
   }
 
   const parsedPort = /^\d+$/.test(portText) ? Number(portText) : NaN
-  const savedLocale = config
-    ? resolveEffectiveLocale({
-        locale: config.ui.locale,
-        localeMode: config.ui.localeMode,
-        systemLanguage: navigator.language,
-      })
-    : "en-US"
-  const savedLocaleMode = config
-    ? normalizeLocaleMode(config.ui.localeMode, config.ui.locale)
-    : "auto"
+  const isPortDirty = Boolean(config && String(config.server.port) !== portText)
+  const canSavePort = !loading && isPortDirty && !portError && Number.isInteger(parsedPort)
 
-  const hasChanges = Boolean(
-    config &&
-      (String(config.server.port) !== portText ||
-        strictMode !== config.compat.strictMode ||
-        detailedLogs !== !!config.logging.captureBody ||
-        launchOnStartup !== config.ui.launchOnStartup ||
-        closeToTray !== (config.ui.closeToTray ?? true) ||
-        theme !== config.ui.theme ||
-        locale !== savedLocale ||
-        localeMode !== savedLocaleMode)
+  const remoteIsConfigured = useMemo(
+    () => remoteRepoUrl.trim().length > 0 && remoteToken.trim().length > 0,
+    [remoteRepoUrl, remoteToken]
   )
 
-  const canSave = !loading && hasChanges && !portError && Number.isInteger(parsedPort)
+  const applyImmediateConfig = async (builder: (base: ProxyConfig) => ProxyConfig) => {
+    if (!config) return
+    try {
+      await saveConfig(builder(config))
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
+  }
 
-  const handleSave = async () => {
+  const persistRemoteConfig = async () => {
+    if (!config) return false
+    const nextRepoUrl = remoteRepoUrl.trim()
+    const nextToken = remoteToken.trim()
+    const nextBranch = remoteBranch.trim() || "main"
+    const changed =
+      nextRepoUrl !== (config.remoteGit.repoUrl ?? "") ||
+      nextToken !== (config.remoteGit.token ?? "") ||
+      nextBranch !== (config.remoteGit.branch ?? "main")
+    if (!changed) return true
+
+    try {
+      await saveConfig({
+        ...config,
+        remoteGit: {
+          repoUrl: nextRepoUrl,
+          token: nextToken,
+          branch: nextBranch,
+        },
+      })
+      return true
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+      return false
+    }
+  }
+
+  const handleSavePort = async () => {
     if (!config) return
     if (!validatePort(portText)) {
       focusInput("port")
       return
     }
 
-    const port = Number(portText)
-    const newServerConfig: ServerConfig = {
-      host: "0.0.0.0",
-      port,
-      authEnabled: config.server.authEnabled ?? false,
-      localBearerToken: config.server.localBearerToken ?? "",
-    }
-
-    const newCompatConfig: CompatConfig = {
-      strictMode,
-    }
-
-    const newUIConfig: UIConfig = {
-      launchOnStartup,
-      closeToTray,
-      theme,
-      locale: localeMode === "manual" ? locale : config.ui.locale === "zh-CN" ? "zh-CN" : "en-US",
-      localeMode,
-    }
-
-    const newLoggingConfig: LoggingConfig = {
-      ...config.logging,
-      captureBody: detailedLogs,
-    }
-
-    const newConfig: ProxyConfig = {
-      ...config,
-      server: newServerConfig,
-      compat: newCompatConfig,
-      logging: newLoggingConfig,
-      ui: newUIConfig,
-    }
-
     try {
-      await saveConfig(newConfig)
-      showToast(t("settings.saveSuccess"), "success")
+      await saveConfig({
+        ...config,
+        server: {
+          ...config.server,
+          host: "0.0.0.0",
+          port: Number(portText),
+        },
+      })
+      showToast(t("settings.portSaveSuccess"), "success")
     } catch (error) {
       showToast(t("errors.saveFailed", { message: String(error) }), "error")
     }
@@ -258,6 +262,45 @@ export const SettingsPage: React.FC = () => {
     }
   }
 
+  const handleRemoteUpload = async () => {
+    if (!remoteIsConfigured) {
+      showToast(t("settings.remoteNotConfigured"), "error")
+      return
+    }
+    if (!(await persistRemoteConfig())) return
+
+    try {
+      setRemoteSyncing(true)
+      const result = await remoteRulesUpload()
+      showToast(
+        result.changed ? t("settings.remoteUploadSuccess") : t("settings.remoteUploadNoChange"),
+        "success"
+      )
+    } catch (error) {
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
+    } finally {
+      setRemoteSyncing(false)
+    }
+  }
+
+  const handleRemotePull = async () => {
+    if (!remoteIsConfigured) {
+      showToast(t("settings.remoteNotConfigured"), "error")
+      return
+    }
+    if (!(await persistRemoteConfig())) return
+
+    try {
+      setRemoteSyncing(true)
+      const result = await remoteRulesPull()
+      showToast(t("settings.remotePullSuccess", { count: result.importedGroupCount }), "success")
+    } catch (error) {
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
+    } finally {
+      setRemoteSyncing(false)
+    }
+  }
+
   const canConfirmImport = importSource === "file" || importJsonText.trim().length > 0
 
   const handleOpenAbout = async () => {
@@ -299,7 +342,20 @@ export const SettingsPage: React.FC = () => {
                 max={65535}
                 hint={!portError ? t("settings.portHint") : undefined}
                 error={portError || undefined}
+                endAdornment={
+                  <Button
+                    variant="primary"
+                    size="small"
+                    onClick={handleSavePort}
+                    disabled={!canSavePort}
+                    loading={loading}
+                    type="button"
+                  >
+                    {t("settings.savePort")}
+                  </Button>
+                }
               />
+              <p className={styles.fieldHint}>{t("settings.nonPortAutoApplyHint")}</p>
             </div>
           </div>
 
@@ -311,7 +367,21 @@ export const SettingsPage: React.FC = () => {
                 <label htmlFor="strictMode">{t("settings.strictMode")}</label>
                 <p>{t("settings.strictModeHint")}</p>
               </div>
-              <Switch id="strictMode" checked={strictMode} onChange={setStrictMode} />
+              <Switch
+                id="strictMode"
+                checked={strictMode}
+                onChange={next => {
+                  setStrictMode(next)
+                  void applyImmediateConfig(current =>
+                    buildImmediateConfig(current, {
+                      compat: {
+                        ...current.compat,
+                        strictMode: next,
+                      },
+                    })
+                  )
+                }}
+              />
             </div>
 
             <div className={styles.formGroupSwitch}>
@@ -319,7 +389,21 @@ export const SettingsPage: React.FC = () => {
                 <label htmlFor="detailedLogs">{t("settings.detailedLogs")}</label>
                 <p>{t("settings.detailedLogsHint")}</p>
               </div>
-              <Switch id="detailedLogs" checked={detailedLogs} onChange={setDetailedLogs} />
+              <Switch
+                id="detailedLogs"
+                checked={detailedLogs}
+                onChange={next => {
+                  setDetailedLogs(next)
+                  void applyImmediateConfig(current =>
+                    buildImmediateConfig(current, {
+                      logging: {
+                        ...current.logging,
+                        captureBody: next,
+                      },
+                    })
+                  )
+                }}
+              />
             </div>
 
             <div className={styles.formGroupSwitch}>
@@ -330,7 +414,17 @@ export const SettingsPage: React.FC = () => {
               <Switch
                 id="launchOnStartup"
                 checked={launchOnStartup}
-                onChange={setLaunchOnStartup}
+                onChange={next => {
+                  setLaunchOnStartup(next)
+                  void applyImmediateConfig(current =>
+                    buildImmediateConfig(current, {
+                      ui: {
+                        ...current.ui,
+                        launchOnStartup: next,
+                      },
+                    })
+                  )
+                }}
               />
             </div>
 
@@ -339,7 +433,21 @@ export const SettingsPage: React.FC = () => {
                 <label htmlFor="closeToTray">{t("settings.closeToTray")}</label>
                 <p>{t("settings.closeToTrayHint")}</p>
               </div>
-              <Switch id="closeToTray" checked={closeToTray} onChange={setCloseToTray} />
+              <Switch
+                id="closeToTray"
+                checked={closeToTray}
+                onChange={next => {
+                  setCloseToTray(next)
+                  void applyImmediateConfig(current =>
+                    buildImmediateConfig(current, {
+                      ui: {
+                        ...current.ui,
+                        closeToTray: next,
+                      },
+                    })
+                  )
+                }}
+              />
             </div>
           </div>
 
@@ -354,7 +462,17 @@ export const SettingsPage: React.FC = () => {
                   type="button"
                   aria-pressed={theme === "light"}
                   className={`${styles.choiceButton} ${theme === "light" ? styles.choiceButtonActive : ""}`}
-                  onClick={() => setTheme("light" as ThemeMode)}
+                  onClick={() => {
+                    setTheme("light")
+                    void applyImmediateConfig(current =>
+                      buildImmediateConfig(current, {
+                        ui: {
+                          ...current.ui,
+                          theme: "light",
+                        },
+                      })
+                    )
+                  }}
                 >
                   <span className={styles.choiceTitle}>{t("settings.themeLight")}</span>
                   <span className={styles.choiceValue}>LIGHT</span>
@@ -363,7 +481,17 @@ export const SettingsPage: React.FC = () => {
                   type="button"
                   aria-pressed={theme === "dark"}
                   className={`${styles.choiceButton} ${theme === "dark" ? styles.choiceButtonActive : ""}`}
-                  onClick={() => setTheme("dark" as ThemeMode)}
+                  onClick={() => {
+                    setTheme("dark")
+                    void applyImmediateConfig(current =>
+                      buildImmediateConfig(current, {
+                        ui: {
+                          ...current.ui,
+                          theme: "dark",
+                        },
+                      })
+                    )
+                  }}
                 >
                   <span className={styles.choiceTitle}>{t("settings.themeDark")}</span>
                   <span className={styles.choiceValue}>DARK</span>
@@ -381,8 +509,16 @@ export const SettingsPage: React.FC = () => {
                   aria-pressed={locale === "en-US"}
                   className={`${styles.choiceButton} ${locale === "en-US" ? styles.choiceButtonActive : ""}`}
                   onClick={() => {
-                    setLocale("en-US" as LocaleCode)
-                    setLocaleMode("manual")
+                    setLocale("en-US")
+                    void applyImmediateConfig(current =>
+                      buildImmediateConfig(current, {
+                        ui: {
+                          ...current.ui,
+                          locale: "en-US",
+                          localeMode: "manual",
+                        },
+                      })
+                    )
                   }}
                 >
                   <span className={styles.choiceTitle}>{t("settings.languageEnglish")}</span>
@@ -393,8 +529,16 @@ export const SettingsPage: React.FC = () => {
                   aria-pressed={locale === "zh-CN"}
                   className={`${styles.choiceButton} ${locale === "zh-CN" ? styles.choiceButtonActive : ""}`}
                   onClick={() => {
-                    setLocale("zh-CN" as LocaleCode)
-                    setLocaleMode("manual")
+                    setLocale("zh-CN")
+                    void applyImmediateConfig(current =>
+                      buildImmediateConfig(current, {
+                        ui: {
+                          ...current.ui,
+                          locale: "zh-CN",
+                          localeMode: "manual",
+                        },
+                      })
+                    )
                   }}
                 >
                   <span className={styles.choiceTitle}>{t("settings.languageChinese")}</span>
@@ -432,6 +576,71 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div className={styles.section}>
+            <h3 className={styles.sectionTitle}>{t("settings.remoteSection")}</h3>
+
+            <div className={styles.formGroup}>
+              <label htmlFor="settings-remote-repo">{t("settings.remoteRepoUrl")}</label>
+              <Input
+                id="settings-remote-repo"
+                value={remoteRepoUrl}
+                onChange={e => setRemoteRepoUrl(e.target.value)}
+                onBlur={() => {
+                  void persistRemoteConfig()
+                }}
+                placeholder={t("settings.remoteRepoUrlPlaceholder")}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label htmlFor="settings-remote-token">{t("settings.remoteToken")}</label>
+              <Input
+                id="settings-remote-token"
+                type="password"
+                value={remoteToken}
+                onChange={e => setRemoteToken(e.target.value)}
+                onBlur={() => {
+                  void persistRemoteConfig()
+                }}
+                placeholder={t("settings.remoteTokenPlaceholder")}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label htmlFor="settings-remote-branch">{t("settings.remoteBranch")}</label>
+              <Input
+                id="settings-remote-branch"
+                value={remoteBranch}
+                onChange={e => setRemoteBranch(e.target.value)}
+                onBlur={() => {
+                  void persistRemoteConfig()
+                }}
+                placeholder="main"
+                hint={t("settings.remoteBranchHint")}
+              />
+            </div>
+
+            <div className={styles.backupActions}>
+              <Button
+                variant="default"
+                onClick={handleRemoteUpload}
+                disabled={loading || remoteSyncing}
+                loading={remoteSyncing}
+              >
+                {t("settings.remoteRulesUpload")}
+              </Button>
+              <Button
+                variant="default"
+                onClick={handleRemotePull}
+                disabled={loading || remoteSyncing}
+                loading={remoteSyncing}
+              >
+                {t("settings.remoteRulesUpdate")}
+              </Button>
+            </div>
+            <p className={styles.fieldHint}>{t("settings.remoteHint")}</p>
+          </div>
+
+          <div className={styles.section}>
             <h3 className={styles.sectionTitle}>{t("settings.aboutSection")}</h3>
 
             <div className={styles.formGroup}>
@@ -448,15 +657,6 @@ export const SettingsPage: React.FC = () => {
               </div>
               <p className={styles.fieldHint}>{t("settings.aboutHint")}</p>
             </div>
-          </div>
-
-          <div className={styles.actions}>
-            <span className={styles.changeHint}>
-              {hasChanges ? t("settings.unsavedChanges") : t("settings.noChanges")}
-            </span>
-            <Button variant="primary" onClick={handleSave} loading={loading} disabled={!canSave}>
-              {t("settings.save")}
-            </Button>
           </div>
         </div>
       </div>
