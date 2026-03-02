@@ -1,9 +1,4 @@
 use crate::log_store::LogStore;
-use crate::mappers::{
-    map_anthropic_to_openai_request, map_anthropic_to_openai_response,
-    map_openai_chat_to_responses, map_openai_to_anthropic_request, map_openai_to_anthropic_response,
-    normalize_openai_request,
-};
 use crate::models::{
     default_metrics, Group, LogEntry, LogEntryError, ProxyConfig, ProxyMetrics, ProxyStatus,
     Rule, RuleProtocol, TokenUsage,
@@ -558,7 +553,8 @@ async fn handle_proxy_request(
         .and_then(|v| v.as_str())
         .unwrap_or(&rule.default_model)
         .to_string();
-    let upstream_path = resolve_upstream_path(&rule.protocol, entry.endpoint);
+    let downstream_protocol = protocol_from_entry(&entry);
+    let upstream_path = resolve_upstream_path(&downstream_protocol, entry.endpoint);
     let upstream_url = match resolve_upstream_url(&rule.api_address, upstream_path) {
         Ok(v) => v,
         Err(msg) => {
@@ -566,13 +562,7 @@ async fn handle_proxy_request(
         }
     };
 
-    let mut upstream_body = match build_upstream_body(
-        &config,
-        &entry,
-        &rule.protocol,
-        &request_body,
-        &target_model,
-    ) {
+    let upstream_body = match build_upstream_body(&request_body, &target_model) {
         Ok(v) => v,
         Err(msg) => {
             return proxy_error_response(422, "proxy_error", &msg, None, "proxy", &trace_id);
@@ -587,13 +577,7 @@ async fn handle_proxy_request(
 
     increment_requests(&state.metrics, stream);
 
-    let upstream_headers = build_rule_headers(&rule.protocol, rule);
-
-    // Current migration phase streams are proxied as passthrough to keep runtime stable.
-    // Cross-protocol stream semantic parity is validated in follow-up hardening.
-    if is_cross_protocol(&entry, &rule.protocol) {
-        upstream_body["stream"] = Value::Bool(false);
-    }
+    let upstream_headers = build_rule_headers(&downstream_protocol, rule);
 
     let upstream_resp = match state
         .client
@@ -784,7 +768,7 @@ async fn handle_proxy_request(
 
     let output_body = map_response_body(
         &entry,
-        &rule.protocol,
+        &downstream_protocol,
         &upstream_json,
         &requested_model,
     );
@@ -896,6 +880,13 @@ fn resolve_upstream_path(target_protocol: &RuleProtocol, endpoint: EntryEndpoint
                 "/v1/chat/completions"
             }
         }
+    }
+}
+
+fn protocol_from_entry(entry: &PathEntry) -> RuleProtocol {
+    match entry.protocol {
+        EntryProtocol::Openai => RuleProtocol::Openai,
+        EntryProtocol::Anthropic => RuleProtocol::Anthropic,
     }
 }
 
@@ -1031,9 +1022,6 @@ fn is_model_match(candidate: &str, requested: &str) -> bool {
 }
 
 fn build_upstream_body(
-    config: &ProxyConfig,
-    entry: &PathEntry,
-    downstream: &RuleProtocol,
     request_body: &Value,
     target_model: &str,
 ) -> Result<Value, String> {
@@ -1043,59 +1031,16 @@ fn build_upstream_body(
         json!({})
     };
     with_model["model"] = json!(target_model);
-
-    let normalized_for_bridge = if matches!(entry.protocol, EntryProtocol::Openai)
-        && entry.endpoint == EntryEndpoint::Responses
-        && matches!(downstream, RuleProtocol::Anthropic)
-    {
-        normalize_openai_request("/v1/responses", &with_model)
-    } else {
-        with_model.clone()
-    };
-
-    match (entry.protocol, downstream) {
-        (EntryProtocol::Openai, RuleProtocol::Anthropic) => {
-            map_openai_to_anthropic_request(
-                &normalized_for_bridge,
-                config.compat.strict_mode,
-                target_model,
-            )
-        }
-        (EntryProtocol::Anthropic, RuleProtocol::Openai) => {
-            map_anthropic_to_openai_request(&with_model, config.compat.strict_mode, target_model)
-        }
-        _ => Ok(with_model),
-    }
+    Ok(with_model)
 }
 
 fn map_response_body(
-    entry: &PathEntry,
-    downstream: &RuleProtocol,
+    _entry: &PathEntry,
+    _downstream: &RuleProtocol,
     upstream_json: &Value,
-    request_model: &str,
+    _request_model: &str,
 ) -> Value {
-    match (entry.protocol, downstream) {
-        (EntryProtocol::Openai, RuleProtocol::Anthropic) => {
-            let chat = map_anthropic_to_openai_response(upstream_json, request_model);
-            if entry.endpoint == EntryEndpoint::Responses {
-                map_openai_chat_to_responses(&chat)
-            } else {
-                chat
-            }
-        }
-        (EntryProtocol::Anthropic, RuleProtocol::Openai) => {
-            map_openai_to_anthropic_response(upstream_json, request_model)
-        }
-        _ => upstream_json.clone(),
-    }
-}
-
-fn is_cross_protocol(entry: &PathEntry, downstream: &RuleProtocol) -> bool {
-    match (entry.protocol, downstream) {
-        (EntryProtocol::Openai, RuleProtocol::Anthropic) => true,
-        (EntryProtocol::Anthropic, RuleProtocol::Openai) => true,
-        _ => false,
-    }
+    upstream_json.clone()
 }
 
 fn extract_token_usage(payload: &Value) -> Option<TokenUsage> {
@@ -1395,10 +1340,9 @@ fn should_capture_body(state: &ServiceState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_upstream_body, extract_token_usage, resolve_target_model, EntryEndpoint,
-        EntryProtocol, PathEntry, StreamTokenAccumulator,
+        build_upstream_body, extract_token_usage, resolve_target_model, StreamTokenAccumulator,
     };
-    use crate::models::{default_config, Group, Rule, RuleProtocol};
+    use crate::models::{Group, Rule, RuleProtocol};
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -1547,26 +1491,17 @@ mod tests {
     }
 
     #[test]
-    fn build_upstream_body_normalizes_openai_responses_for_anthropic_bridge() {
-        let config = default_config();
-        let entry = PathEntry {
-            protocol: EntryProtocol::Openai,
-            endpoint: EntryEndpoint::Responses,
-        };
+    fn build_upstream_body_passes_through_request_shape_with_target_model() {
         let out = build_upstream_body(
-            &config,
-            &entry,
-            &RuleProtocol::Anthropic,
             &json!({
                 "model": "gpt-4.1",
                 "input": "hello from responses"
             }),
-            "claude-3-7-sonnet",
+            "gpt-4.1",
         )
         .expect("mapping should succeed");
 
-        assert_eq!(out["model"], "claude-3-7-sonnet");
-        assert_eq!(out["messages"][0]["role"], "user");
-        assert_eq!(out["messages"][0]["content"][0]["text"], "hello from responses");
+        assert_eq!(out["model"], "gpt-4.1");
+        assert_eq!(out["input"], "hello from responses");
     }
 }
