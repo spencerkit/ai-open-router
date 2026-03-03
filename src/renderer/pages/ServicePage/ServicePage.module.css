@@ -347,21 +347,19 @@
 
 .ruleItemContainer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   width: 100%;
-  gap: var(--sp-2);
+  gap: 6px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
-  min-height: 60px;
-  padding-right: var(--sp-2);
-  padding-left: var(--sp-2);
+  height: 82px;
+  padding: var(--sp-2);
 }
 
 .ruleItems li {
   display: flex;
-  align-items: center;
   width: 100%;
 }
 
@@ -382,61 +380,80 @@
   display: flex;
   align-items: center;
   width: 100%;
-  padding: var(--sp-3);
+  padding: 0 var(--sp-2);
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   transition: color var(--transition-fast);
-  gap: var(--sp-3);
   flex: 1;
-  min-height: 56px;
+  min-width: 0;
+  height: 32px;
+}
+
+.ruleCardTop {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: var(--sp-2);
+  min-height: 32px;
+}
+
+.ruleCardBottom {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 26px;
+}
+
+.ruleActionButtons {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
 }
 
 .quotaBadge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 90px;
-  max-width: 170px;
-  height: 24px;
-  padding: 0 var(--sp-2);
-  border-radius: var(--radius-full);
-  font-size: 11px;
+  min-width: 76px;
+  max-width: 160px;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 2px;
+  font-size: 8px;
   font-weight: var(--weight-medium);
   letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border: 1px solid transparent;
+  border: none;
   flex-shrink: 0;
 }
 
 .quotaBadgeOk {
   color: #13795b;
   background: rgba(19, 121, 91, 0.13);
-  border-color: rgba(19, 121, 91, 0.22);
 }
 
 .quotaBadgeLow {
   color: #9a6700;
   background: rgba(154, 103, 0, 0.14);
-  border-color: rgba(154, 103, 0, 0.22);
 }
 
 .quotaBadgeEmpty,
 .quotaBadgeError {
   color: #c0392b;
   background: rgba(192, 57, 43, 0.12);
-  border-color: rgba(192, 57, 43, 0.2);
 }
 
 .quotaBadgeUnknown,
 .quotaBadgeUnsupported {
   color: var(--text-secondary);
   background: var(--surface-active);
-  border-color: var(--border);
 }
 
 .ruleItem:focus-visible {
@@ -448,10 +465,23 @@
   font-weight: var(--weight-medium);
   font-size: var(--text-sm);
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .ruleItem.active .ruleModel {
   color: var(--accent);
+}
+
+.ruleMainLine {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-width: 0;
 }
 
 .ruleDirection {
@@ -471,6 +501,24 @@
   padding: 2px var(--sp-2);
   border-radius: var(--radius-full);
   white-space: nowrap;
+}
+
+.ruleQuotaWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.quotaResetAt {
+  font-size: 8px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .activateButton {
@@ -509,8 +557,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
