@@ -68,6 +68,35 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+const DEFAULT_THRESHOLDS = {
+  nonStream: {
+    minSuccessRatePct: 99.9,
+    maxTimeoutCount: 0,
+    p95WarnMs: 250,
+    p95FailMs: 800,
+  },
+  stream: {
+    minSuccessRatePct: 99.9,
+    maxTimeoutCount: 0,
+    p95WarnMs: 1000,
+    p95FailMs: 3000,
+  },
+  mixed: {
+    nonStream: {
+      minSuccessRatePct: 99.9,
+      maxTimeoutCount: 0,
+      p95WarnMs: 300,
+      p95FailMs: 1000,
+    },
+    stream: {
+      minSuccessRatePct: 99.9,
+      maxTimeoutCount: 0,
+      p95WarnMs: 1200,
+      p95FailMs: 3500,
+    },
+  },
+}
+
 function percentile(sortedValues, p) {
   if (sortedValues.length === 0) return 0
   const rank = Math.min(
@@ -302,6 +331,63 @@ function toScenarioSummary({ name, mode, concurrency, collector, startedAt, fini
     statusCodeCounts: collector.statusCodeCounts,
     errorTypeCounts: collector.errorTypeCounts,
     ...extra,
+  }
+}
+
+function resolveThresholds(config) {
+  const user = config.thresholds || {}
+  return {
+    nonStream: {
+      ...DEFAULT_THRESHOLDS.nonStream,
+      ...(user.nonStream || {}),
+    },
+    stream: {
+      ...DEFAULT_THRESHOLDS.stream,
+      ...(user.stream || {}),
+    },
+    mixed: {
+      nonStream: {
+        ...DEFAULT_THRESHOLDS.mixed.nonStream,
+        ...(user.mixed?.nonStream || {}),
+      },
+      stream: {
+        ...DEFAULT_THRESHOLDS.mixed.stream,
+        ...(user.mixed?.stream || {}),
+      },
+    },
+  }
+}
+
+function evaluateHealth(result, threshold) {
+  const redReasons = []
+  const yellowReasons = []
+  const p95Ms = result?.latencyMs?.p95Ms || 0
+
+  if (result.successRate < threshold.minSuccessRatePct) {
+    redReasons.push(`successRate ${result.successRate}% < ${threshold.minSuccessRatePct}%`)
+  }
+  if (result.timeoutCount > threshold.maxTimeoutCount) {
+    redReasons.push(`timeouts ${result.timeoutCount} > ${threshold.maxTimeoutCount}`)
+  }
+  if (p95Ms > threshold.p95FailMs) {
+    redReasons.push(`p95 ${p95Ms}ms > ${threshold.p95FailMs}ms`)
+  } else if (p95Ms > threshold.p95WarnMs) {
+    yellowReasons.push(`p95 ${p95Ms}ms > ${threshold.p95WarnMs}ms`)
+  }
+
+  if (redReasons.length > 0) {
+    return { grade: "red", reasons: [...redReasons, ...yellowReasons] }
+  }
+  if (yellowReasons.length > 0) {
+    return { grade: "yellow", reasons: yellowReasons }
+  }
+  return { grade: "green", reasons: [] }
+}
+
+function attachHealth(result, threshold) {
+  return {
+    ...result,
+    health: evaluateHealth(result, threshold),
   }
 }
 
@@ -547,6 +633,7 @@ function printScenarioResult(result) {
       {
         lane: "nonstream",
         concurrency: result.nonStreamConcurrency,
+        grade: result.nonStream.health?.grade || "-",
         rps: result.nonStream.throughputRps,
         successRatePct: result.nonStream.successRate,
         p95Ms: result.nonStream.latencyMs.p95Ms,
@@ -557,6 +644,7 @@ function printScenarioResult(result) {
       {
         lane: "stream",
         concurrency: result.streamConcurrency,
+        grade: result.stream.health?.grade || "-",
         rps: result.stream.throughputRps,
         successRatePct: result.stream.successRate,
         p95Ms: result.stream.latencyMs.p95Ms,
@@ -573,6 +661,7 @@ function printScenarioResult(result) {
     {
       mode: result.mode,
       concurrency: result.concurrency,
+      grade: result.health?.grade || "-",
       durationSec: result.durationSec,
       requestsCompleted: result.requestsCompleted,
       rps: result.throughputRps,
@@ -584,6 +673,37 @@ function printScenarioResult(result) {
       failed: result.failed,
     },
   ])
+}
+
+function collectHealthRows(report) {
+  const rows = []
+  for (const item of report.nonStreamResults || []) {
+    rows.push({
+      scenario: item.name,
+      grade: item.health?.grade || "-",
+      reasons: item.health?.reasons?.join("; ") || "ok",
+    })
+  }
+  for (const item of report.streamResults || []) {
+    rows.push({
+      scenario: item.name,
+      grade: item.health?.grade || "-",
+      reasons: item.health?.reasons?.join("; ") || "ok",
+    })
+  }
+  if (report.mixedResult) {
+    rows.push({
+      scenario: "mixed-nonstream",
+      grade: report.mixedResult.nonStream.health?.grade || "-",
+      reasons: report.mixedResult.nonStream.health?.reasons?.join("; ") || "ok",
+    })
+    rows.push({
+      scenario: "mixed-stream",
+      grade: report.mixedResult.stream.health?.grade || "-",
+      reasons: report.mixedResult.stream.health?.reasons?.join("; ") || "ok",
+    })
+  }
+  return rows
 }
 
 function printSummary(report) {
@@ -600,6 +720,12 @@ function printSummary(report) {
   }
   if (report.mixedResult) {
     printScenarioResult(report.mixedResult)
+  }
+
+  const healthRows = collectHealthRows(report)
+  if (healthRows.length > 0) {
+    console.log("\n=== Health Checks ===")
+    console.table(healthRows)
   }
 }
 
@@ -626,15 +752,25 @@ async function main() {
     streamResults: [],
     mixedResult: null,
   }
+  const thresholds = resolveThresholds(config)
 
   if (args.scenario === "all" || args.scenario === "nonstream") {
-    report.nonStreamResults = await runNonStreamMatrix(config, common)
+    const nonStreamResults = await runNonStreamMatrix(config, common)
+    report.nonStreamResults = nonStreamResults.map(item => attachHealth(item, thresholds.nonStream))
   }
   if (args.scenario === "all" || args.scenario === "stream") {
-    report.streamResults = await runStreamMatrix(config, common)
+    const streamResults = await runStreamMatrix(config, common)
+    report.streamResults = streamResults.map(item => attachHealth(item, thresholds.stream))
   }
   if (args.scenario === "all" || args.scenario === "mixed") {
-    report.mixedResult = await runMixedScenario(config, common)
+    const mixedResult = await runMixedScenario(config, common)
+    if (mixedResult) {
+      report.mixedResult = {
+        ...mixedResult,
+        nonStream: attachHealth(mixedResult.nonStream, thresholds.mixed.nonStream),
+        stream: attachHealth(mixedResult.stream, thresholds.mixed.stream),
+      }
+    }
   }
 
   report.finishedAt = nowIso()

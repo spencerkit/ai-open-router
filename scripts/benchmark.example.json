@@ -3,6 +3,7 @@
   "_docAuth": "If server.authEnabled=false, delete headers.authorization.",
   "_docNonStreamMode": "nonStream.mode: fixed_requests | duration; duration gives more stable curves.",
   "_docWarmup": "warmupSec is preheat traffic before each non-stream matrix point and is excluded from metrics.",
+  "_docThresholds": "thresholds control health grade (green/yellow/red) by success rate, timeout count and p95.",
   "warmupSec": 3,
   "baseUrl": "http://localhost:8999",
   "path": "/oc/mock-group/responses",
@@ -13,6 +14,34 @@
   "expectStatus": [200],
   "requestTimeoutMs": 65000,
   "streamTimeoutMs": 600000,
+  "thresholds": {
+    "nonStream": {
+      "minSuccessRatePct": 99.9,
+      "maxTimeoutCount": 0,
+      "p95WarnMs": 250,
+      "p95FailMs": 800
+    },
+    "stream": {
+      "minSuccessRatePct": 99.9,
+      "maxTimeoutCount": 0,
+      "p95WarnMs": 1000,
+      "p95FailMs": 3000
+    },
+    "mixed": {
+      "nonStream": {
+        "minSuccessRatePct": 99.9,
+        "maxTimeoutCount": 0,
+        "p95WarnMs": 300,
+        "p95FailMs": 1000
+      },
+      "stream": {
+        "minSuccessRatePct": 99.9,
+        "maxTimeoutCount": 0,
+        "p95WarnMs": 1200,
+        "p95FailMs": 3500
+      }
+    }
+  },
   "nonStream": {
     "enabled": true,
     "mode": "duration",
