@@ -1,6 +1,7 @@
 use crate::app_state::{apply_launch_on_startup_setting, sync_runtime_config, SharedState};
 use crate::backup::extract_groups_from_import_payload;
 use crate::models::{GroupBackupImportResult, ProxyConfig, ProxyStatus, SaveConfigResult};
+use crate::services::{AppError, AppResult};
 use serde_json::Value;
 use tauri::AppHandle;
 
@@ -12,7 +13,7 @@ pub async fn save_config(
     state: &SharedState,
     app: &AppHandle,
     next_config: Value,
-) -> Result<SaveConfigResult, String> {
+) -> AppResult<SaveConfigResult> {
     let prev = state.config_store.get();
     let saved = state.config_store.save(next_config)?;
 
@@ -30,8 +31,8 @@ pub async fn save_config(
 pub async fn import_groups_payload(
     state: &SharedState,
     parsed: Value,
-) -> Result<(usize, ProxyConfig, bool, ProxyStatus), String> {
-    let groups = extract_groups_from_import_payload(&parsed)?;
+) -> AppResult<(usize, ProxyConfig, bool, ProxyStatus)> {
+    let groups = extract_groups_from_import_payload(&parsed).map_err(AppError::validation)?;
     let prev = state.config_store.get();
     let mut next = prev.clone();
     next.groups = groups.clone();
@@ -47,7 +48,7 @@ pub async fn import_groups_with_source(
     parsed: Value,
     source: &str,
     file_path: Option<String>,
-) -> Result<GroupBackupImportResult, String> {
+) -> AppResult<GroupBackupImportResult> {
     let (groups_len, saved, restarted, status) = import_groups_payload(state, parsed).await?;
 
     Ok(GroupBackupImportResult {

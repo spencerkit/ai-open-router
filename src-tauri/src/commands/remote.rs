@@ -9,7 +9,9 @@ pub async fn config_remote_rules_upload(
     app: AppHandle,
     force: Option<bool>,
 ) -> Result<RemoteRulesUploadResult, String> {
-    remote_rules_service::upload(&state, &app, force).await
+    remote_rules_service::upload(&state, &app, force)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -18,5 +20,7 @@ pub async fn config_remote_rules_pull(
     app: AppHandle,
     force: Option<bool>,
 ) -> Result<RemoteRulesPullResult, String> {
-    remote_rules_service::pull(&state, &app, force).await
+    remote_rules_service::pull(&state, &app, force)
+        .await
+        .map_err(|e| e.to_string())
 }

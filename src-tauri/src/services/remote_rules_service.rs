@@ -6,6 +6,7 @@ use crate::remote_sync::{
     upload_groups_json_to_remote,
 };
 use crate::services::config_service;
+use crate::services::{AppError, AppResult};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
@@ -34,19 +35,21 @@ pub async fn upload(
     state: &SharedState,
     app: &AppHandle,
     force: Option<bool>,
-) -> Result<RemoteRulesUploadResult, String> {
+) -> AppResult<RemoteRulesUploadResult> {
     if !has_remote_git_binary() {
-        return Err("git is not available in current environment".to_string());
+        return Err(AppError::external(
+            "git is not available in current environment",
+        ));
     }
 
     let app_data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("resolve app_data_dir failed: {e}"))?;
+        .map_err(|e| AppError::external(format!("resolve app_data_dir failed: {e}")))?;
     let current = state.config_store.get();
     let backup_payload = create_groups_backup_payload(&current.groups);
     let json_text = serde_json::to_string_pretty(&backup_payload)
-        .map_err(|e| format!("serialize backup failed: {e}"))?;
+        .map_err(|e| AppError::internal(format!("serialize backup failed: {e}")))?;
     let local_updated_at = get_local_config_updated_at(state);
 
     upload_groups_json_to_remote(
@@ -57,26 +60,30 @@ pub async fn upload(
         local_updated_at,
         force.unwrap_or(false),
     )
+    .map_err(AppError::external)
 }
 
 pub async fn pull(
     state: &SharedState,
     app: &AppHandle,
     force: Option<bool>,
-) -> Result<RemoteRulesPullResult, String> {
+) -> AppResult<RemoteRulesPullResult> {
     if !has_remote_git_binary() {
-        return Err("git is not available in current environment".to_string());
+        return Err(AppError::external(
+            "git is not available in current environment",
+        ));
     }
 
     let app_data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("resolve app_data_dir failed: {e}"))?;
+        .map_err(|e| AppError::external(format!("resolve app_data_dir failed: {e}")))?;
     let current = state.config_store.get();
     let local_updated_at = get_local_config_updated_at(state);
-    let json_text = pull_groups_json_from_remote(app_data_dir.as_path(), &current.remote_git)?;
+    let json_text = pull_groups_json_from_remote(app_data_dir.as_path(), &current.remote_git)
+        .map_err(AppError::external)?;
     let parsed = serde_json::from_str::<Value>(&json_text)
-        .map_err(|_| "Invalid JSON in remote rules file".to_string())?;
+        .map_err(|_| AppError::validation("Invalid JSON in remote rules file"))?;
     let remote_updated_at = read_exported_at_from_json(&parsed);
 
     if !force.unwrap_or(false) {

@@ -1,22 +1,24 @@
 use crate::app_state::SharedState;
 use crate::models::{Rule, RuleProtocol, RuleQuotaConfig, RuleQuotaSnapshot, RuleQuotaTestResult};
 use crate::quota;
+use crate::services::{AppError, AppResult};
 
 pub async fn get_rule(
     state: &SharedState,
     group_id: String,
     rule_id: String,
-) -> Result<RuleQuotaSnapshot, String> {
+) -> AppResult<RuleQuotaSnapshot> {
     let config = state.config_store.get();
-    quota::fetch_rule_quota(&config, &group_id, &rule_id).await
+    quota::fetch_rule_quota(&config, &group_id, &rule_id)
+        .await
+        .map_err(AppError::external)
 }
 
-pub async fn get_group(
-    state: &SharedState,
-    group_id: String,
-) -> Result<Vec<RuleQuotaSnapshot>, String> {
+pub async fn get_group(state: &SharedState, group_id: String) -> AppResult<Vec<RuleQuotaSnapshot>> {
     let config = state.config_store.get();
-    quota::fetch_group_quotas(&config, &group_id).await
+    quota::fetch_group_quotas(&config, &group_id)
+        .await
+        .map_err(AppError::external)
 }
 
 pub async fn test_draft(
@@ -27,13 +29,13 @@ pub async fn test_draft(
     rule_api_address: String,
     rule_default_model: String,
     quota: RuleQuotaConfig,
-) -> Result<RuleQuotaTestResult, String> {
+) -> AppResult<RuleQuotaTestResult> {
     let config = state.config_store.get();
     let group = config
         .groups
         .iter()
         .find(|g| g.id == group_id)
-        .ok_or_else(|| format!("group not found: {group_id}"))?;
+        .ok_or_else(|| AppError::not_found(format!("group not found: {group_id}")))?;
 
     let draft_rule = Rule {
         id: "draft-rule".to_string(),

@@ -2,6 +2,7 @@ use crate::app_state::SharedState;
 use crate::backup::{backup_default_file_name, create_groups_backup_payload};
 use crate::models::{GroupBackupExportResult, GroupBackupImportResult};
 use crate::services::config_service;
+use crate::services::{AppError, AppResult};
 use serde_json::Value;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -10,11 +11,11 @@ use tauri_plugin_dialog::DialogExt;
 pub async fn export_groups_to_file(
     state: &SharedState,
     app: &AppHandle,
-) -> Result<GroupBackupExportResult, String> {
+) -> AppResult<GroupBackupExportResult> {
     let current = state.config_store.get();
     let backup_payload = create_groups_backup_payload(&current.groups);
     let json_text = serde_json::to_string_pretty(&backup_payload)
-        .map_err(|e| format!("serialize backup failed: {e}"))?;
+        .map_err(|e| AppError::internal(format!("serialize backup failed: {e}")))?;
 
     let mut file_path = None;
     let title = "Export Group Rules Backup";
@@ -27,8 +28,9 @@ pub async fn export_groups_to_file(
     {
         let abs = path
             .into_path()
-            .map_err(|e| format!("invalid save file path: {e}"))?;
-        std::fs::write(&abs, &json_text).map_err(|e| format!("write backup failed: {e}"))?;
+            .map_err(|e| AppError::validation(format!("invalid save file path: {e}")))?;
+        std::fs::write(&abs, &json_text)
+            .map_err(|e| AppError::external(format!("write backup failed: {e}")))?;
         file_path = Some(abs.to_string_lossy().to_string());
     }
 
@@ -45,11 +47,11 @@ pub async fn export_groups_to_file(
 pub async fn export_groups_to_folder(
     state: &SharedState,
     app: &AppHandle,
-) -> Result<GroupBackupExportResult, String> {
+) -> AppResult<GroupBackupExportResult> {
     let current = state.config_store.get();
     let backup_payload = create_groups_backup_payload(&current.groups);
     let json_text = serde_json::to_string_pretty(&backup_payload)
-        .map_err(|e| format!("serialize backup failed: {e}"))?;
+        .map_err(|e| AppError::internal(format!("serialize backup failed: {e}")))?;
 
     let mut output_file = None;
     if let Some(folder) = app
@@ -60,9 +62,10 @@ pub async fn export_groups_to_folder(
     {
         let folder_path = folder
             .into_path()
-            .map_err(|e| format!("invalid folder path: {e}"))?;
+            .map_err(|e| AppError::validation(format!("invalid folder path: {e}")))?;
         let backup_path = folder_path.join(backup_default_file_name());
-        std::fs::write(&backup_path, json_text).map_err(|e| format!("write backup failed: {e}"))?;
+        std::fs::write(&backup_path, json_text)
+            .map_err(|e| AppError::external(format!("write backup failed: {e}")))?;
         output_file = Some(backup_path.to_string_lossy().to_string());
     }
 
@@ -79,15 +82,15 @@ pub async fn export_groups_to_folder(
 pub async fn export_groups_to_clipboard(
     state: &SharedState,
     app: &AppHandle,
-) -> Result<GroupBackupExportResult, String> {
+) -> AppResult<GroupBackupExportResult> {
     let current = state.config_store.get();
     let backup_payload = create_groups_backup_payload(&current.groups);
     let json_text = serde_json::to_string_pretty(&backup_payload)
-        .map_err(|e| format!("serialize backup failed: {e}"))?;
+        .map_err(|e| AppError::internal(format!("serialize backup failed: {e}")))?;
 
     app.clipboard()
         .write_text(json_text.clone())
-        .map_err(|e| format!("write clipboard failed: {e}"))?;
+        .map_err(|e| AppError::external(format!("write clipboard failed: {e}")))?;
 
     Ok(GroupBackupExportResult {
         ok: true,
@@ -102,7 +105,7 @@ pub async fn export_groups_to_clipboard(
 pub async fn import_groups_from_file(
     state: &SharedState,
     app: &AppHandle,
-) -> Result<GroupBackupImportResult, String> {
+) -> AppResult<GroupBackupImportResult> {
     let selected = app
         .dialog()
         .file()
@@ -125,10 +128,11 @@ pub async fn import_groups_from_file(
 
     let path_buf = path
         .into_path()
-        .map_err(|e| format!("invalid file path: {e}"))?;
-    let raw = std::fs::read_to_string(&path_buf).map_err(|e| format!("read file failed: {e}"))?;
-    let parsed =
-        serde_json::from_str::<Value>(&raw).map_err(|_| "Invalid JSON file".to_string())?;
+        .map_err(|e| AppError::validation(format!("invalid file path: {e}")))?;
+    let raw = std::fs::read_to_string(&path_buf)
+        .map_err(|e| AppError::external(format!("read file failed: {e}")))?;
+    let parsed = serde_json::from_str::<Value>(&raw)
+        .map_err(|_| AppError::validation("Invalid JSON file"))?;
 
     config_service::import_groups_with_source(
         state,
@@ -142,11 +146,11 @@ pub async fn import_groups_from_file(
 pub async fn import_groups_from_json_text(
     state: &SharedState,
     json_text: String,
-) -> Result<GroupBackupImportResult, String> {
+) -> AppResult<GroupBackupImportResult> {
     if json_text.trim().is_empty() {
-        return Err("Invalid JSON text".to_string());
+        return Err(AppError::validation("Invalid JSON text"));
     }
-    let parsed =
-        serde_json::from_str::<Value>(&json_text).map_err(|_| "Invalid JSON text".to_string())?;
+    let parsed = serde_json::from_str::<Value>(&json_text)
+        .map_err(|_| AppError::validation("Invalid JSON text"))?;
     config_service::import_groups_with_source(state, parsed, "json", None).await
 }

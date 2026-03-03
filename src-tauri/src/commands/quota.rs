@@ -9,7 +9,9 @@ pub async fn quota_get_rule(
     group_id: String,
     rule_id: String,
 ) -> Result<RuleQuotaSnapshot, String> {
-    quota_service::get_rule(&state, group_id, rule_id).await
+    quota_service::get_rule(&state, group_id, rule_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -17,7 +19,9 @@ pub async fn quota_get_group(
     state: State<'_, SharedState>,
     group_id: String,
 ) -> Result<Vec<RuleQuotaSnapshot>, String> {
-    quota_service::get_group(&state, group_id).await
+    quota_service::get_group(&state, group_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -40,4 +44,5 @@ pub async fn quota_test_draft(
         quota,
     )
     .await
+    .map_err(|e| e.to_string())
 }
