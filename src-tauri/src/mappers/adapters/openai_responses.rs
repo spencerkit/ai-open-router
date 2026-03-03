@@ -121,10 +121,120 @@ fn normalize_system_to_instructions(system: &Value) -> Option<String> {
     Some(system.to_string())
 }
 
+fn canonicalize_schema_key(key: &str) -> String {
+    key.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect::<String>()
+}
+
+fn collect_schema_properties(schema: &Value, out: &mut serde_json::Map<String, Value>) {
+    if let Some(properties) = schema.get("properties").and_then(|v| v.as_object()) {
+        for (key, value) in properties {
+            out.entry(key.clone()).or_insert_with(|| value.clone());
+        }
+    }
+
+    for composite in ["allOf", "anyOf", "oneOf"] {
+        if let Some(parts) = schema.get(composite).and_then(|v| v.as_array()) {
+            for part in parts {
+                collect_schema_properties(part, out);
+            }
+        }
+    }
+}
+
+fn schema_properties(schema: &Value) -> serde_json::Map<String, Value> {
+    let mut out = serde_json::Map::new();
+    collect_schema_properties(schema, &mut out);
+    out
+}
+
+fn schema_alias_index(
+    properties: &serde_json::Map<String, Value>,
+) -> HashMap<String, Option<String>> {
+    let mut index = HashMap::<String, Option<String>>::new();
+    for key in properties.keys() {
+        let alias = canonicalize_schema_key(key);
+        if alias.is_empty() {
+            continue;
+        }
+
+        match index.get_mut(&alias) {
+            Some(slot) => {
+                if slot.as_deref() != Some(key.as_str()) {
+                    *slot = None;
+                }
+            }
+            None => {
+                index.insert(alias, Some(key.clone()));
+            }
+        }
+    }
+    index
+}
+
+fn normalize_arguments_with_schema(arguments: &Value, schema: Option<&Value>) -> Value {
+    let Some(schema) = schema else {
+        return arguments.clone();
+    };
+
+    match arguments {
+        Value::Object(obj) => {
+            let properties = schema_properties(schema);
+            if properties.is_empty() {
+                return arguments.clone();
+            }
+
+            let alias_index = schema_alias_index(&properties);
+            let mut normalized = serde_json::Map::new();
+            for (key, value) in obj {
+                let resolved_key = if properties.contains_key(key) {
+                    key.clone()
+                } else {
+                    let alias = canonicalize_schema_key(key);
+                    match alias_index.get(&alias) {
+                        Some(Some(mapped))
+                            if !mapped.is_empty() && !obj.contains_key(mapped.as_str()) =>
+                        {
+                            mapped.clone()
+                        }
+                        _ => key.clone(),
+                    }
+                };
+
+                let child_schema = properties.get(&resolved_key);
+                normalized.insert(
+                    resolved_key,
+                    normalize_arguments_with_schema(value, child_schema),
+                );
+            }
+            Value::Object(normalized)
+        }
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| normalize_arguments_with_schema(item, schema.get("items")))
+                .collect::<Vec<_>>(),
+        ),
+        _ => arguments.clone(),
+    }
+}
+
 pub fn encode_request(request: &CanonicalRequest) -> Value {
     let mut input = vec![];
     let mut system_chunks = vec![];
     let mut function_call_id_map = HashMap::<String, String>::new();
+    let tool_schemas = request
+        .tools
+        .as_ref()
+        .map(|tools| {
+            tools
+                .iter()
+                .map(|tool| (tool.name.clone(), tool.input_schema.clone()))
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default();
 
     for msg in &request.messages {
         match &msg.role {
@@ -168,6 +278,8 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
                         input: args,
                     } = block
                     {
+                        let normalized_args =
+                            normalize_arguments_with_schema(args, tool_schemas.get(name));
                         let call_id = normalize_function_call_id(id, &mut function_call_id_map);
                         input.push(json!({
                             "type": "function_call",
@@ -175,7 +287,7 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
                             "call_id": call_id,
                             "status": "completed",
                             "name": name,
-                            "arguments": serde_json::to_string(args)
+                            "arguments": serde_json::to_string(&normalized_args)
                                 .unwrap_or_else(|_| "{}".to_string()),
                         }));
                     }
@@ -243,11 +355,9 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
             .map(|tool| {
                 json!({
                     "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description.clone().unwrap_or(Value::Null),
-                        "parameters": tool.input_schema,
-                    }
+                    "name": tool.name,
+                    "description": tool.description.clone().unwrap_or(Value::Null),
+                    "parameters": tool.input_schema,
                 })
             })
             .collect::<Vec<_>>());
@@ -257,7 +367,7 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
         if let Some(name) = name {
             out["tool_choice"] = json!({
                 "type": "function",
-                "function": { "name": name }
+                "name": name
             });
         } else {
             out["tool_choice"] = json!(kind);

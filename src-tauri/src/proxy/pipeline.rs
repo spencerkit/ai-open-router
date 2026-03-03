@@ -13,7 +13,8 @@ use super::routing::{
 };
 use super::stream_bridge::{create_stream_bridge, map_non_stream_response_via_bridge};
 use super::{
-    ServiceState, MAX_REQUEST_BODY_BYTES, MAX_STREAM_LOG_BODY_BYTES, NON_STREAM_REQUEST_TIMEOUT_MS,
+    ServiceState, MAX_REQUEST_BODY_BYTES, MAX_STREAM_LOG_BODY_BYTES,
+    MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS, NON_STREAM_REQUEST_TIMEOUT_MS,
     STREAM_REQUEST_TIMEOUT_MS,
 };
 use crate::mappers::{map_request_by_surface, map_response_by_surface, MapperSurface};
@@ -394,11 +395,7 @@ pub(super) async fn handle_proxy_request(
     state.metrics.increment_request(stream);
 
     let upstream_headers = build_rule_headers(&target_protocol, &active_route.rule);
-    let request_timeout_ms = if stream {
-        STREAM_REQUEST_TIMEOUT_MS
-    } else {
-        NON_STREAM_REQUEST_TIMEOUT_MS
-    };
+    let request_timeout_ms = resolve_request_timeout_ms(stream, &entry, &target_protocol);
 
     let upstream_resp = match state
         .client
@@ -830,6 +827,7 @@ pub(super) async fn handle_proxy_request(
 /// - Cross-surface forwarding uses canonical mapper conversion.
 /// - Cross-surface streaming keeps mapper output (`stream`), while SSE bytes are
 ///   forwarded directly from upstream.
+/// - For `messages -> responses`, stream is forced to false for compatibility.
 pub(super) fn build_upstream_body(
     entry: &PathEntry,
     target_protocol: &RuleProtocol,
@@ -853,6 +851,35 @@ pub(super) fn build_upstream_body(
     )?;
     if mapped.is_object() {
         mapped["model"] = json!(target_model);
+        if source_surface == MapperSurface::AnthropicMessages
+            && target_surface == MapperSurface::OpenaiResponses
+        {
+            mapped["stream"] = json!(false);
+            let has_tools = mapped
+                .get("tools")
+                .and_then(|v| v.as_array())
+                .map(|arr| !arr.is_empty())
+                .unwrap_or(false);
+            let tool_choice_missing = mapped
+                .get("tool_choice")
+                .map(|v| v.is_null())
+                .unwrap_or(true);
+            if has_tools && tool_choice_missing {
+                mapped["tool_choice"] = json!("auto");
+            }
+            let parallel_tool_calls_missing = mapped
+                .get("parallel_tool_calls")
+                .map(|v| v.is_null())
+                .unwrap_or(true);
+            if has_tools && parallel_tool_calls_missing {
+                mapped["parallel_tool_calls"] = json!(true);
+            }
+            // TODO(protocol-compat): negotiate upstream capability and restore
+            // max_output_tokens forwarding when the responses endpoint supports it.
+            if let Some(obj) = mapped.as_object_mut() {
+                obj.remove("max_output_tokens");
+            }
+        }
     }
     Ok(mapped)
 }
@@ -881,6 +908,24 @@ fn map_response_body(
     }
 
     map_response_by_surface(source_surface, target_surface, upstream_json, request_model)
+}
+
+pub(super) fn resolve_request_timeout_ms(
+    stream: bool,
+    entry: &PathEntry,
+    target_protocol: &RuleProtocol,
+) -> u64 {
+    if stream {
+        return STREAM_REQUEST_TIMEOUT_MS;
+    }
+
+    if matches!(entry.endpoint, EntryEndpoint::Messages)
+        && matches!(target_protocol, RuleProtocol::Openai)
+    {
+        return MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS;
+    }
+
+    NON_STREAM_REQUEST_TIMEOUT_MS
 }
 
 /// Convert parsed downstream endpoint into mapper surface enum.

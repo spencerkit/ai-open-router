@@ -22,6 +22,7 @@ mod stream_bridge;
 const MAX_REQUEST_BODY_BYTES: usize = 10 * 1024 * 1024;
 const MAX_STREAM_LOG_BODY_BYTES: usize = 256 * 1024;
 const NON_STREAM_REQUEST_TIMEOUT_MS: u64 = 60_000;
+const MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS: u64 = 300_000;
 const STREAM_REQUEST_TIMEOUT_MS: u64 = 600_000;
 const UPSTREAM_CONNECT_TIMEOUT_MS: u64 = 10_000;
 
@@ -250,10 +251,13 @@ impl ProxyRuntime {
 #[cfg(test)]
 mod tests {
     use super::observability::{extract_token_usage, StreamTokenAccumulator};
-    use super::pipeline::build_upstream_body;
+    use super::pipeline::{build_upstream_body, resolve_request_timeout_ms};
     use super::routing::{
         detect_entry_protocol, resolve_target_model, resolve_upstream_path, EntryEndpoint,
         EntryProtocol, PathEntry,
+    };
+    use super::{
+        MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS, NON_STREAM_REQUEST_TIMEOUT_MS,
     };
     use crate::models::{default_rule_quota_config, Group, Rule, RuleProtocol};
     use serde_json::{json, Value};
@@ -429,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn build_upstream_body_keeps_stream_on_cross_protocol_mapping() {
+    fn build_upstream_body_forces_non_stream_for_messages_to_responses() {
         let entry = PathEntry {
             protocol: EntryProtocol::Anthropic,
             endpoint: EntryEndpoint::Messages,
@@ -448,8 +452,63 @@ mod tests {
         .expect("mapping should succeed");
 
         assert_eq!(out["model"], "gpt-4.1");
-        assert_eq!(out["stream"], true);
+        assert_eq!(out["stream"], false);
         assert_eq!(out["input"][0]["type"], "message");
+    }
+
+    #[test]
+    fn build_upstream_body_drops_max_output_tokens_for_messages_to_responses() {
+        let entry = PathEntry {
+            protocol: EntryProtocol::Anthropic,
+            endpoint: EntryEndpoint::Messages,
+        };
+        let out = build_upstream_body(
+            &entry,
+            &RuleProtocol::Openai,
+            &json!({
+                "model": "claude-3-5-sonnet",
+                "max_tokens": 1234,
+                "messages": [{ "role": "user", "content": [{ "type": "text", "text": "hello" }] }]
+            }),
+            true,
+            "gpt-4.1",
+        )
+        .expect("mapping should succeed");
+
+        assert_eq!(out["model"], "gpt-4.1");
+        assert!(out.get("max_output_tokens").is_none());
+    }
+
+    #[test]
+    fn build_upstream_body_sets_auto_tool_choice_for_messages_to_responses_when_tools_exist() {
+        let entry = PathEntry {
+            protocol: EntryProtocol::Anthropic,
+            endpoint: EntryEndpoint::Messages,
+        };
+        let out = build_upstream_body(
+            &entry,
+            &RuleProtocol::Openai,
+            &json!({
+                "model": "claude-3-5-sonnet",
+                "messages": [{ "role": "user", "content": [{ "type": "text", "text": "hello" }] }],
+                "tools": [{
+                    "name": "Read",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "file_path": { "type": "string" }
+                        },
+                        "required": ["file_path"]
+                    }
+                }]
+            }),
+            true,
+            "gpt-4.1",
+        )
+        .expect("mapping should succeed");
+
+        assert_eq!(out["tool_choice"], "auto");
+        assert_eq!(out["parallel_tool_calls"], true);
     }
 
     #[test]
@@ -472,6 +531,28 @@ mod tests {
 
         assert_eq!(out["model"], "gpt-4.1");
         assert_eq!(out["stream"], true);
+    }
+
+    #[test]
+    fn resolve_request_timeout_ms_extends_messages_to_responses_non_stream_requests() {
+        let entry = PathEntry {
+            protocol: EntryProtocol::Anthropic,
+            endpoint: EntryEndpoint::Messages,
+        };
+
+        let timeout = resolve_request_timeout_ms(false, &entry, &RuleProtocol::Openai);
+        assert_eq!(timeout, MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS);
+    }
+
+    #[test]
+    fn resolve_request_timeout_ms_keeps_default_for_other_non_stream_requests() {
+        let entry = PathEntry {
+            protocol: EntryProtocol::Anthropic,
+            endpoint: EntryEndpoint::Messages,
+        };
+
+        let timeout = resolve_request_timeout_ms(false, &entry, &RuleProtocol::OpenaiCompletion);
+        assert_eq!(timeout, NON_STREAM_REQUEST_TIMEOUT_MS);
     }
 
     #[test]
