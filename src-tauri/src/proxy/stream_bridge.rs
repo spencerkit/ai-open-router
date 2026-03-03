@@ -2,6 +2,9 @@
 //! Streaming bridge for protocol-specific SSE event conversion.
 //! Currently supports OpenAI chat-completions SSE -> Anthropic messages SSE.
 
+use crate::mappers::helpers::{
+    extract_openai_usage_summary, map_openai_finish_reason_to_anthropic_stop,
+};
 use crate::mappers::MapperSurface;
 use axum::body::Bytes;
 use serde_json::{json, Value};
@@ -136,7 +139,7 @@ impl OpenaiChatToAnthropicBridge {
             self.upstream_model = Some(model.to_string());
         }
         if let Some(usage) = parsed.get("usage") {
-            if let Some(norm) = normalize_openai_usage(usage) {
+            if let Some(norm) = normalize_openai_usage_to_anthropic(usage) {
                 self.final_usage = Some(norm);
             }
         }
@@ -169,7 +172,9 @@ impl OpenaiChatToAnthropicBridge {
 
                 if let Some(finish_reason) = choice.get("finish_reason").and_then(|v| v.as_str()) {
                     if !finish_reason.is_empty() {
-                        self.final_stop_reason = Some(map_finish_reason(finish_reason).to_string());
+                        self.final_stop_reason = Some(
+                            map_openai_finish_reason_to_anthropic_stop(finish_reason).to_string(),
+                        );
                         self.close_active_block(&mut out);
                     }
                 }
@@ -441,56 +446,13 @@ impl OpenaiChatToAnthropicBridge {
     }
 }
 
-fn map_finish_reason(reason: &str) -> &str {
-    match reason {
-        "tool_calls" => "tool_use",
-        "length" => "max_tokens",
-        "stop" => "end_turn",
-        other => other,
-    }
-}
-
-fn normalize_openai_usage(usage: &Value) -> Option<Value> {
-    if !usage.is_object() {
-        return None;
-    }
-
-    let input_tokens = usage
-        .get("input_tokens")
-        .and_then(|v| v.as_u64())
-        .or_else(|| usage.get("prompt_tokens").and_then(|v| v.as_u64()))
-        .unwrap_or(0);
-    let output_tokens = usage
-        .get("output_tokens")
-        .and_then(|v| v.as_u64())
-        .or_else(|| usage.get("completion_tokens").and_then(|v| v.as_u64()))
-        .unwrap_or(0);
-    let cache_read_tokens = usage
-        .get("cache_read_input_tokens")
-        .and_then(|v| v.as_u64())
-        .or_else(|| {
-            usage
-                .get("prompt_tokens_details")
-                .and_then(|v| v.get("cached_tokens"))
-                .and_then(|v| v.as_u64())
-        })
-        .unwrap_or(0);
-    let cache_write_tokens = usage
-        .get("cache_creation_input_tokens")
-        .and_then(|v| v.as_u64())
-        .or_else(|| {
-            usage
-                .get("prompt_tokens_details")
-                .and_then(|v| v.get("cache_creation_tokens"))
-                .and_then(|v| v.as_u64())
-        })
-        .unwrap_or(0);
-
+fn normalize_openai_usage_to_anthropic(usage: &Value) -> Option<Value> {
+    let summary = extract_openai_usage_summary(usage)?;
     Some(json!({
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cache_read_input_tokens": cache_read_tokens,
-        "cache_creation_input_tokens": cache_write_tokens,
+        "input_tokens": summary.input_tokens,
+        "output_tokens": summary.output_tokens,
+        "cache_read_input_tokens": summary.cache_read_tokens,
+        "cache_creation_input_tokens": summary.cache_write_tokens,
     }))
 }
 

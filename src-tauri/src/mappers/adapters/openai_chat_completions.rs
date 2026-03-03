@@ -7,7 +7,10 @@ use super::super::canonical::{
     CanonicalRole, CanonicalTool, CanonicalToolCall, CanonicalToolChoice, CanonicalUsage,
     MapOptions,
 };
-use super::super::helpers::{as_array, str_or_empty, to_tool_result_content};
+use super::super::helpers::{
+    as_array, extract_openai_usage_summary, parse_openai_finish_reason, str_or_empty,
+    to_tool_result_content, OpenAIFinishReason,
+};
 use serde_json::{json, Value};
 
 fn non_null(body: &Value, key: &str) -> Option<Value> {
@@ -414,31 +417,23 @@ pub fn decode_response(openai_response: &Value, request_model: &str) -> Canonica
         }
     }
 
-    let finish_reason = match choice
-        .get("finish_reason")
-        .and_then(|v| v.as_str())
-        .unwrap_or("stop")
-    {
-        "tool_calls" => CanonicalFinishReason::ToolUse,
-        "length" => CanonicalFinishReason::MaxTokens,
-        "stop" => CanonicalFinishReason::Stop,
-        other => CanonicalFinishReason::Other(other.to_string()),
+    let finish_reason = match parse_openai_finish_reason(
+        choice
+            .get("finish_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("stop"),
+    ) {
+        OpenAIFinishReason::ToolCalls => CanonicalFinishReason::ToolUse,
+        OpenAIFinishReason::Length => CanonicalFinishReason::MaxTokens,
+        OpenAIFinishReason::Stop => CanonicalFinishReason::Stop,
+        OpenAIFinishReason::Other(other) => CanonicalFinishReason::Other(other.to_string()),
     };
 
     let usage = openai_response
         .get("usage")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let input_tokens = usage
-        .get("input_tokens")
-        .and_then(|v| v.as_u64())
-        .or_else(|| usage.get("prompt_tokens").and_then(|v| v.as_u64()))
-        .unwrap_or(0);
-    let output_tokens = usage
-        .get("output_tokens")
-        .and_then(|v| v.as_u64())
-        .or_else(|| usage.get("completion_tokens").and_then(|v| v.as_u64()))
-        .unwrap_or(0);
+    let usage_summary = extract_openai_usage_summary(&usage).unwrap_or_default();
 
     CanonicalResponse {
         id: openai_response
@@ -467,9 +462,9 @@ pub fn decode_response(openai_response: &Value, request_model: &str) -> Canonica
         tool_calls,
         finish_reason,
         usage: CanonicalUsage {
-            input_tokens,
-            output_tokens,
-            total_tokens: usage.get("total_tokens").and_then(|v| v.as_u64()),
+            input_tokens: usage_summary.input_tokens,
+            output_tokens: usage_summary.output_tokens,
+            total_tokens: usage_summary.total_tokens,
         },
     }
 }

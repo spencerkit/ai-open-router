@@ -5,7 +5,7 @@
 mod adapters;
 mod canonical;
 mod engine;
-mod helpers;
+pub(crate) mod helpers;
 mod normalize;
 mod policy;
 mod request;
