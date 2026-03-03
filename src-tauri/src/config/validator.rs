@@ -27,6 +27,9 @@ pub fn validate_config(config: &ProxyConfig) -> Result<(), String> {
     if config.ui.locale_mode != "auto" && config.ui.locale_mode != "manual" {
         return Err("ui.localeMode must be auto|manual".into());
     }
+    if config.ui.quota_auto_refresh_minutes < 1 || config.ui.quota_auto_refresh_minutes > 1440 {
+        return Err("ui.quotaAutoRefreshMinutes must be between 1 and 1440".into());
+    }
     if config.remote_git.branch.trim().is_empty() {
         return Err("remoteGit.branch must be non-empty".into());
     }
@@ -130,5 +133,14 @@ mod tests {
 
         let err = validate_config(&cfg).expect_err("validation should fail");
         assert!(err.contains("configVersion"));
+    }
+
+    #[test]
+    fn quota_auto_refresh_minutes_must_be_valid() {
+        let mut cfg = default_config();
+        cfg.ui.quota_auto_refresh_minutes = 0;
+
+        let err = validate_config(&cfg).expect_err("validation should fail");
+        assert!(err.contains("ui.quotaAutoRefreshMinutes"));
     }
 }

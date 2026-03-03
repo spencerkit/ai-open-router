@@ -37,6 +37,8 @@ pub struct UiConfig {
     pub locale_mode: String,
     pub launch_on_startup: bool,
     pub close_to_tray: bool,
+    #[serde(default = "crate::config::schema::default_quota_auto_refresh_minutes")]
+    pub quota_auto_refresh_minutes: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
