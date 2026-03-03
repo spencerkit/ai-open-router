@@ -27,6 +27,7 @@ export type {
   ProxyMetrics,
   ProxyStatus,
   QuotaStatus,
+  QuotaUnitType,
   Rule,
   RuleDirection,
   RuleProtocol,

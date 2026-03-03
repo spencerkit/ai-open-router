@@ -67,6 +67,14 @@ pub struct RuleQuotaResponseMapping {
     pub reset_at: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QuotaUnitType {
+    Percentage,
+    Amount,
+    Tokens,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuleQuotaConfig {
@@ -85,6 +93,8 @@ pub struct RuleQuotaConfig {
     pub auth_scheme: String,
     #[serde(default)]
     pub custom_headers: HashMap<String, String>,
+    #[serde(default = "default_quota_unit_type")]
+    pub unit_type: QuotaUnitType,
     #[serde(default = "default_quota_low_threshold_percent")]
     pub low_threshold_percent: f64,
     #[serde(default)]
@@ -107,6 +117,10 @@ pub fn default_quota_auth_scheme() -> String {
     "Bearer".to_string()
 }
 
+pub fn default_quota_unit_type() -> QuotaUnitType {
+    QuotaUnitType::Percentage
+}
+
 pub fn default_quota_low_threshold_percent() -> f64 {
     10.0
 }
@@ -122,6 +136,7 @@ pub fn default_rule_quota_config() -> RuleQuotaConfig {
         auth_header: default_quota_auth_header(),
         auth_scheme: default_quota_auth_scheme(),
         custom_headers: HashMap::new(),
+        unit_type: default_quota_unit_type(),
         low_threshold_percent: default_quota_low_threshold_percent(),
         response: RuleQuotaResponseMapping::default(),
     }

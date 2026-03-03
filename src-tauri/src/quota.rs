@@ -1,4 +1,6 @@
-use crate::models::{Group, ProxyConfig, QuotaStatus, Rule, RuleQuotaSnapshot, RuleQuotaTestResult};
+use crate::models::{
+    Group, ProxyConfig, QuotaStatus, QuotaUnitType, Rule, RuleQuotaSnapshot, RuleQuotaTestResult,
+};
 use chrono::Utc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, Method};
@@ -504,32 +506,37 @@ fn map_payload_to_snapshot(
     snapshot.unit = unit;
     snapshot.reset_at = reset_at;
 
-    let mut percent = match (remaining, total) {
+    let mut computed_percent = match (remaining, total) {
         (Some(rem), Some(all)) if all > 0.0 => Some((rem / all) * 100.0),
         _ => None,
     };
-    if percent.is_none() {
+    if computed_percent.is_none() {
         if let Some(rem) = remaining {
             if (0.0..=1.0).contains(&rem) {
-                percent = Some(rem * 100.0);
+                computed_percent = Some(rem * 100.0);
             }
         }
     }
-    snapshot.percent = percent;
+
+    let normalized_remaining = match rule.quota.unit_type {
+        QuotaUnitType::Percentage => computed_percent.or(remaining),
+        QuotaUnitType::Amount | QuotaUnitType::Tokens => remaining,
+    };
+    snapshot.percent = computed_percent;
 
     let low_threshold = if rule.quota.low_threshold_percent.is_finite()
-        && rule.quota.low_threshold_percent > 0.0
+        && rule.quota.low_threshold_percent >= 0.0
     {
         rule.quota.low_threshold_percent
     } else {
         10.0
     };
 
-    snapshot.status = match remaining {
+    snapshot.status = match normalized_remaining {
         None => QuotaStatus::Unknown,
         Some(rem) if rem <= 0.0 => QuotaStatus::Empty,
-        Some(_) => {
-            if percent.unwrap_or(100.0) <= low_threshold {
+        Some(rem) => {
+            if rem < low_threshold {
                 QuotaStatus::Low
             } else {
                 QuotaStatus::Ok
@@ -618,9 +625,15 @@ fn value_to_f64(value: &Value) -> Option<f64> {
     if let Some(v) = value.as_f64() {
         return Some(v);
     }
-    value
-        .as_str()
-        .and_then(|text| text.trim().parse::<f64>().ok())
+    value.as_str().and_then(|text| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let stripped_percent = trimmed.trim_end_matches('%').trim();
+        let normalized = stripped_percent.replace(',', "");
+        normalized.parse::<f64>().ok()
+    })
 }
 
 fn value_to_string(value: &Value) -> Option<String> {
@@ -924,6 +937,7 @@ mod tests {
     use super::{evaluate_expression, extract_json_path, map_payload_to_snapshot};
     use crate::models::{
         default_rule_quota_config, default_quota_low_threshold_percent, QuotaStatus,
+        QuotaUnitType,
         RuleQuotaResponseMapping,
     };
     use crate::models::{Rule, RuleProtocol};
@@ -1059,6 +1073,68 @@ mod tests {
 
         assert_eq!(snapshot.remaining, Some(0.05));
         assert_eq!(snapshot.percent, Some(5.0));
+        assert_eq!(snapshot.status, QuotaStatus::Low);
+    }
+
+    #[test]
+    fn map_payload_to_snapshot_uses_remaining_value_for_amount_threshold() {
+        let mut rule = build_rule_with_mapping(RuleQuotaResponseMapping {
+            remaining: json!("$.quota.remaining"),
+            unit: Value::Null,
+            total: json!("$.quota.total"),
+            reset_at: Value::Null,
+        });
+        rule.quota.unit_type = QuotaUnitType::Amount;
+        rule.quota.low_threshold_percent = 10.0;
+
+        let payload = json!({
+            "quota": {
+                "remaining": 20,
+                "total": 100
+            }
+        });
+        let mut snapshot = super::new_snapshot(
+            &crate::models::Group {
+                id: "g1".to_string(),
+                name: "G1".to_string(),
+                models: vec![],
+                active_rule_id: None,
+                rules: vec![],
+            },
+            &rule,
+        );
+        map_payload_to_snapshot(&mut snapshot, &rule, &payload).expect("mapping should succeed");
+        assert_eq!(snapshot.status, QuotaStatus::Ok);
+    }
+
+    #[test]
+    fn map_payload_to_snapshot_parses_percentage_string_remaining() {
+        let mut rule = build_rule_with_mapping(RuleQuotaResponseMapping {
+            remaining: json!("$.quota.remaining"),
+            unit: Value::Null,
+            total: Value::Null,
+            reset_at: Value::Null,
+        });
+        rule.quota.unit_type = QuotaUnitType::Percentage;
+        rule.quota.low_threshold_percent = 10.0;
+        let payload = json!({
+            "quota": {
+                "remaining": "7.5%"
+            }
+        });
+        let mut snapshot = super::new_snapshot(
+            &crate::models::Group {
+                id: "g1".to_string(),
+                name: "G1".to_string(),
+                models: vec![],
+                active_rule_id: None,
+                rules: vec![],
+            },
+            &rule,
+        );
+        map_payload_to_snapshot(&mut snapshot, &rule, &payload).expect("mapping should succeed");
+
+        assert_eq!(snapshot.remaining, Some(7.5));
         assert_eq!(snapshot.status, QuotaStatus::Low);
     }
 }

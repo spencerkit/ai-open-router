@@ -34,16 +34,21 @@ const parseQuotaHeaders = (raw: string): Record<string, string> => {
   return next
 }
 
-const buildRemainingMapping = (path: string, expr: string) => {
+const buildRemainingMapping = (expr: string) => {
   const nextExpr = expr.trim()
   if (nextExpr) {
     return { expr: nextExpr }
   }
-  const nextPath = path.trim()
-  if (nextPath) {
-    return nextPath
-  }
   return null
+}
+
+const normalizeNumericInput = (raw: string) => {
+  const normalized = raw.replace(/[^0-9.]/g, "")
+  const firstDot = normalized.indexOf(".")
+  if (firstDot === -1) {
+    return normalized
+  }
+  return `${normalized.slice(0, firstDot + 1)}${normalized.slice(firstDot + 1).replace(/\./g, "")}`
 }
 
 const buildQuotaConfig = ({
@@ -56,11 +61,10 @@ const buildQuotaConfig = ({
   authHeader,
   authScheme,
   customHeaders,
+  unitType,
   lowThresholdPercent,
-  remainingPath,
   remainingExpr,
   unitPath,
-  totalPath,
   resetAtPath,
 }: {
   enabled: boolean
@@ -72,11 +76,10 @@ const buildQuotaConfig = ({
   authHeader: string
   authScheme: string
   customHeaders: Record<string, string>
+  unitType: Rule["quota"]["unitType"]
   lowThresholdPercent: number
-  remainingPath: string
   remainingExpr: string
   unitPath: string
-  totalPath: string
   resetAtPath: string
 }): Rule["quota"] => ({
   enabled,
@@ -88,12 +91,13 @@ const buildQuotaConfig = ({
   authHeader: authHeader.trim(),
   authScheme: authScheme.trim(),
   customHeaders,
+  unitType,
   lowThresholdPercent:
-    Number.isFinite(lowThresholdPercent) && lowThresholdPercent > 0 ? lowThresholdPercent : 10,
+    Number.isFinite(lowThresholdPercent) && lowThresholdPercent >= 0 ? lowThresholdPercent : 10,
   response: {
-    remaining: buildRemainingMapping(remainingPath, remainingExpr),
+    remaining: buildRemainingMapping(remainingExpr),
     unit: unitPath.trim() || null,
-    total: totalPath.trim() || null,
+    total: null,
     resetAt: resetAtPath.trim() || null,
   },
 })
@@ -103,16 +107,51 @@ const formatQuotaValue = (value?: number | null): string => {
     return "-"
   }
   const abs = Math.abs(value)
-  if (abs >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(2).replace(/\\.00$/, "")}M`
-  }
-  if (abs >= 1_000) {
-    return `${(value / 1_000).toFixed(1).replace(/\\.0$/, "")}k`
-  }
   if (abs >= 1) {
     return value.toFixed(2).replace(/\\.00$/, "")
   }
   return value.toFixed(4).replace(/0+$/, "").replace(/\\.$/, "")
+}
+
+const formatTokenQuotaValue = (value?: number | null): string => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "-"
+  }
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(2).replace(/\\.00$/, "")}M`
+  }
+  return Number.isInteger(value)
+    ? String(value)
+    : value
+        .toFixed(2)
+        .replace(/\\.00$/, "")
+        .replace(/\\.$/, "")
+}
+
+const formatQuotaPreviewByUnitType = (
+  unitType: Rule["quota"]["unitType"],
+  snapshot?: RuleQuotaSnapshot | null
+): string => {
+  if (!snapshot) return "-"
+  if (unitType === "percentage") {
+    const basis =
+      snapshot.percent !== null && snapshot.percent !== undefined
+        ? snapshot.percent
+        : snapshot.remaining !== null && snapshot.remaining !== undefined
+          ? snapshot.remaining
+          : null
+    if (basis === null || Number.isNaN(basis)) return "-"
+    const value = formatQuotaValue(basis)
+    return value.endsWith("%") ? value : `${value}%`
+  }
+  if (unitType === "amount") {
+    return formatQuotaValue(snapshot.remaining)
+  }
+  if (snapshot.unit?.trim()) {
+    return `${formatQuotaValue(snapshot.remaining)} ${snapshot.unit.trim()}`
+  }
+  return formatTokenQuotaValue(snapshot.remaining)
 }
 
 /**
@@ -143,10 +182,9 @@ export const RuleCreatePage: React.FC = () => {
   const [quotaAuthHeader, setQuotaAuthHeader] = useState("Authorization")
   const [quotaAuthScheme, setQuotaAuthScheme] = useState("Bearer")
   const [quotaHeadersText, setQuotaHeadersText] = useState("{}")
-  const [quotaRemainingPath, setQuotaRemainingPath] = useState("")
+  const [quotaUnitType, setQuotaUnitType] = useState<Rule["quota"]["unitType"]>("percentage")
   const [quotaRemainingExpr, setQuotaRemainingExpr] = useState("")
-  const [quotaUnitPath, setQuotaUnitPath] = useState("")
-  const [quotaTotalPath, setQuotaTotalPath] = useState("")
+  const quotaUnitPath = ""
   const [quotaResetAtPath, setQuotaResetAtPath] = useState("")
   const [quotaLowThresholdPercent, setQuotaLowThresholdPercent] = useState("10")
   const [quotaTestLoading, setQuotaTestLoading] = useState(false)
@@ -178,10 +216,9 @@ export const RuleCreatePage: React.FC = () => {
     quotaAuthHeader,
     quotaAuthScheme,
     quotaHeadersText,
-    quotaRemainingPath,
+    quotaUnitType,
     quotaRemainingExpr,
     quotaUnitPath,
-    quotaTotalPath,
     quotaResetAtPath,
     quotaLowThresholdPercent,
   })
@@ -237,7 +274,7 @@ export const RuleCreatePage: React.FC = () => {
       if (!quotaEndpoint.trim()) {
         nextErrors.quotaEndpoint = t("validation.required", { field: t("ruleForm.quotaEndpoint") })
       }
-      if (!quotaRemainingPath.trim() && !quotaRemainingExpr.trim()) {
+      if (!quotaRemainingExpr.trim()) {
         nextErrors.quotaRemaining = t("validation.required", {
           field: t("ruleForm.quotaRemainingMapping"),
         })
@@ -249,7 +286,7 @@ export const RuleCreatePage: React.FC = () => {
       }
 
       const threshold = Number(quotaLowThresholdPercent)
-      if (!Number.isFinite(threshold) || threshold <= 0) {
+      if (!Number.isFinite(threshold) || threshold < 0) {
         nextErrors.quotaThreshold = t("ruleForm.quotaThresholdError")
       }
     }
@@ -277,7 +314,7 @@ export const RuleCreatePage: React.FC = () => {
       return false
     }
     if (nextErrors.quotaRemaining) {
-      focusField("quota-remaining-path")
+      focusField("quota-remaining-expr")
       return false
     }
     if (nextErrors.quotaHeaders) {
@@ -306,7 +343,7 @@ export const RuleCreatePage: React.FC = () => {
       })
       return
     }
-    if (!quotaRemainingPath.trim() && !quotaRemainingExpr.trim()) {
+    if (!quotaRemainingExpr.trim()) {
       setQuotaTestResult({
         ok: false,
         message: t("validation.required", { field: t("ruleForm.quotaRemainingMapping") }),
@@ -326,7 +363,7 @@ export const RuleCreatePage: React.FC = () => {
     }
 
     const threshold = Number(quotaLowThresholdPercent)
-    if (!Number.isFinite(threshold) || threshold <= 0) {
+    if (!Number.isFinite(threshold) || threshold < 0) {
       setQuotaTestResult({
         ok: false,
         message: t("ruleForm.quotaThresholdError"),
@@ -344,11 +381,10 @@ export const RuleCreatePage: React.FC = () => {
       authHeader: quotaAuthHeader,
       authScheme: quotaAuthScheme,
       customHeaders: quotaHeaders,
+      unitType: quotaUnitType,
       lowThresholdPercent: threshold,
-      remainingPath: quotaRemainingPath,
       remainingExpr: quotaRemainingExpr,
       unitPath: quotaUnitPath,
-      totalPath: quotaTotalPath,
       resetAtPath: quotaResetAtPath,
     })
 
@@ -392,11 +428,10 @@ export const RuleCreatePage: React.FC = () => {
       authHeader: quotaAuthHeader,
       authScheme: quotaAuthScheme,
       customHeaders: quotaHeaders,
+      unitType: quotaUnitType,
       lowThresholdPercent: threshold,
-      remainingPath: quotaRemainingPath,
       remainingExpr: quotaRemainingExpr,
       unitPath: quotaUnitPath,
-      totalPath: quotaTotalPath,
       resetAtPath: quotaResetAtPath,
     })
 
@@ -447,8 +482,7 @@ export const RuleCreatePage: React.FC = () => {
     token.trim() &&
     apiAddress.trim() &&
     defaultModel.trim() &&
-    (!quotaEnabled ||
-      (quotaEndpoint.trim() && (quotaRemainingPath.trim() || quotaRemainingExpr.trim())))
+    (!quotaEnabled || (quotaEndpoint.trim() && quotaRemainingExpr.trim()))
 
   return (
     <div className={styles.ruleCreatePage}>
@@ -756,21 +790,6 @@ export const RuleCreatePage: React.FC = () => {
                   </div>
 
                   <div className={styles.formGroup}>
-                    <label htmlFor="quota-remaining-path">{t("ruleForm.quotaRemainingPath")}</label>
-                    <Input
-                      id="quota-remaining-path"
-                      value={quotaRemainingPath}
-                      onChange={e => {
-                        setQuotaRemainingPath(e.target.value)
-                        if (errors.quotaRemaining) {
-                          setErrors(prev => ({ ...prev, quotaRemaining: undefined }))
-                        }
-                      }}
-                      placeholder="$.data.remaining_balance"
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
                     <label htmlFor="quota-remaining-expr">{t("ruleForm.quotaRemainingExpr")}</label>
                     <Input
                       id="quota-remaining-expr"
@@ -791,26 +810,20 @@ export const RuleCreatePage: React.FC = () => {
 
                   <div className={styles.dualColumnRow}>
                     <div className={styles.formGroup}>
-                      <label htmlFor="quota-unit-path">{t("ruleForm.quotaUnitPath")}</label>
-                      <Input
-                        id="quota-unit-path"
-                        value={quotaUnitPath}
-                        onChange={e => setQuotaUnitPath(e.target.value)}
-                        placeholder="$.data.currency"
-                      />
+                      <label htmlFor="quota-unit-type">{t("ruleForm.quotaUnitType")}</label>
+                      <select
+                        id="quota-unit-type"
+                        className={styles.nativeSelect}
+                        value={quotaUnitType}
+                        onChange={e =>
+                          setQuotaUnitType(e.target.value as Rule["quota"]["unitType"])
+                        }
+                      >
+                        <option value="percentage">{t("ruleForm.quotaUnitTypePercentage")}</option>
+                        <option value="amount">{t("ruleForm.quotaUnitTypeAmount")}</option>
+                        <option value="tokens">{t("ruleForm.quotaUnitTypeTokens")}</option>
+                      </select>
                     </div>
-                    <div className={styles.formGroup}>
-                      <label htmlFor="quota-total-path">{t("ruleForm.quotaTotalPath")}</label>
-                      <Input
-                        id="quota-total-path"
-                        value={quotaTotalPath}
-                        onChange={e => setQuotaTotalPath(e.target.value)}
-                        placeholder="$.data.total_balance"
-                      />
-                    </div>
-                  </div>
-
-                  <div className={styles.dualColumnRow}>
                     <div className={styles.formGroup}>
                       <label htmlFor="quota-reset-at-path">{t("ruleForm.quotaResetAtPath")}</label>
                       <Input
@@ -820,24 +833,29 @@ export const RuleCreatePage: React.FC = () => {
                         placeholder="$.data.reset_at"
                       />
                     </div>
-                    <div className={styles.formGroup}>
-                      <label htmlFor="quota-threshold">{t("ruleForm.quotaLowThreshold")}</label>
-                      <Input
-                        id="quota-threshold"
-                        value={quotaLowThresholdPercent}
-                        onChange={e => {
-                          setQuotaLowThresholdPercent(e.target.value)
-                          if (errors.quotaThreshold) {
-                            setErrors(prev => ({ ...prev, quotaThreshold: undefined }))
-                          }
-                        }}
-                        placeholder="10"
-                        error={errors.quotaThreshold}
-                        hint={
-                          !errors.quotaThreshold ? t("ruleForm.quotaLowThresholdHint") : undefined
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label htmlFor="quota-threshold">{t("ruleForm.quotaLowThreshold")}</label>
+                    <Input
+                      id="quota-threshold"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      value={quotaLowThresholdPercent}
+                      onChange={e => {
+                        setQuotaLowThresholdPercent(normalizeNumericInput(e.target.value))
+                        if (errors.quotaThreshold) {
+                          setErrors(prev => ({ ...prev, quotaThreshold: undefined }))
                         }
-                      />
-                    </div>
+                      }}
+                      placeholder="10"
+                      error={errors.quotaThreshold}
+                      hint={
+                        !errors.quotaThreshold ? t("ruleForm.quotaLowThresholdHint") : undefined
+                      }
+                    />
                   </div>
 
                   <div className={styles.quotaTestActions}>
@@ -886,15 +904,16 @@ export const RuleCreatePage: React.FC = () => {
                             <strong>{resolveQuotaTestStatusText(quotaTestResult.snapshot)}</strong>
                           </div>
                           <div>
-                            <span>{t("ruleForm.quotaRemainingPath")}</span>
-                            <strong>{formatQuotaValue(quotaTestResult.snapshot.remaining)}</strong>
+                            <span>{t("ruleForm.quotaTestRemaining")}</span>
+                            <strong>
+                              {formatQuotaPreviewByUnitType(
+                                quotaUnitType,
+                                quotaTestResult.snapshot
+                              )}
+                            </strong>
                           </div>
                           <div>
-                            <span>{t("ruleForm.quotaTotalPath")}</span>
-                            <strong>{formatQuotaValue(quotaTestResult.snapshot.total)}</strong>
-                          </div>
-                          <div>
-                            <span>{t("ruleForm.quotaUnitPath")}</span>
+                            <span>{t("ruleForm.quotaTestResponseUnit")}</span>
                             <strong>{quotaTestResult.snapshot.unit || "-"}</strong>
                           </div>
                           <div>

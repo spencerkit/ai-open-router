@@ -11,6 +11,7 @@ export type RuleDirection = "oc" | "co"
 export type RuleProtocol = "openai" | "openai_completion" | "anthropic"
 
 export type QuotaStatus = "ok" | "low" | "empty" | "unknown" | "unsupported" | "error"
+export type QuotaUnitType = "percentage" | "amount" | "tokens"
 
 export interface QuotaMappingObject {
   path?: string
@@ -37,6 +38,7 @@ export interface RuleQuotaConfig {
   authHeader: string
   authScheme: string
   customHeaders: Record<string, string>
+  unitType: QuotaUnitType
   lowThresholdPercent: number
   response: RuleQuotaResponseMapping
 }
