@@ -46,6 +46,32 @@ fn anthropic_request_maps_to_openai_request() {
 }
 
 #[test]
+fn anthropic_request_without_stream_defaults_to_stream_true() {
+    let input = json!({
+        "model": "claude-x",
+        "messages": [{ "role": "user", "content": [{ "type": "text", "text": "hello" }] }]
+    });
+
+    let out = map_anthropic_to_openai_request(&input, true, "gpt-target")
+        .expect("mapping should succeed");
+    assert_eq!(out["stream"], true);
+}
+
+#[test]
+fn anthropic_stream_request_enables_openai_include_usage_option() {
+    let input = json!({
+        "model": "claude-x",
+        "stream": true,
+        "messages": [{ "role": "user", "content": [{ "type": "text", "text": "hello" }] }]
+    });
+
+    let out = map_anthropic_to_openai_request(&input, true, "gpt-target")
+        .expect("mapping should succeed");
+    assert_eq!(out["stream"], true);
+    assert_eq!(out["stream_options"]["include_usage"], true);
+}
+
+#[test]
 fn anthropic_request_maps_to_openai_responses_request() {
     let input = json!({
         "model": "claude-x",

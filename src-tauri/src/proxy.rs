@@ -17,6 +17,7 @@ mod net;
 mod observability;
 mod pipeline;
 mod routing;
+mod stream_bridge;
 
 const MAX_REQUEST_BODY_BYTES: usize = 10 * 1024 * 1024;
 const MAX_STREAM_LOG_BODY_BYTES: usize = 256 * 1024;
@@ -428,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn build_upstream_body_forces_non_stream_on_cross_protocol_mapping() {
+    fn build_upstream_body_keeps_stream_on_cross_protocol_mapping() {
         let entry = PathEntry {
             protocol: EntryProtocol::Anthropic,
             endpoint: EntryEndpoint::Messages,
@@ -447,8 +448,30 @@ mod tests {
         .expect("mapping should succeed");
 
         assert_eq!(out["model"], "gpt-4.1");
-        assert_eq!(out["stream"], false);
+        assert_eq!(out["stream"], true);
         assert_eq!(out["input"][0]["type"], "message");
+    }
+
+    #[test]
+    fn build_upstream_body_defaults_stream_true_when_anthropic_stream_missing() {
+        let entry = PathEntry {
+            protocol: EntryProtocol::Anthropic,
+            endpoint: EntryEndpoint::Messages,
+        };
+        let out = build_upstream_body(
+            &entry,
+            &RuleProtocol::OpenaiCompletion,
+            &json!({
+                "model": "claude-3-5-sonnet",
+                "messages": [{ "role": "user", "content": [{ "type": "text", "text": "hello" }] }]
+            }),
+            true,
+            "gpt-4.1",
+        )
+        .expect("mapping should succeed");
+
+        assert_eq!(out["model"], "gpt-4.1");
+        assert_eq!(out["stream"], true);
     }
 
     #[test]

@@ -141,7 +141,7 @@ pub fn decode_request(body: &Value, options: &MapOptions) -> Result<CanonicalReq
         stream: body
             .get("stream")
             .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .unwrap_or(true),
         system: non_null(body, "system"),
         tools,
         tool_choice,

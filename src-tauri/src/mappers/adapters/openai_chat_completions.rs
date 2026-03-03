@@ -342,6 +342,10 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
         "stream": request.stream,
     });
 
+    if request.stream {
+        req["stream_options"] = json!({ "include_usage": true });
+    }
+
     if let Some(tools) = &request.tools {
         req["tools"] = json!(tools
             .iter()

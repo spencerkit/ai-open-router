@@ -15,6 +15,7 @@ use super::{
     ServiceState, MAX_REQUEST_BODY_BYTES, MAX_STREAM_LOG_BODY_BYTES, NON_STREAM_REQUEST_TIMEOUT_MS,
     STREAM_REQUEST_TIMEOUT_MS,
 };
+use super::stream_bridge::create_stream_bridge;
 use crate::mappers::{map_request_by_surface, map_response_by_surface, MapperSurface};
 use crate::models::RuleProtocol;
 use axum::body::{to_bytes, Body, Bytes};
@@ -460,6 +461,10 @@ pub(super) async fn handle_proxy_request(
         .to_lowercase();
 
     if stream && upstream_ct.contains("text/event-stream") {
+        let source_surface = surface_from_rule_protocol(&target_protocol);
+        let target_surface = surface_from_entry(&entry);
+        let mut stream_bridge =
+            create_stream_bridge(source_surface, target_surface, &requested_model);
         let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(32);
         let stream_state = state.clone();
         let stream_trace_id = trace_id.clone();
@@ -488,6 +493,7 @@ pub(super) async fn handle_proxy_request(
             let mut bytes_stream = upstream_resp.bytes_stream();
             let mut usage_acc = StreamTokenAccumulator::default();
             let mut stream_failed = false;
+            let mut downstream_closed = false;
             let mut stream_body = Vec::<u8>::new();
             let mut stream_body_truncated = false;
 
@@ -495,19 +501,31 @@ pub(super) async fn handle_proxy_request(
                 match bytes_stream.try_next().await {
                     Ok(Some(bytes)) => {
                         usage_acc.consume_chunk(bytes.as_ref());
-                        if stream_capture_body && !stream_body_truncated {
-                            let remaining =
-                                MAX_STREAM_LOG_BODY_BYTES.saturating_sub(stream_body.len());
-                            if remaining == 0 {
-                                stream_body_truncated = true;
-                            } else if bytes.len() <= remaining {
-                                stream_body.extend_from_slice(bytes.as_ref());
-                            } else {
-                                stream_body.extend_from_slice(&bytes.as_ref()[..remaining]);
-                                stream_body_truncated = true;
+                        let outgoing_chunks = if let Some(bridge) = stream_bridge.as_mut() {
+                            bridge.consume_chunk(bytes.as_ref())
+                        } else {
+                            vec![bytes]
+                        };
+
+                        for outgoing in outgoing_chunks {
+                            if stream_capture_body && !stream_body_truncated {
+                                let remaining =
+                                    MAX_STREAM_LOG_BODY_BYTES.saturating_sub(stream_body.len());
+                                if remaining == 0 {
+                                    stream_body_truncated = true;
+                                } else if outgoing.len() <= remaining {
+                                    stream_body.extend_from_slice(outgoing.as_ref());
+                                } else {
+                                    stream_body.extend_from_slice(&outgoing.as_ref()[..remaining]);
+                                    stream_body_truncated = true;
+                                }
+                            }
+                            if tx.send(Ok(outgoing)).await.is_err() {
+                                downstream_closed = true;
+                                break;
                             }
                         }
-                        if tx.send(Ok(bytes)).await.is_err() {
+                        if downstream_closed {
                             break;
                         }
                     }
@@ -521,6 +539,29 @@ pub(super) async fn handle_proxy_request(
                             )))
                             .await;
                         break;
+                    }
+                }
+            }
+
+            if !stream_failed && !downstream_closed {
+                if let Some(bridge) = stream_bridge.as_mut() {
+                    let trailing = bridge.finish();
+                    for outgoing in trailing {
+                        if stream_capture_body && !stream_body_truncated {
+                            let remaining =
+                                MAX_STREAM_LOG_BODY_BYTES.saturating_sub(stream_body.len());
+                            if remaining == 0 {
+                                stream_body_truncated = true;
+                            } else if outgoing.len() <= remaining {
+                                stream_body.extend_from_slice(outgoing.as_ref());
+                            } else {
+                                stream_body.extend_from_slice(&outgoing.as_ref()[..remaining]);
+                                stream_body_truncated = true;
+                            }
+                        }
+                        if tx.send(Ok(outgoing)).await.is_err() {
+                            break;
+                        }
                     }
                 }
             }
@@ -767,8 +808,8 @@ pub(super) async fn handle_proxy_request(
 ///
 /// - Same-surface forwarding is pass-through plus resolved target model override.
 /// - Cross-surface forwarding uses canonical mapper conversion.
-/// - Cross-surface requests currently force `stream=false` until stream-bridge
-///   mapping is fully implemented for every protocol pair.
+/// - Cross-surface streaming keeps mapper output (`stream`), while SSE bytes are
+///   forwarded directly from upstream.
 pub(super) fn build_upstream_body(
     entry: &PathEntry,
     target_protocol: &RuleProtocol,
@@ -792,8 +833,6 @@ pub(super) fn build_upstream_body(
     )?;
     if mapped.is_object() {
         mapped["model"] = json!(target_model);
-        // Keep cross-protocol behavior stable until stream bridge is implemented.
-        mapped["stream"] = json!(false);
     }
     Ok(mapped)
 }
