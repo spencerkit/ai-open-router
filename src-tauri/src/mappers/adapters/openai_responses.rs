@@ -47,6 +47,43 @@ fn push_assistant_message(input: &mut Vec<Value>, text: &str) {
     }));
 }
 
+fn normalize_system_to_instructions(system: &Value) -> Option<String> {
+    if system.is_null() {
+        return None;
+    }
+
+    if let Some(text) = system.as_str() {
+        if text.trim().is_empty() {
+            return None;
+        }
+        return Some(text.to_string());
+    }
+
+    if let Some(arr) = system.as_array() {
+        let mut texts = Vec::with_capacity(arr.len());
+        for block in arr {
+            if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+                if !text.is_empty() {
+                    texts.push(text.to_string());
+                }
+                continue;
+            }
+
+            if let Some(text) = block.as_str() {
+                if !text.is_empty() {
+                    texts.push(text.to_string());
+                }
+            }
+        }
+
+        if !texts.is_empty() {
+            return Some(texts.join("\n\n"));
+        }
+    }
+
+    Some(system.to_string())
+}
+
 pub fn encode_request(request: &CanonicalRequest) -> Value {
     let mut input = vec![];
     let mut system_chunks = vec![];
@@ -187,7 +224,9 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
     }
 
     if let Some(system) = &request.system {
-        out["instructions"] = system.clone();
+        if let Some(instructions) = normalize_system_to_instructions(system) {
+            out["instructions"] = json!(instructions);
+        }
     } else if !system_chunks.is_empty() {
         out["instructions"] = json!(system_chunks.join("\n\n"));
     }

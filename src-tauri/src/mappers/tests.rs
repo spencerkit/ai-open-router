@@ -66,6 +66,25 @@ fn anthropic_request_maps_to_openai_responses_request() {
 }
 
 #[test]
+fn anthropic_system_blocks_map_to_string_instructions() {
+    let input = json!({
+        "model": "claude-x",
+        "system": [
+            { "type": "text", "text": "first instruction" },
+            { "type": "text", "text": "second instruction" }
+        ],
+        "messages": [{ "role": "user", "content": [{ "type": "text", "text": "hello" }] }],
+        "stream": false
+    });
+
+    let out = map_anthropic_to_openai_responses_request(&input, true, "gpt-target")
+        .expect("mapping should succeed");
+
+    assert!(out["instructions"].is_string());
+    assert_eq!(out["instructions"], "first instruction\n\nsecond instruction");
+}
+
+#[test]
 fn anthropic_response_maps_to_openai_response() {
     let input = json!({
         "id": "msg_1",
