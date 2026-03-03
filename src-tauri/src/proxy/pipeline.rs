@@ -452,6 +452,7 @@ pub(super) async fn handle_proxy_request(
     };
 
     let upstream_status = upstream_resp.status().as_u16();
+    let upstream_is_error = upstream_status >= 400;
     let upstream_headers_plain = plain_headers(upstream_resp.headers());
     let upstream_ct = upstream_resp
         .headers()
@@ -463,8 +464,11 @@ pub(super) async fn handle_proxy_request(
     if stream && upstream_ct.contains("text/event-stream") {
         let source_surface = surface_from_rule_protocol(&target_protocol);
         let target_surface = surface_from_entry(&entry);
-        let mut stream_bridge =
-            create_stream_bridge(source_surface, target_surface, &requested_model);
+        let mut stream_bridge = if upstream_is_error {
+            None
+        } else {
+            create_stream_bridge(source_surface, target_surface, &requested_model)
+        };
         let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(32);
         let stream_state = state.clone();
         let stream_trace_id = trace_id.clone();
@@ -487,6 +491,7 @@ pub(super) async fn handle_proxy_request(
         let stream_upstream_headers = upstream_headers_plain.clone();
         let stream_capture_body = capture_body;
         let stream_upstream_status = upstream_status;
+        let stream_upstream_is_error = upstream_is_error;
         let stream_started = started;
 
         tokio::spawn(async move {
@@ -573,7 +578,7 @@ pub(super) async fn handle_proxy_request(
             stream_state
                 .metrics
                 .add_latency(stream_started.elapsed().as_millis() as u64);
-            if stream_failed {
+            if stream_failed || stream_upstream_is_error {
                 stream_state.metrics.increment_error();
             }
 
@@ -601,13 +606,23 @@ pub(super) async fn handle_proxy_request(
                 Some(stream_request_body),
                 Some(stream_upstream_body),
                 stream_response_body,
-                if stream_failed { Some(502) } else { Some(200) },
+                if stream_failed {
+                    Some(502)
+                } else if stream_upstream_is_error {
+                    Some(stream_upstream_status)
+                } else {
+                    Some(200)
+                },
                 Some(stream_upstream_status),
                 Some(stream_upstream_headers),
                 Some(response_headers.drain().collect()),
                 token_usage,
                 stream_started.elapsed().as_millis() as u64,
-                if stream_failed { "error" } else { "ok" },
+                if stream_failed || stream_upstream_is_error {
+                    "error"
+                } else {
+                    "ok"
+                },
                 stream_capture_body,
             );
         });
@@ -616,7 +631,12 @@ pub(super) async fn handle_proxy_request(
             rx.recv().await.map(|item| (item, rx))
         }));
         let mut resp = Response::new(body);
-        *resp.status_mut() = StatusCode::OK;
+        *resp.status_mut() = StatusCode::from_u16(if upstream_is_error {
+            upstream_status
+        } else {
+            200
+        })
+        .unwrap_or(StatusCode::OK);
 
         let response_headers = response_headers_sse(&trace_id);
         for (k, v) in &response_headers {

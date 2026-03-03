@@ -92,6 +92,70 @@ fn anthropic_request_maps_to_openai_responses_request() {
 }
 
 #[test]
+fn anthropic_tool_ids_are_normalized_for_openai_responses_requests() {
+    let out = map_anthropic_to_openai_responses_request(
+        &json!({
+            "model": "claude-x",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": "call_function_5uh3ccwh4li3_1",
+                        "name": "Glob",
+                        "input": { "pattern": "**/*.md" }
+                    }]
+                },
+                {
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": "call_function_5uh3ccwh4li3_1",
+                        "content": "README.md"
+                    }]
+                }
+            ]
+        }),
+        true,
+        "gpt-target",
+    )
+    .expect("mapping should succeed");
+
+    let input = out["input"].as_array().expect("input should be an array");
+    let call = input
+        .iter()
+        .find(|item| item.get("type").and_then(|v| v.as_str()) == Some("function_call"))
+        .expect("function_call should exist");
+    let call_output = input
+        .iter()
+        .find(|item| item.get("type").and_then(|v| v.as_str()) == Some("function_call_output"))
+        .expect("function_call_output should exist");
+
+    let call_id = call
+        .get("call_id")
+        .and_then(|v| v.as_str())
+        .expect("function_call.call_id should be string");
+    let output_call_id = call_output
+        .get("call_id")
+        .and_then(|v| v.as_str())
+        .expect("function_call_output.call_id should be string");
+
+    assert!(call_id.starts_with("fc"), "call_id={call_id}");
+    assert_eq!(call["id"], call["call_id"]);
+    assert_eq!(call_output["id"], call_output["call_id"]);
+    assert_eq!(call_id, output_call_id);
+    assert!(
+        call["arguments"].is_string(),
+        "function_call.arguments must be string for responses API"
+    );
+    assert_eq!(
+        call["arguments"],
+        "{\"pattern\":\"**/*.md\"}",
+        "function_call.arguments should be serialized json string"
+    );
+}
+
+#[test]
 fn anthropic_system_blocks_map_to_string_instructions() {
     let input = json!({
         "model": "claude-x",

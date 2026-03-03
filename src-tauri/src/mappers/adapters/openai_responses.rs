@@ -9,6 +9,7 @@ use super::super::canonical::{
 use super::super::normalize::normalize_openai_request;
 use super::openai_chat_completions;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 pub fn decode_request(body: &Value, options: &MapOptions) -> Result<CanonicalRequest, String> {
     let normalized = normalize_openai_request("/v1/responses", body);
@@ -45,6 +46,42 @@ fn push_assistant_message(input: &mut Vec<Value>, text: &str) {
         "role": "assistant",
         "content": [{ "type": "output_text", "text": text }],
     }));
+}
+
+fn sanitize_call_id_fragment(raw: &str) -> String {
+    raw.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+}
+
+fn normalize_function_call_id(raw: &str, id_map: &mut HashMap<String, String>) -> String {
+    let normalized_raw = raw.trim();
+    if normalized_raw.is_empty() {
+        return "fc_generated".to_string();
+    }
+    if let Some(existing) = id_map.get(normalized_raw) {
+        return existing.clone();
+    }
+
+    let normalized = if normalized_raw.starts_with("fc") {
+        normalized_raw.to_string()
+    } else {
+        let suffix = sanitize_call_id_fragment(normalized_raw);
+        if suffix.is_empty() {
+            "fc_generated".to_string()
+        } else {
+            format!("fc_{suffix}")
+        }
+    };
+
+    id_map.insert(normalized_raw.to_string(), normalized.clone());
+    normalized
 }
 
 fn normalize_system_to_instructions(system: &Value) -> Option<String> {
@@ -87,6 +124,7 @@ fn normalize_system_to_instructions(system: &Value) -> Option<String> {
 pub fn encode_request(request: &CanonicalRequest) -> Value {
     let mut input = vec![];
     let mut system_chunks = vec![];
+    let mut function_call_id_map = HashMap::<String, String>::new();
 
     for msg in &request.messages {
         match &msg.role {
@@ -107,10 +145,12 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
                         } => {
                             push_user_message(&mut input, &text);
                             text = String::new();
+                            let call_id =
+                                normalize_function_call_id(tool_use_id, &mut function_call_id_map);
                             input.push(json!({
                                 "type": "function_call_output",
-                                "id": if tool_use_id.is_empty() { "call_generated" } else { tool_use_id },
-                                "call_id": if tool_use_id.is_empty() { "call_generated" } else { tool_use_id },
+                                "id": call_id.clone(),
+                                "call_id": call_id,
                                 "output": content,
                             }));
                         }
@@ -128,14 +168,15 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
                         input: args,
                     } = block
                     {
-                        let call_id = if id.is_empty() { "call_generated" } else { id };
+                        let call_id = normalize_function_call_id(id, &mut function_call_id_map);
                         input.push(json!({
                             "type": "function_call",
-                            "id": call_id,
+                            "id": call_id.clone(),
                             "call_id": call_id,
                             "status": "completed",
                             "name": name,
-                            "arguments": args,
+                            "arguments": serde_json::to_string(args)
+                                .unwrap_or_else(|_| "{}".to_string()),
                         }));
                     }
                 }
@@ -149,10 +190,12 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
                     } = block
                     {
                         emitted = true;
+                        let call_id =
+                            normalize_function_call_id(tool_use_id, &mut function_call_id_map);
                         input.push(json!({
                             "type": "function_call_output",
-                            "id": if tool_use_id.is_empty() { "call_generated" } else { tool_use_id },
-                            "call_id": if tool_use_id.is_empty() { "call_generated" } else { tool_use_id },
+                            "id": call_id.clone(),
+                            "call_id": call_id,
                             "output": content,
                         }));
                     }
@@ -161,10 +204,12 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
                 if !emitted {
                     let text = merge_text(&msg.blocks);
                     if !text.is_empty() {
+                        let call_id =
+                            normalize_function_call_id("call_generated", &mut function_call_id_map);
                         input.push(json!({
                             "type": "function_call_output",
-                            "id": "call_generated",
-                            "call_id": "call_generated",
+                            "id": call_id.clone(),
+                            "call_id": call_id,
                             "output": text,
                         }));
                     }
