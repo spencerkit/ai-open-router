@@ -1,0 +1,11 @@
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    { "role": "system", "content": "be precise" },
+    { "role": "user", "content": "hello" }
+  ],
+  "stream": true,
+  "max_tokens": 120,
+  "thinking": { "type": "enabled" },
+  "context_management": { "clear_function_results": false }
+}
