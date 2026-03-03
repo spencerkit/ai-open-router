@@ -586,4 +586,23 @@ mod tests {
         assert!(err.contains("git add remote rules file failed"));
         assert!(err.contains("permission denied"));
     }
+
+    #[test]
+    fn contract_read_remote_exported_at_snapshot() {
+        let root = unique_temp_root("contract-exported-at");
+        std::fs::create_dir_all(&root).expect("create temp root");
+        std::fs::write(
+            root.join(REMOTE_RULES_FILE_PATH),
+            include_str!("contract_fixtures/remote_sync/groups-rules-backup.json"),
+        )
+        .expect("write contract backup");
+
+        let actual = read_remote_exported_at(&root).expect("read exportedAt should succeed");
+        let expected = Some(
+            include_str!("contract_fixtures/remote_sync/exported_at.expected.txt")
+                .trim()
+                .to_string(),
+        );
+        assert_eq!(actual, expected);
+    }
 }

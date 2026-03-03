@@ -670,4 +670,36 @@ mod tests {
             .expect("mapping should succeed");
         assert_eq!(parsed.status, QuotaStatus::Empty);
     }
+
+    #[test]
+    fn contract_parse_quota_payload_snapshot() {
+        let payload: Value = serde_json::from_str(include_str!(
+            "../contract_fixtures/quota/parse_quota_payload.payload.json"
+        ))
+        .expect("contract payload must be valid json");
+        let expected: Value = serde_json::from_str(include_str!(
+            "../contract_fixtures/quota/parse_quota_payload.expected.json"
+        ))
+        .expect("contract expected must be valid json");
+
+        let mut rule = build_rule_with_mapping(RuleQuotaResponseMapping {
+            remaining: json!("$.quota.remaining_ratio"),
+            unit: json!("$.quota.unit"),
+            total: Value::Null,
+            reset_at: json!("$.quota.resetAt"),
+        });
+        rule.quota.unit_type = QuotaUnitType::Percentage;
+        rule.quota.low_threshold_percent = 10.0;
+
+        let parsed = parse_quota_payload(&rule, &payload).expect("mapping should succeed");
+        let actual = json!({
+            "remaining": parsed.remaining,
+            "total": parsed.total,
+            "unit": parsed.unit,
+            "reset_at": parsed.reset_at,
+            "percent": parsed.percent,
+            "status": format!("{:?}", parsed.status),
+        });
+        assert_eq!(actual, expected);
+    }
 }

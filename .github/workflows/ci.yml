@@ -49,6 +49,9 @@ jobs:
       - name: Cargo test (Tauri backend)
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
+      - name: Cargo contract tests (Tauri backend)
+        run: cargo test --manifest-path src-tauri/Cargo.toml contract_
+
   auto_tag:
     name: Auto Tag Release Version
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

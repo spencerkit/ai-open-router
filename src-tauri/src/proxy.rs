@@ -240,7 +240,7 @@ mod tests {
     use super::pipeline::build_upstream_body;
     use super::routing::{resolve_target_model, resolve_upstream_path};
     use crate::models::{default_rule_quota_config, Group, Rule, RuleProtocol};
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::collections::HashMap;
 
     #[test]
@@ -419,5 +419,26 @@ mod tests {
             resolve_upstream_path(&RuleProtocol::OpenaiCompletion),
             "/v1/chat/completions"
         );
+    }
+
+    #[test]
+    fn contract_extract_token_usage_snapshot() {
+        let input: Value = serde_json::from_str(include_str!(
+            "contract_fixtures/proxy/extract_token_usage.input.json"
+        ))
+        .expect("contract input must be valid json");
+        let expected: Value = serde_json::from_str(include_str!(
+            "contract_fixtures/proxy/extract_token_usage.expected.json"
+        ))
+        .expect("contract expected must be valid json");
+
+        let usage = extract_token_usage(&input).expect("usage should exist");
+        let actual = json!({
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+            "cache_read_tokens": usage.cache_read_tokens,
+            "cache_write_tokens": usage.cache_write_tokens,
+        });
+        assert_eq!(actual, expected);
     }
 }

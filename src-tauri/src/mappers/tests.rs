@@ -3,7 +3,7 @@ use super::{
     map_openai_chat_to_responses, map_openai_to_anthropic_request,
     map_openai_to_anthropic_response, normalize_openai_request,
 };
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[test]
 fn openai_request_maps_to_anthropic_request() {
@@ -287,4 +287,20 @@ fn openai_finish_reason_tool_calls_maps_to_anthropic_tool_use() {
         "claude-m",
     );
     assert_eq!(out["stop_reason"], "tool_use");
+}
+
+#[test]
+fn contract_openai_to_anthropic_request_snapshot() {
+    let input: Value = serde_json::from_str(include_str!(
+        "../contract_fixtures/mappers/openai_to_anthropic_request.input.json"
+    ))
+    .expect("contract input must be valid json");
+    let expected: Value = serde_json::from_str(include_str!(
+        "../contract_fixtures/mappers/openai_to_anthropic_request.expected.json"
+    ))
+    .expect("contract expected must be valid json");
+
+    let actual = map_openai_to_anthropic_request(&input, true, "claude-3-5-sonnet")
+        .expect("mapping should succeed");
+    assert_eq!(actual, expected);
 }
