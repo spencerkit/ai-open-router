@@ -24,6 +24,7 @@ export type {
   LogEntryError,
   LogEntryPhase,
   LogEntryStatus,
+  Provider,
   ProxyMetrics,
   ProxyStatus,
   QuotaStatus,
@@ -124,6 +125,9 @@ export interface HourlyStatsPoint {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  totalDurationMs: number
+  inputTps: number
+  outputTps: number
 }
 
 export type StatsDimension = "rule" | "protocol" | "status"
@@ -131,9 +135,8 @@ export type StatsDimension = "rule" | "protocol" | "status"
 export interface ComparisonSummary {
   requestsDeltaPct: number
   errorsDeltaPct: number
-  rpmDeltaPct: number
-  inputTpmDeltaPct: number
-  outputTpmDeltaPct: number
+  inputTpsDeltaPct: number
+  outputTpsDeltaPct: number
 }
 
 export interface StatsCountBreakdownItem {
@@ -181,12 +184,10 @@ export interface StatsSummaryResult {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
-  rpm: number
-  inputTpm: number
-  outputTpm: number
-  peakRpm: number
-  peakInputTpm: number
-  peakOutputTpm: number
+  inputTps: number
+  outputTps: number
+  peakInputTps: number
+  peakOutputTps: number
   comparison?: ComparisonSummary | null
   breakdowns?: StatsBreakdowns | null
   hourly: HourlyStatsPoint[]

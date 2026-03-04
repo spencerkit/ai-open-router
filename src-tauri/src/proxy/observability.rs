@@ -12,7 +12,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 
 use crate::models::{
-    default_metrics, LogEntry, LogEntryError, ProxyMetrics, Rule, RuleProtocol, TokenUsage,
+    default_metrics, CostSnapshot, LogEntry, LogEntryError, ProxyMetrics, Rule, RuleProtocol,
+    TokenUsage,
 };
 
 pub(super) struct MetricsState {
@@ -374,6 +375,7 @@ pub(super) fn log_simple(
         forward_request_body: None,
         response_body: if capture_body { response_body } else { None },
         token_usage: None,
+        cost_snapshot: None,
         http_status,
         upstream_status: None,
         duration_ms: 0,
@@ -411,6 +413,10 @@ pub(super) fn finalize_log(
     status: &str,
     capture_body: bool,
 ) {
+    let cost_snapshot = token_usage
+        .as_ref()
+        .map(|usage| build_cost_snapshot(rule, usage));
+
     let entry = LogEntry {
         timestamp: Utc::now().to_rfc3339(),
         trace_id: trace_id.to_string(),
@@ -453,6 +459,7 @@ pub(super) fn finalize_log(
         },
         response_body: if capture_body { response_body } else { None },
         token_usage,
+        cost_snapshot,
         http_status,
         upstream_status,
         duration_ms,
@@ -460,6 +467,38 @@ pub(super) fn finalize_log(
     };
     state.log_store.append(entry.clone());
     state.stats_store.append_log(&entry);
+}
+
+fn build_cost_snapshot(rule: &Rule, usage: &TokenUsage) -> CostSnapshot {
+    let cost = &rule.cost;
+    if !cost.enabled {
+        return CostSnapshot {
+            enabled: false,
+            currency: cost.currency.clone(),
+            input_price_per_m: cost.input_price_per_m,
+            output_price_per_m: cost.output_price_per_m,
+            cache_input_price_per_m: cost.cache_input_price_per_m,
+            cache_output_price_per_m: cost.cache_output_price_per_m,
+            total_cost: 0.0,
+        };
+    }
+
+    let input_cost = (usage.input_tokens as f64 / 1_000_000.0) * cost.input_price_per_m;
+    let output_cost = (usage.output_tokens as f64 / 1_000_000.0) * cost.output_price_per_m;
+    let cache_input_cost =
+        (usage.cache_read_tokens as f64 / 1_000_000.0) * cost.cache_input_price_per_m;
+    let cache_output_cost =
+        (usage.cache_write_tokens as f64 / 1_000_000.0) * cost.cache_output_price_per_m;
+
+    CostSnapshot {
+        enabled: true,
+        currency: cost.currency.clone(),
+        input_price_per_m: cost.input_price_per_m,
+        output_price_per_m: cost.output_price_per_m,
+        cache_input_price_per_m: cost.cache_input_price_per_m,
+        cache_output_price_per_m: cost.cache_output_price_per_m,
+        total_cost: input_cost + output_cost + cache_input_cost + cache_output_cost,
+    }
 }
 
 fn should_capture_body(state: &ServiceState) -> bool {
