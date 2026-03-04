@@ -1,19 +1,19 @@
 //! Module Overview
 //! Streaming bridge for protocol-specific SSE event conversion.
-//! Currently supports OpenAI chat-completions SSE -> Anthropic messages SSE.
+//! Supports:
+//! - OpenAI chat-completions SSE -> Anthropic messages SSE.
+//! - OpenAI responses SSE -> OpenAI chat-completions SSE.
+//! - OpenAI chat-completions SSE -> OpenAI responses SSE.
 
-use crate::mappers::{MapperSurface, OpenaiChatToAnthropicStreamMapper};
+mod emit;
+mod parser;
+mod registry;
+
+use self::parser::{SseDataParser, SseFramePayload};
+use self::registry::{build_bridge, map_non_stream_via_bridge, DynBridgeAdapter};
+use crate::mappers::MapperSurface;
 use axum::body::Bytes;
 use serde_json::Value;
-
-type DynBridgeAdapter = dyn BridgeAdapter + Send;
-type BridgeBuilder = fn(&str) -> Box<DynBridgeAdapter>;
-
-const BRIDGE_REGISTRY: &[(MapperSurface, MapperSurface, BridgeBuilder)] = &[(
-    MapperSurface::OpenaiChatCompletions,
-    MapperSurface::AnthropicMessages,
-    build_openai_chat_to_anthropic_bridge,
-)];
 
 pub(super) struct StreamBridge {
     parser: SseDataParser,
@@ -25,13 +25,9 @@ pub(super) fn create_stream_bridge(
     target: MapperSurface,
     request_model: &str,
 ) -> Option<StreamBridge> {
-    let builder = BRIDGE_REGISTRY
-        .iter()
-        .find_map(|(src, tgt, build)| ((*src == source) && (*tgt == target)).then_some(*build))?;
-
     Some(StreamBridge {
         parser: SseDataParser::default(),
-        adapter: builder(request_model),
+        adapter: build_bridge(source, target, request_model)?,
     })
 }
 
@@ -41,15 +37,7 @@ pub(super) fn map_non_stream_response_via_bridge(
     payload: &Value,
     request_model: &str,
 ) -> Option<Value> {
-    let builder = BRIDGE_REGISTRY
-        .iter()
-        .find_map(|(src, tgt, build)| ((*src == source) && (*tgt == target)).then_some(*build))?;
-
-    let mut adapter = builder(request_model);
-    let mut sink = Vec::new();
-    adapter.on_single_response_json(payload, &mut sink);
-    adapter.finish(&mut sink);
-    adapter.final_response_json()
+    map_non_stream_via_bridge(source, target, payload, request_model)
 }
 
 impl StreamBridge {
@@ -57,9 +45,12 @@ impl StreamBridge {
         let frames = self.parser.consume_chunk(chunk);
         let mut out = Vec::new();
         for frame in frames {
-            match frame {
-                SseDataFrame::Json(payload) => self.adapter.on_json_frame(&payload, &mut out),
-                SseDataFrame::Done => self.adapter.on_done_frame(&mut out),
+            match &frame.payload {
+                SseFramePayload::Json(payload) => {
+                    self.adapter
+                        .on_json_frame(frame.event.as_deref(), payload, &mut out)
+                }
+                SseFramePayload::Done => self.adapter.on_done_frame(&mut out),
             }
         }
         out
@@ -68,146 +59,19 @@ impl StreamBridge {
     pub(super) fn finish(&mut self) -> Vec<Bytes> {
         let mut out = Vec::new();
 
-        // Handle potential last data line without trailing newline.
         for frame in self.parser.drain_remainder() {
-            match frame {
-                SseDataFrame::Json(payload) => self.adapter.on_json_frame(&payload, &mut out),
-                SseDataFrame::Done => self.adapter.on_done_frame(&mut out),
+            match &frame.payload {
+                SseFramePayload::Json(payload) => {
+                    self.adapter
+                        .on_json_frame(frame.event.as_deref(), payload, &mut out)
+                }
+                SseFramePayload::Done => self.adapter.on_done_frame(&mut out),
             }
         }
 
         self.adapter.finish(&mut out);
         out
     }
-}
-
-trait BridgeAdapter {
-    fn on_json_frame(&mut self, payload: &Value, out: &mut Vec<Bytes>);
-    fn on_done_frame(&mut self, out: &mut Vec<Bytes>);
-    fn finish(&mut self, out: &mut Vec<Bytes>);
-    fn on_single_response_json(&mut self, _payload: &Value, _out: &mut Vec<Bytes>) {}
-    fn final_response_json(&self) -> Option<Value> {
-        None
-    }
-}
-
-#[derive(Default)]
-struct SseDataParser {
-    line_buffer: String,
-}
-
-enum SseDataFrame {
-    Json(Value),
-    Done,
-}
-
-impl SseDataParser {
-    fn consume_chunk(&mut self, chunk: &[u8]) -> Vec<SseDataFrame> {
-        self.line_buffer.push_str(&String::from_utf8_lossy(chunk));
-        let mut out = Vec::new();
-
-        while let Some(newline_idx) = self.line_buffer.find('\n') {
-            let mut line = self.line_buffer[..newline_idx].to_string();
-            if line.ends_with('\r') {
-                let _ = line.pop();
-            }
-            if let Some(frame) = Self::parse_line(&line) {
-                out.push(frame);
-            }
-            self.line_buffer.drain(..=newline_idx);
-        }
-
-        out
-    }
-
-    fn drain_remainder(&mut self) -> Vec<SseDataFrame> {
-        if self.line_buffer.is_empty() {
-            return Vec::new();
-        }
-
-        let mut line = std::mem::take(&mut self.line_buffer);
-        if line.ends_with('\r') {
-            let _ = line.pop();
-        }
-
-        match Self::parse_line(&line) {
-            Some(frame) => vec![frame],
-            None => Vec::new(),
-        }
-    }
-
-    fn parse_line(line: &str) -> Option<SseDataFrame> {
-        let rest = line.strip_prefix("data:")?;
-        let payload = rest.trim_start();
-
-        if payload.is_empty() {
-            return None;
-        }
-        if payload == "[DONE]" {
-            return Some(SseDataFrame::Done);
-        }
-
-        serde_json::from_str::<Value>(payload)
-            .ok()
-            .map(SseDataFrame::Json)
-    }
-}
-
-fn build_openai_chat_to_anthropic_bridge(request_model: &str) -> Box<DynBridgeAdapter> {
-    Box::new(OpenaiChatToAnthropicBridgeAdapter::new(request_model))
-}
-
-struct OpenaiChatToAnthropicBridgeAdapter {
-    mapper: OpenaiChatToAnthropicStreamMapper,
-}
-
-impl OpenaiChatToAnthropicBridgeAdapter {
-    fn new(request_model: &str) -> Self {
-        Self {
-            mapper: OpenaiChatToAnthropicStreamMapper::new(request_model),
-        }
-    }
-}
-
-impl BridgeAdapter for OpenaiChatToAnthropicBridgeAdapter {
-    fn on_json_frame(&mut self, payload: &Value, out: &mut Vec<Bytes>) {
-        for (event, payload) in self.mapper.on_stream_payload(payload) {
-            push_sse_event(out, &event, &payload);
-        }
-    }
-
-    fn on_done_frame(&mut self, out: &mut Vec<Bytes>) {
-        for (event, payload) in self.mapper.on_done() {
-            push_sse_event(out, &event, &payload);
-        }
-    }
-
-    fn finish(&mut self, out: &mut Vec<Bytes>) {
-        for (event, payload) in self.mapper.finish() {
-            push_sse_event(out, &event, &payload);
-        }
-    }
-
-    fn on_single_response_json(&mut self, payload: &Value, out: &mut Vec<Bytes>) {
-        for (event, payload) in self.mapper.on_non_stream_payload(payload) {
-            push_sse_event(out, &event, &payload);
-        }
-        for (event, payload) in self.mapper.finish() {
-            push_sse_event(out, &event, &payload);
-        }
-    }
-
-    fn final_response_json(&self) -> Option<Value> {
-        self.mapper.final_message_json()
-    }
-}
-
-fn push_sse_event(out: &mut Vec<Bytes>, event: &str, payload: &Value) {
-    out.push(encode_sse_json_event(event, payload));
-}
-
-fn encode_sse_json_event(event: &str, payload: &Value) -> Bytes {
-    Bytes::from(format!("event: {event}\ndata: {}\n\n", payload))
 }
 
 #[cfg(test)]
@@ -306,6 +170,71 @@ mod tests {
     }
 
     #[test]
+    fn bridge_responses_stream_to_chat_chunks() {
+        let mut bridge = create_stream_bridge(
+            MapperSurface::OpenaiResponses,
+            MapperSurface::OpenaiChatCompletions,
+            "gpt-target",
+        )
+        .expect("bridge should exist");
+
+        let input = concat!(
+            "event: response.output_text.delta\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hel\",\"response\":{\"id\":\"resp_1\",\"model\":\"gpt-up\",\"created_at\":123}}\n\n",
+            "event: response.output_text.delta\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"lo\"}\n\n",
+            "event: response.completed\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":2}}}\n\n"
+        );
+
+        let mut out = bridge.consume_chunk(input.as_bytes());
+        out.extend(bridge.finish());
+        let combined = out
+            .iter()
+            .map(|b| String::from_utf8_lossy(b.as_ref()).to_string())
+            .collect::<Vec<_>>()
+            .join("");
+
+        assert!(combined.contains("chat.completion.chunk"), "{combined}");
+        assert!(combined.contains("\"content\":\"hel\""), "{combined}");
+        assert!(combined.contains("\"content\":\"lo\""), "{combined}");
+        assert!(combined.contains("\"finish_reason\":\"stop\""), "{combined}");
+        assert!(combined.contains("\"prompt_tokens\":10"), "{combined}");
+        assert!(combined.contains("data: [DONE]"), "{combined}");
+    }
+
+    #[test]
+    fn bridge_chat_stream_to_responses_events() {
+        let mut bridge = create_stream_bridge(
+            MapperSurface::OpenaiChatCompletions,
+            MapperSurface::OpenaiResponses,
+            "gpt-target",
+        )
+        .expect("bridge should exist");
+
+        let input = concat!(
+            "data: {\"id\":\"chatcmpl_9\",\"model\":\"gpt-up\",\"created\":456,\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"finish_reason\":null}],\"usage\":null}\n\n",
+            "data: {\"id\":\"chatcmpl_9\",\"model\":\"gpt-up\",\"created\":456,\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":1}}\n\n",
+            "data: [DONE]\n\n"
+        );
+
+        let mut out = bridge.consume_chunk(input.as_bytes());
+        out.extend(bridge.finish());
+        let combined = out
+            .iter()
+            .map(|b| String::from_utf8_lossy(b.as_ref()).to_string())
+            .collect::<Vec<_>>()
+            .join("");
+
+        assert!(combined.contains("event: response.output_text.delta"), "{combined}");
+        assert!(combined.contains("\"delta\":\"hello\""), "{combined}");
+        assert!(combined.contains("event: response.completed"), "{combined}");
+        assert!(combined.contains("\"object\":\"response\""), "{combined}");
+        assert!(combined.contains("\"input_tokens\":5"), "{combined}");
+        assert!(combined.contains("data: [DONE]"), "{combined}");
+    }
+
+    #[test]
     fn non_stream_bridge_maps_openai_chat_text_response() {
         let out = map_non_stream_response_via_bridge(
             MapperSurface::OpenaiChatCompletions,
@@ -385,5 +314,59 @@ mod tests {
         assert_eq!(out["stop_reason"], "tool_use");
         assert_eq!(out["usage"]["input_tokens"], 3);
         assert_eq!(out["usage"]["output_tokens"], 1);
+    }
+
+    #[test]
+    fn non_stream_bridge_maps_responses_to_chat() {
+        let out = map_non_stream_response_via_bridge(
+            MapperSurface::OpenaiResponses,
+            MapperSurface::OpenaiChatCompletions,
+            &json!({
+                "id": "resp_1",
+                "object": "response",
+                "model": "gpt-upstream",
+                "status": "completed",
+                "output": [{
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type":"output_text","text":"hello"}]
+                }],
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 2,
+                    "total_tokens": 12
+                }
+            }),
+            "gpt-target",
+        );
+        let out = out.expect("bridge should map non-stream responses to chat");
+        assert_eq!(out["object"], "chat.completion");
+        assert_eq!(out["model"], "gpt-target");
+    }
+
+    #[test]
+    fn stream_bridge_emits_done_once_for_chat_to_responses() {
+        let mut bridge = create_stream_bridge(
+            MapperSurface::OpenaiChatCompletions,
+            MapperSurface::OpenaiResponses,
+            "gpt-target",
+        )
+        .expect("bridge should exist");
+
+        let input = concat!(
+            "data: {\"id\":\"chatcmpl_9\",\"model\":\"gpt-up\",\"created\":456,\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"finish_reason\":null}],\"usage\":null}\n\n",
+            "data: [DONE]\n\n"
+        );
+
+        let mut out = bridge.consume_chunk(input.as_bytes());
+        out.extend(bridge.finish());
+        let combined = out
+            .iter()
+            .map(|b| String::from_utf8_lossy(b.as_ref()).to_string())
+            .collect::<Vec<_>>()
+            .join("");
+
+        let done_count = combined.matches("data: [DONE]").count();
+        assert_eq!(done_count, 1, "{combined}");
     }
 }

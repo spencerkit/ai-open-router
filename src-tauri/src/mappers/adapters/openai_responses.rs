@@ -6,10 +6,12 @@ use super::super::canonical::{
     CanonicalBlock, CanonicalFinishReason, CanonicalRequest, CanonicalResponse, CanonicalRole,
     CanonicalToolChoice, MapOptions,
 };
+use super::super::helpers::extract_openai_usage_summary;
 use super::super::normalize::normalize_openai_request;
 use super::openai_chat_completions;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 pub fn decode_request(body: &Value, options: &MapOptions) -> Result<CanonicalRequest, String> {
     let normalized = normalize_openai_request("/v1/responses", body);
@@ -513,4 +515,369 @@ pub fn encode_response(response: &CanonicalResponse) -> Value {
                 .unwrap_or(response.usage.input_tokens + response.usage.output_tokens),
         },
     })
+}
+
+#[derive(Clone)]
+struct ChatToolState {
+    id: String,
+    name: String,
+    arguments: String,
+    output_index: usize,
+    added_sent: bool,
+}
+
+pub(crate) struct OpenaiChatToResponsesStreamMapper {
+    request_model: String,
+    upstream_id: Option<String>,
+    upstream_model: Option<String>,
+    upstream_created: Option<i64>,
+    output_text: String,
+    tool_states: HashMap<usize, ChatToolState>,
+    next_output_index: usize,
+    final_usage: Option<Value>,
+    final_finish_reason: Option<String>,
+    completed: bool,
+}
+
+impl OpenaiChatToResponsesStreamMapper {
+    pub(crate) fn new(request_model: &str) -> Self {
+        Self {
+            request_model: request_model.to_string(),
+            upstream_id: None,
+            upstream_model: None,
+            upstream_created: None,
+            output_text: String::new(),
+            tool_states: HashMap::new(),
+            next_output_index: 1,
+            final_usage: None,
+            final_finish_reason: None,
+            completed: false,
+        }
+    }
+
+    pub(crate) fn on_stream_payload(&mut self, payload: &Value) -> Vec<(String, Value)> {
+        let mut out = Vec::new();
+        self.update_common_metadata(payload);
+
+        if let Some(choices) = payload.get("choices").and_then(|v| v.as_array()) {
+            for (i, choice) in choices.iter().enumerate() {
+                let choice_index = choice
+                    .get("index")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(i as u64) as usize;
+                if choice_index != 0 {
+                    continue;
+                }
+
+                if let Some(delta) = choice.get("delta") {
+                    if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
+                        self.emit_text_delta(content, &mut out);
+                    }
+                    if let Some(tool_calls) = delta.get("tool_calls").and_then(|v| v.as_array()) {
+                        for (tc_i, tc) in tool_calls.iter().enumerate() {
+                            let tool_index = tc
+                                .get("index")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(tc_i as u64)
+                                as usize;
+                            self.emit_tool_delta(tool_index, tc, &mut out);
+                        }
+                    }
+                }
+
+                if let Some(reason) = choice.get("finish_reason").and_then(|v| v.as_str()) {
+                    if !reason.is_empty() {
+                        self.final_finish_reason = Some(reason.to_string());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    pub(crate) fn on_done(&mut self) -> Vec<(String, Value)> {
+        self.finish()
+    }
+
+    pub(crate) fn finish(&mut self) -> Vec<(String, Value)> {
+        if self.completed {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        self.emit_completed(&mut out);
+        out
+    }
+
+    pub(crate) fn final_responses_json(&self) -> Option<Value> {
+        if !self.completed {
+            return None;
+        }
+        Some(json!({
+            "id": self.response_id(),
+            "object": "response",
+            "created_at": self.response_created(),
+            "model": self.response_model(),
+            "status": "completed",
+            "output": [{
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type":"output_text","text": self.output_text}],
+            }],
+            "usage": self.final_usage.clone().unwrap_or_else(|| json!({
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+            }))
+        }))
+    }
+
+    fn update_common_metadata(&mut self, payload: &Value) {
+        if let Some(id) = payload.get("id").and_then(|v| v.as_str()) {
+            self.upstream_id = Some(id.to_string());
+        }
+        if let Some(model) = payload.get("model").and_then(|v| v.as_str()) {
+            self.upstream_model = Some(model.to_string());
+        }
+        if let Some(created) = payload.get("created").and_then(|v| v.as_i64()) {
+            self.upstream_created = Some(created);
+        }
+        if let Some(usage) = payload.get("usage") {
+            if let Some(summary) = extract_openai_usage_summary(usage) {
+                self.final_usage = Some(json!({
+                    "input_tokens": summary.input_tokens,
+                    "output_tokens": summary.output_tokens,
+                    "total_tokens": summary
+                        .total_tokens
+                        .unwrap_or(summary.input_tokens + summary.output_tokens),
+                }));
+            }
+        }
+    }
+
+    fn response_id(&self) -> String {
+        self.upstream_id
+            .as_ref()
+            .map(|id| format!("resp_{id}"))
+            .unwrap_or_else(|| format!("resp_{}", Uuid::new_v4().simple()))
+    }
+
+    fn response_model(&self) -> String {
+        if !self.request_model.is_empty() {
+            return self.request_model.clone();
+        }
+        self.upstream_model
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+
+    fn response_created(&self) -> i64 {
+        self.upstream_created
+            .unwrap_or_else(|| chrono::Utc::now().timestamp())
+    }
+
+    fn ensure_tool_state(&mut self, tool_index: usize, tool_call: &Value) -> &mut ChatToolState {
+        self.tool_states.entry(tool_index).or_insert_with(|| {
+            let output_index = self.next_output_index;
+            self.next_output_index += 1;
+            let id = tool_call
+                .get("id")
+                .and_then(|v| v.as_str())
+                .filter(|v| !v.is_empty())
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| format!("call_{}", Uuid::new_v4().simple()));
+            let name = tool_call
+                .get("function")
+                .and_then(|v| v.get("name"))
+                .and_then(|v| v.as_str())
+                .filter(|v| !v.is_empty())
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "tool".to_string());
+            ChatToolState {
+                id,
+                name,
+                arguments: String::new(),
+                output_index,
+                added_sent: false,
+            }
+        })
+    }
+
+    fn emit_text_delta(&mut self, text: &str, out: &mut Vec<(String, Value)>) {
+        if text.is_empty() {
+            return;
+        }
+        self.output_text.push_str(text);
+        out.push((
+            "response.output_text.delta".to_string(),
+            json!({
+                "type": "response.output_text.delta",
+                "response_id": self.response_id(),
+                "output_index": 0,
+                "content_index": 0,
+                "delta": text,
+            }),
+        ));
+    }
+
+    fn emit_tool_delta(
+        &mut self,
+        tool_index: usize,
+        tool_call: &Value,
+        out: &mut Vec<(String, Value)>,
+    ) {
+        let state = self.ensure_tool_state(tool_index, tool_call).clone();
+
+        if !state.added_sent {
+            out.push((
+                "response.output_item.added".to_string(),
+                json!({
+                    "type": "response.output_item.added",
+                    "response_id": self.response_id(),
+                    "output_index": state.output_index,
+                    "item": {
+                        "type": "function_call",
+                        "id": state.id,
+                        "call_id": state.id,
+                        "name": state.name,
+                        "arguments": "",
+                        "status": "in_progress",
+                    }
+                }),
+            ));
+            if let Some(existing) = self.tool_states.get_mut(&tool_index) {
+                existing.added_sent = true;
+            }
+        }
+
+        if let Some(name) = tool_call
+            .get("function")
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty())
+        {
+            if let Some(existing) = self.tool_states.get_mut(&tool_index) {
+                existing.name = name.to_string();
+            }
+        }
+
+        if let Some(arguments) = tool_call
+            .get("function")
+            .and_then(|v| v.get("arguments"))
+            .and_then(|v| v.as_str())
+        {
+            if !arguments.is_empty() {
+                let response_id = self.response_id();
+                if let Some(existing) = self.tool_states.get_mut(&tool_index) {
+                    existing.arguments.push_str(arguments);
+                    let output_index = existing.output_index;
+                    let item_id = existing.id.clone();
+                    out.push((
+                        "response.function_call_arguments.delta".to_string(),
+                        json!({
+                            "type": "response.function_call_arguments.delta",
+                            "response_id": response_id,
+                            "output_index": output_index,
+                            "item_id": item_id,
+                            "call_id": item_id,
+                            "delta": arguments,
+                        }),
+                    ));
+                }
+            }
+        }
+    }
+
+    fn finish_reason_to_status(reason: &str) -> &'static str {
+        match reason {
+            "length" => "incomplete",
+            _ => "completed",
+        }
+    }
+
+    fn emit_completed(&mut self, out: &mut Vec<(String, Value)>) {
+        if self.completed {
+            return;
+        }
+
+        let mut sorted_tools = self.tool_states.iter().collect::<Vec<_>>();
+        sorted_tools.sort_by_key(|(_, state)| state.output_index);
+
+        for (_, state) in &sorted_tools {
+            out.push((
+                "response.output_item.done".to_string(),
+                json!({
+                    "type": "response.output_item.done",
+                    "response_id": self.response_id(),
+                    "output_index": state.output_index,
+                    "item": {
+                        "type": "function_call",
+                        "id": state.id,
+                        "call_id": state.id,
+                        "name": state.name,
+                        "arguments": state.arguments,
+                        "status": "completed",
+                    }
+                }),
+            ));
+        }
+
+        if !self.output_text.is_empty() {
+            out.push((
+                "response.output_text.done".to_string(),
+                json!({
+                    "type": "response.output_text.done",
+                    "response_id": self.response_id(),
+                    "output_index": 0,
+                    "content_index": 0,
+                    "text": self.output_text,
+                }),
+            ));
+        }
+
+        let mut output = vec![json!({
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": self.output_text}],
+        })];
+        for (_, state) in sorted_tools {
+            output.push(json!({
+                "type": "function_call",
+                "id": state.id,
+                "call_id": state.id,
+                "name": state.name,
+                "arguments": state.arguments,
+                "status": "completed",
+            }));
+        }
+
+        let finish_reason = self.final_finish_reason.clone().unwrap_or_else(|| {
+            if self.tool_states.is_empty() {
+                "stop".to_string()
+            } else {
+                "tool_calls".to_string()
+            }
+        });
+        let status = Self::finish_reason_to_status(&finish_reason);
+        out.push((
+            "response.completed".to_string(),
+            json!({
+                "type": "response.completed",
+                "response": {
+                    "id": self.response_id(),
+                    "object": "response",
+                    "created_at": self.response_created(),
+                    "model": self.response_model(),
+                    "status": status,
+                    "output": output,
+                    "usage": self.final_usage.clone().unwrap_or_else(|| json!({
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "total_tokens": 0,
+                    })),
+                }
+            }),
+        ));
+
+        self.completed = true;
+    }
 }
