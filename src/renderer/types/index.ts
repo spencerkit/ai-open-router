@@ -126,6 +126,7 @@ export interface HourlyStatsPoint {
   cacheReadTokens: number
   cacheWriteTokens: number
   totalDurationMs: number
+  totalCost: number
   inputTps: number
   outputTps: number
 }
@@ -135,6 +136,7 @@ export type StatsDimension = "rule" | "protocol" | "status"
 export interface ComparisonSummary {
   requestsDeltaPct: number
   errorsDeltaPct: number
+  totalCostDeltaPct: number
   inputTpsDeltaPct: number
   outputTpsDeltaPct: number
 }
@@ -184,6 +186,8 @@ export interface StatsSummaryResult {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  totalCost: number
+  costCurrency?: string | null
   inputTps: number
   outputTps: number
   peakInputTps: number
@@ -209,6 +213,7 @@ export interface RuleCardStatsItem {
   inputTokens: number
   outputTokens: number
   tokens: number
+  totalCost: number
   hourly: RuleCardHourlyPoint[]
 }
 

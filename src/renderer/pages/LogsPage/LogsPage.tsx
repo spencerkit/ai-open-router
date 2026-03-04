@@ -35,6 +35,16 @@ const MACARON = {
 
 type LogsTab = "stats" | "logs"
 
+function resolveCurrencyPrefix(currency?: string | null): string {
+  const normalized = currency?.trim().toUpperCase()
+  if (!normalized) return "$"
+  if (normalized === "USD") return "$"
+  if (normalized === "CNY" || normalized === "RMB") return "¥"
+  if (normalized === "EUR") return "€"
+  if (normalized === "JPY") return "¥"
+  return `${normalized} `
+}
+
 function formatHourLabel(hourIso: string, hoursFilter: number): string {
   const date = new Date(hourIso)
   if (Number.isNaN(date.getTime())) return hourIso
@@ -78,6 +88,15 @@ function formatTpsMetric(value: number): string {
   if (rounded >= 1_000_000) return `${Math.round(rounded / 1_000_000)}M`
   if (rounded >= 1_000) return `${Math.round(rounded / 1_000)}k`
   return String(rounded)
+}
+
+function formatCostMetric(value: number, currency?: string | null): string {
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0
+  const prefix = resolveCurrencyPrefix(currency)
+  if (safe === 0) return `${prefix}0.00`
+  if (safe < 0.0001) return `${prefix}<0.0001`
+  if (safe < 1) return `${prefix}${safe.toFixed(4)}`
+  return `${prefix}${safe.toFixed(2)}`
 }
 
 function formatDelta(delta: number): string {
@@ -136,6 +155,19 @@ export const LogsPage: React.FC = () => {
     return options
   }, [config])
 
+  const providerCostMetaByKey = useMemo(() => {
+    const map = new Map<string, { enabled: boolean; currency: string }>()
+    for (const group of config?.groups || []) {
+      for (const provider of group.providers || []) {
+        map.set(`${group.id}::${provider.id}`, {
+          enabled: Boolean(provider.cost?.enabled),
+          currency: provider.cost?.currency || "USD",
+        })
+      }
+    }
+    return map
+  }, [config])
+
   const ruleOptionsByKey = useMemo(() => {
     const map = new Map<string, { key: string; label: string }>()
     for (const option of ruleOptions) {
@@ -154,6 +186,10 @@ export const LogsPage: React.FC = () => {
       .map(key => ruleOptionsByKey.get(key))
       .filter((option): option is { key: string; label: string } => Boolean(option))
   }, [ruleOptionsByKey, selectedProviderKeys])
+
+  const hasAnyCostEnabledInSelection = useMemo(() => {
+    return selectedProviderKeys.some(key => providerCostMetaByKey.get(key)?.enabled)
+  }, [providerCostMetaByKey, selectedProviderKeys])
 
   const visibleRuleOptions = useMemo(() => {
     const keyword = providerSearchValue.trim().toLowerCase()
@@ -396,6 +432,14 @@ export const LogsPage: React.FC = () => {
       }),
     }
   }, [logsStats?.breakdowns?.requestsByRule, logsStats?.breakdowns?.tokensByRule, ruleOptionsByKey])
+
+  const totalCostText = useMemo(() => {
+    const currency = logsStats?.costCurrency
+    if (currency === "MIXED") {
+      return `${t("logs.costMixedCurrency")} ${formatCostMetric(logsStats?.totalCost ?? 0, "USD")}`
+    }
+    return formatCostMetric(logsStats?.totalCost ?? 0, currency || "USD")
+  }, [logsStats?.costCurrency, logsStats?.totalCost, t])
 
   useEffect(() => {
     if (activeTab !== "stats" || !usageChartDomRef.current) return
@@ -1107,6 +1151,37 @@ export const LogsPage: React.FC = () => {
                   {formatTpsMetric(logsStats?.peakOutputTps ?? 0)}
                 </strong>
               </div>
+              {hasAnyCostEnabledInSelection ? (
+                <div className={styles.summaryCard}>
+                  <span className={styles.summaryLabel}>{t("logs.totalCost")}</span>
+                  <strong className={styles.summaryValue}>{totalCostText}</strong>
+                  {enableComparison && comparison && (
+                    <span
+                      className={`${styles.summaryDelta} ${comparison.totalCostDeltaPct >= 0 ? styles.summaryDeltaUp : styles.summaryDeltaDown}`}
+                    >
+                      {formatDelta(comparison.totalCostDeltaPct)}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className={`${styles.summaryCard} ${styles.summaryCardNotice}`}>
+                  <span className={styles.summaryLabel}>{t("logs.totalCost")}</span>
+                  <strong className={styles.summaryValue}>
+                    {t("logs.costSummaryUnavailable")}
+                  </strong>
+                  <span className={styles.summaryNoticeText}>
+                    {t("logs.costSummaryUnavailableHint")}
+                  </span>
+                  <Button
+                    size="small"
+                    variant="ghost"
+                    onClick={() => navigate("/")}
+                    className={styles.summaryNoticeAction}
+                  >
+                    {t("logs.goConfigureBilling")}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 

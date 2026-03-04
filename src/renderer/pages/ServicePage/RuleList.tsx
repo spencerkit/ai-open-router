@@ -17,6 +17,16 @@ import type { Group, RuleCardStatsItem, RuleQuotaSnapshot } from "@/types"
 import { formatTokenMillions } from "@/utils/tokenFormat"
 import styles from "./ServicePage.module.css"
 
+function resolveCurrencyPrefix(currency?: string): string {
+  const normalized = currency?.trim().toUpperCase()
+  if (!normalized) return "$"
+  if (normalized === "USD") return "$"
+  if (normalized === "CNY" || normalized === "RMB") return "¥"
+  if (normalized === "EUR") return "€"
+  if (normalized === "JPY") return "¥"
+  return `${normalized} `
+}
+
 export interface ServicePageProps {
   groups: Group[]
   activeGroupId: string | null
@@ -310,6 +320,15 @@ export const RuleList: React.FC<{
     return Math.round(value).toLocaleString()
   }
 
+  const formatCostConsumed = (value: number, currency?: string) => {
+    const safe = Number.isFinite(value) ? Math.max(0, value) : 0
+    const prefix = resolveCurrencyPrefix(currency)
+    if (safe === 0) return `${prefix}0.00`
+    if (safe < 0.0001) return `${prefix}<0.0001`
+    if (safe < 1) return `${prefix}${safe.toFixed(4)}`
+    return `${prefix}${safe.toFixed(2)}`
+  }
+
   const renderRuleMiniChart = (stats?: RuleCardStatsItem) => {
     const hourly = [...(stats?.hourly ?? [])].sort((a, b) => {
       return new Date(a.hour).getTime() - new Date(b.hour).getTime()
@@ -554,6 +573,16 @@ export const RuleList: React.FC<{
                       </div>
                       <div className={styles.ruleTrendWrap}>
                         <div className={styles.ruleTrendInlineMeta}>
+                          {provider.cost?.enabled && (
+                            <span>
+                              {t("servicePage.miniCostConsumed", {
+                                value: formatCostConsumed(
+                                  cardStats?.totalCost ?? 0,
+                                  provider.cost?.currency || "USD"
+                                ),
+                              })}
+                            </span>
+                          )}
                           <span>
                             {t("servicePage.miniRequests")}:{" "}
                             {formatCompactRequest(cardStats?.requests ?? 0)}

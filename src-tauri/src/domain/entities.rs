@@ -370,6 +370,7 @@ pub struct HourlyStatsPoint {
     pub cache_read_tokens: u64,
     pub cache_write_tokens: u64,
     pub total_duration_ms: u64,
+    pub total_cost: f64,
     pub input_tps: f64,
     pub output_tps: f64,
 }
@@ -387,6 +388,8 @@ pub struct StatsSummaryResult {
     pub output_tokens: u64,
     pub cache_read_tokens: u64,
     pub cache_write_tokens: u64,
+    pub total_cost: f64,
+    pub cost_currency: Option<String>,
     pub input_tps: f64,
     pub output_tps: f64,
     pub peak_input_tps: f64,
@@ -402,6 +405,7 @@ pub struct StatsSummaryResult {
 pub struct ComparisonSummary {
     pub requests_delta_pct: f64,
     pub errors_delta_pct: f64,
+    pub total_cost_delta_pct: f64,
     pub input_tps_delta_pct: f64,
     pub output_tps_delta_pct: f64,
 }
@@ -469,6 +473,7 @@ pub struct RuleCardStatsItem {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub tokens: u64,
+    pub total_cost: f64,
     pub hourly: Vec<RuleCardHourlyPoint>,
 }
 

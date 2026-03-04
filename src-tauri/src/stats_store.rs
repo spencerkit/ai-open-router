@@ -57,6 +57,8 @@ struct WindowAggregate {
     cache_read_tokens: u64,
     cache_write_tokens: u64,
     total_duration_ms: u64,
+    total_cost: f64,
+    currencies: HashSet<String>,
     hourly: BTreeMap<String, HourlyStatsPoint>,
     errors_by_status: HashMap<String, u64>,
     requests_by_protocol: HashMap<String, u64>,
@@ -227,6 +229,7 @@ impl StatsStore {
                             previous.requests as f64,
                         ),
                         errors_delta_pct: pct_delta(current.errors as f64, previous.errors as f64),
+                        total_cost_delta_pct: pct_delta(current.total_cost, previous.total_cost),
                         input_tps_delta_pct: pct_delta(
                             input_tps,
                             token_speed_metric(previous.input_tokens, previous_duration_seconds),
@@ -252,6 +255,8 @@ impl StatsStore {
             output_tokens: current.output_tokens,
             cache_read_tokens: current.cache_read_tokens,
             cache_write_tokens: current.cache_write_tokens,
+            total_cost: current.total_cost,
+            cost_currency: resolve_single_currency(&current.currencies),
             input_tps,
             output_tps,
             peak_input_tps,
@@ -283,7 +288,8 @@ impl StatsStore {
             "SELECT rule_id,
                     COUNT(*) AS requests,
                     SUM(input_tokens) AS input_tokens,
-                    SUM(output_tokens) AS output_tokens
+                    SUM(output_tokens) AS output_tokens,
+                    SUM(COALESCE(total_cost, 0)) AS total_cost
              FROM request_events
              WHERE ts_epoch_ms >= ?1 AND ts_epoch_ms < ?2
                AND group_id = ?3
@@ -302,6 +308,7 @@ impl StatsStore {
                     row.get::<_, i64>(1)? as u64,
                     row.get::<_, i64>(2)? as u64,
                     row.get::<_, i64>(3)? as u64,
+                    row.get::<_, f64>(4)?,
                 ))
             },
         ) {
@@ -309,9 +316,9 @@ impl StatsStore {
             Err(_) => return vec![],
         };
 
-        let mut totals_map: BTreeMap<String, (u64, u64, u64)> = BTreeMap::new();
+        let mut totals_map: BTreeMap<String, (u64, u64, u64, f64)> = BTreeMap::new();
         for row in totals_rows.flatten() {
-            totals_map.insert(row.0, (row.1, row.2, row.3));
+            totals_map.insert(row.0, (row.1, row.2, row.3, row.4));
         }
 
         let mut hourly_stmt = match guard.prepare(
@@ -355,13 +362,14 @@ impl StatsStore {
 
         totals_map
             .into_iter()
-            .map(|(rule_id, (requests, input_tokens, output_tokens))| RuleCardStatsItem {
+            .map(|(rule_id, (requests, input_tokens, output_tokens, total_cost))| RuleCardStatsItem {
                 group_id: normalized_group_id.to_string(),
                 rule_id: rule_id.clone(),
                 requests,
                 input_tokens,
                 output_tokens,
                 tokens: input_tokens + output_tokens,
+                total_cost,
                 hourly: points.remove(&rule_id).unwrap_or_default(),
             })
             .collect()
@@ -477,7 +485,8 @@ fn aggregate_window(
                 SUM(output_tokens) AS output_tokens,
                 SUM(cache_read_tokens) AS cache_read_tokens,
                 SUM(cache_write_tokens) AS cache_write_tokens,
-                SUM(duration_ms) AS total_duration_ms
+                SUM(duration_ms) AS total_duration_ms,
+                SUM(COALESCE(total_cost, 0)) AS total_cost
          FROM request_events
          WHERE ts_epoch_ms >= ?1 AND ts_epoch_ms < ?2{filter_sql}
          GROUP BY hour
@@ -500,6 +509,7 @@ fn aggregate_window(
                 cache_read_tokens: row.get::<_, i64>(5)? as u64,
                 cache_write_tokens: row.get::<_, i64>(6)? as u64,
                 total_duration_ms: row.get::<_, i64>(7)? as u64,
+                total_cost: row.get::<_, f64>(8)?,
                 input_tps: 0.0,
                 output_tps: 0.0,
             })
@@ -518,7 +528,29 @@ fn aggregate_window(
         aggregate.cache_read_tokens += point.cache_read_tokens;
         aggregate.cache_write_tokens += point.cache_write_tokens;
         aggregate.total_duration_ms += point.total_duration_ms;
+        aggregate.total_cost += point.total_cost;
         aggregate.hourly.insert(point.hour.clone(), point);
+    }
+
+    let currency_sql = format!(
+        "SELECT COALESCE(NULLIF(TRIM(currency), ''), '') AS currency
+         FROM request_events
+         WHERE ts_epoch_ms >= ?1 AND ts_epoch_ms < ?2
+           AND total_cost IS NOT NULL{filter_sql}"
+    );
+    let mut currency_args = vec![SqlValue::Integer(start_ms), SqlValue::Integer(end_ms)];
+    currency_args.append(&mut params_values.clone());
+    let mut currency_stmt = conn
+        .prepare(&currency_sql)
+        .map_err(|e| format!("prepare currency query failed: {e}"))?;
+    let currency_rows = currency_stmt
+        .query_map(params_from_iter(currency_args), |row| row.get::<_, String>(0))
+        .map_err(|e| format!("query currencies failed: {e}"))?;
+    for row in currency_rows.flatten() {
+        let currency = row.trim();
+        if !currency.is_empty() {
+            aggregate.currencies.insert(currency.to_string());
+        }
     }
 
     let protocol_sql = format!(
@@ -656,6 +688,8 @@ fn empty_summary(
         output_tokens: 0,
         cache_read_tokens: 0,
         cache_write_tokens: 0,
+        total_cost: 0.0,
+        cost_currency: None,
         input_tps: 0.0,
         output_tps: 0.0,
         peak_input_tps: 0.0,
@@ -873,6 +907,16 @@ fn build_ranked_token_breakdown(
         .collect();
     items.sort_by(|a, b| b.tokens.cmp(&a.tokens).then_with(|| a.key.cmp(&b.key)));
     items
+}
+
+fn resolve_single_currency(currencies: &HashSet<String>) -> Option<String> {
+    if currencies.is_empty() {
+        return None;
+    }
+    if currencies.len() == 1 {
+        return currencies.iter().next().cloned();
+    }
+    Some("MIXED".to_string())
 }
 
 fn normalize_hour(ts: &str) -> Option<String> {

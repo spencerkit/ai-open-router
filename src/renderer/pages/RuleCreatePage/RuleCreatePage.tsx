@@ -51,6 +51,8 @@ const normalizeNumericInput = (raw: string) => {
   return `${normalized.slice(0, firstDot + 1)}${normalized.slice(firstDot + 1).replace(/\./g, "")}`
 }
 
+const COST_CURRENCY_OPTIONS = ["USD", "CNY", "EUR", "JPY", "HKD", "GBP", "SGD"] as const
+
 const buildQuotaConfig = ({
   enabled,
   provider,
@@ -973,12 +975,21 @@ export const RuleCreatePage: React.FC = () => {
                 <>
                   <div className={styles.formGroup}>
                     <label htmlFor="cost-currency">{t("ruleForm.costCurrency")}</label>
-                    <Input
+                    <select
                       id="cost-currency"
+                      className={styles.nativeSelect}
                       value={costCurrency}
                       onChange={e => setCostCurrency(e.target.value)}
-                      placeholder="USD"
-                    />
+                    >
+                      {!COST_CURRENCY_OPTIONS.includes(
+                        costCurrency as (typeof COST_CURRENCY_OPTIONS)[number]
+                      ) && <option value={costCurrency}>{costCurrency}</option>}
+                      {COST_CURRENCY_OPTIONS.map(currency => (
+                        <option key={currency} value={currency}>
+                          {currency}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className={styles.dualColumnRow}>
                     <div className={styles.formGroup}>
