@@ -99,7 +99,6 @@ git commit -m "chore(release): vX.Y.Z"
 
 1. 合并 release PR 到 `main`
 2. `CI` 工作流自动读取 `package.json` 版本并创建 `vX.Y.Z` tag（若远端已存在同名 tag 会自动跳过）
-   - 需在仓库 Secrets 中配置 `RELEASE_TOKEN`（PAT，建议 `repo` 权限），用于推送 tag 并触发下游 `Release Build`
 3. `Release Build` 工作流自动执行：
 - 多平台打包（macOS + Windows）
 - 上传产物 artifact
