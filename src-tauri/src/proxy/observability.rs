@@ -189,7 +189,7 @@ pub(super) fn extract_token_usage(payload: &Value) -> Option<TokenUsage> {
         .or_else(|| payload.get("message").and_then(|m| m.get("usage")))
         .or_else(|| payload.get("delta").and_then(|d| d.get("usage")))?;
 
-    let input_tokens = first_u64(
+    let raw_input_tokens = first_u64(
         usage,
         &[
             "input_tokens",
@@ -225,6 +225,7 @@ pub(super) fn extract_token_usage(payload: &Value) -> Option<TokenUsage> {
             "cache_creation_tokens",
         ],
     );
+    let input_tokens = normalize_input_tokens(usage, raw_input_tokens, cache_read_tokens);
 
     if input_tokens == 0 && output_tokens == 0 && cache_read_tokens == 0 && cache_write_tokens == 0
     {
@@ -237,6 +238,29 @@ pub(super) fn extract_token_usage(payload: &Value) -> Option<TokenUsage> {
         cache_read_tokens,
         cache_write_tokens,
     })
+}
+
+fn normalize_input_tokens(usage: &Value, raw_input_tokens: u64, cache_read_tokens: u64) -> u64 {
+    // OpenAI usage may report `input_tokens` including cached tokens.
+    // Anthropic reports cache read separately from input.
+    // To align app semantics with Anthropic, only normalize for OpenAI-style payloads.
+    let has_openai_cached_details = usage
+        .get("input_tokens_details")
+        .or_else(|| usage.get("prompt_tokens_details"))
+        .and_then(|details| details.get("cached_tokens"))
+        .and_then(|value| value.as_u64())
+        .is_some();
+    let has_openai_prompt_fields = usage.get("prompt_tokens").and_then(|value| value.as_u64()).is_some()
+        || usage
+            .get("completion_tokens")
+            .and_then(|value| value.as_u64())
+            .is_some();
+
+    if (has_openai_cached_details || has_openai_prompt_fields) && raw_input_tokens >= cache_read_tokens {
+        raw_input_tokens.saturating_sub(cache_read_tokens)
+    } else {
+        raw_input_tokens
+    }
 }
 
 fn first_u64(obj: &Value, fields: &[&str]) -> u64 {

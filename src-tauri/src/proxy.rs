@@ -312,7 +312,7 @@ mod tests {
         });
 
         let usage = extract_token_usage(&payload).expect("usage should exist");
-        assert_eq!(usage.input_tokens, 100);
+        assert_eq!(usage.input_tokens, 70);
         assert_eq!(usage.output_tokens, 20);
         assert_eq!(usage.cache_read_tokens, 30);
         assert_eq!(usage.cache_write_tokens, 5);
@@ -362,7 +362,7 @@ mod tests {
         acc.consume_chunk(b"data: [DONE]\n\n");
 
         let usage = acc.into_token_usage().expect("usage should be captured");
-        assert_eq!(usage.input_tokens, 12);
+        assert_eq!(usage.input_tokens, 11);
         assert_eq!(usage.output_tokens, 4);
         assert_eq!(usage.cache_read_tokens, 1);
         assert_eq!(usage.cache_write_tokens, 2);
