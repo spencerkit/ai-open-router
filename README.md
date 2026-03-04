@@ -3,6 +3,7 @@
 Desktop proxy service for bidirectional routing between OpenAI-compatible APIs and Anthropic APIs.
 
 中文文档: [docs/zh/README.md](docs/zh/README.md)
+发布流程: [docs/release-process.md](docs/release-process.md)
 
 ## Overview
 
@@ -35,7 +36,11 @@ It routes requests by group, forwards with the group active rule, and translates
    - Real-time request logs with status, group/rule context, protocol direction, upstream target, and token usage.
    - Detailed log view for request/response headers and payloads (when capture is enabled).
    - Aggregated stats by time range and rule filter; persisted locally with retention policy.
-7. Desktop runtime behavior
+7. Rule quota visibility
+   - Each rule can configure a dedicated quota endpoint and mapping fields for remaining quota.
+   - Remaining quota status is shown directly on the rule card (`ok`, `low`, `empty`, etc.).
+   - Supports heterogeneous provider payloads via JSON path and expression mapping.
+8. Desktop runtime behavior
    - Launch on startup and close-to-tray behavior toggles.
    - Theme and language switching.
    - About panel showing app name/version.
@@ -62,7 +67,9 @@ It routes requests by group, forwards with the group active rule, and translates
 - Basic tool-call field mapping
 - Streaming behavior:
   - Same-protocol streaming uses SSE passthrough
-  - Cross-protocol requests are currently forced to non-stream mode for stability (`stream=false` upstream)
+  - OpenAI chat-completions -> Anthropic messages supports SSE event bridge conversion
+  - Other cross-protocol streaming currently forwards upstream SSE bytes directly
+  - Anthropic-entry requests default to `stream=true` when `stream` is omitted
 
 ### Model Routing
 
@@ -73,6 +80,44 @@ It routes requests by group, forwards with the group active rule, and translates
   - Wildcard suffix (`a1*`)
 - Rule-level `modelMappings` are applied on matched models
 - Falls back to rule `defaultModel` when no mapping/match applies
+
+### Rule Quota Query
+
+- Per-rule quota config fields:
+  - `enabled`, `provider`, `endpoint`, `method`
+  - `useRuleToken` / `customToken`
+  - `authHeader`, `authScheme`, `customHeaders`
+  - `response.remaining`, `response.unit`, `response.total`, `response.resetAt`
+  - `lowThresholdPercent`
+- Rule cards show current remaining quota and status badge.
+- Quota can be refreshed per rule from the Service page.
+
+Mapping examples:
+
+```json
+{
+  "response": {
+    "remaining": "$.data.remaining_balance",
+    "unit": "$.data.currency",
+    "total": "$.data.total_balance",
+    "resetAt": "$.data.reset_at"
+  }
+}
+```
+
+```json
+{
+  "response": {
+    "remaining": "$.data.remaining_balance/$.data.remaining_total",
+    "unit": "$.data.unit"
+  }
+}
+```
+
+Expression support and safety:
+- Allowed: numeric literals, `+ - * /`, parentheses, and `path('$.x.y')`
+- Inline path expressions like `$.a/$.b` are supported
+- No script execution (`eval`, JS runtime, external process) is used
 
 ### Desktop UI
 
@@ -90,6 +135,7 @@ It routes requests by group, forwards with the group active rule, and translates
 - Rule editor/creator:
   - Protocol, token, API address, default model
   - Per-model mapping
+  - Quota endpoint + response mapping for remaining quota
   - Token visibility toggle
 - Logs:
   - Request list, status filter, refresh, clear
@@ -137,6 +183,31 @@ It routes requests by group, forwards with the group active rule, and translates
 ### Logs
 
 ![Logs Page](docs/assets/screenshots/logs-page.png)
+
+### Regenerate Screenshots (Playwright + Tauri Mock)
+
+To regenerate screenshots without starting Tauri runtime, use the built-in Playwright script with mocked Tauri `invoke` API:
+
+```bash
+npm run screenshots:mock
+```
+
+Default behavior:
+- Starts Vite dev server at `http://127.0.0.1:4173`
+- Injects mock Tauri IPC responses (`window.__TAURI_INTERNALS__.invoke`)
+- Captures:
+  - `docs/assets/screenshots/service-page.png`
+  - `docs/assets/screenshots/settings-page.png`
+  - `docs/assets/screenshots/logs-page.png`
+
+Optional arguments:
+
+```bash
+node scripts/capture-screenshots.js \
+  --base-url http://127.0.0.1:4173 \
+  --output-dir docs/assets/screenshots \
+  --keep-server
+```
 
 ## Quick Start
 
@@ -188,6 +259,51 @@ npm run check
 npm run test
 npm run ci
 ```
+
+## Debug Guide
+
+```bash
+# run desktop app in dev mode
+npm start
+
+# run frontend only
+npm run dev
+
+# check local proxy health
+curl http://localhost:8899/healthz
+curl http://localhost:8899/metrics-lite
+
+# verify version consistency before release
+npm run version:check
+
+# dry-run release planning (no file changes)
+npm run release:plan
+```
+
+Debug checklist:
+- If proxy requests fail, check app Logs page first, then `GET /healthz` and `GET /metrics-lite`.
+- If tests fail, run `npm run test:rust` to verify backend unit tests directly.
+- If CI fails only on release logic, run `npm run release:plan -- --from-tag <tag>` locally.
+- If release notes are empty, ensure `CHANGELOG.md` contains a `## vX.Y.Z - YYYY-MM-DD` section.
+
+## Release Quick Start
+
+```bash
+# 1) preview next version and changelog section
+npm run release:plan -- --from-tag v0.2.1
+
+# 2) generate version bump + changelog
+npm run release:prepare -- --from-tag v0.2.1
+
+# 3) commit release changes and open PR
+git checkout -b release/vX.Y.Z
+git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json CHANGELOG.md
+git commit -m "chore(release): vX.Y.Z"
+
+# 4) merge PR to main (CI will auto-create tag vX.Y.Z and trigger Release Build)
+```
+
+For complete release flow, see [docs/release-process.md](docs/release-process.md).
 
 ## Build Commands
 

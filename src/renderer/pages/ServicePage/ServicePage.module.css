@@ -347,20 +347,20 @@
 
 .ruleItemContainer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   width: 100%;
-  gap: var(--sp-2);
+  gap: 6px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
-  min-height: 60px;
-  padding-right: var(--sp-2);
+  min-height: 90px;
+  padding: var(--sp-2);
+  position: relative;
 }
 
 .ruleItems li {
   display: flex;
-  align-items: center;
   width: 100%;
 }
 
@@ -375,22 +375,120 @@
   background: var(--surface-selected);
   border-color: var(--accent);
   box-shadow: var(--shadow-sm);
+  border-left: 3px solid var(--accent);
+}
+
+.enabledCornerBadge {
+  position: absolute;
+  left: 8px;
+  top: -8px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-raised));
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
 }
 
 .ruleItem {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: var(--sp-3);
+  padding: 0 var(--sp-2);
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   transition: color var(--transition-fast);
-  gap: var(--sp-3);
   flex: 1;
-  min-height: 56px;
+  min-width: 0;
+  height: 32px;
+}
+
+.ruleCardTop {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: var(--sp-2);
+  min-height: 32px;
+}
+
+.ruleCardBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 32px;
+}
+
+.ruleMetaLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.ruleActionButtons {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+.ruleHeaderRight {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.quotaBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  max-width: 160px;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 2px;
+  font-size: 8px;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: none;
+  flex-shrink: 0;
+}
+
+.quotaBadgeOk {
+  color: #13795b;
+  background: rgba(19, 121, 91, 0.13);
+}
+
+.quotaBadgeLow {
+  color: #9a6700;
+  background: rgba(154, 103, 0, 0.14);
+}
+
+.quotaBadgeEmpty,
+.quotaBadgeError {
+  color: #c0392b;
+  background: rgba(192, 57, 43, 0.12);
+}
+
+.quotaBadgeUnknown,
+.quotaBadgeUnsupported {
+  color: var(--text-secondary);
+  background: var(--surface-active);
 }
 
 .ruleItem:focus-visible {
@@ -402,10 +500,23 @@
   font-weight: var(--weight-medium);
   font-size: var(--text-sm);
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .ruleItem.active .ruleModel {
   color: var(--accent);
+}
+
+.ruleMainLine {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-width: 0;
 }
 
 .ruleDirection {
@@ -417,49 +528,182 @@
   background: var(--surface-active);
 }
 
-.currentBadge {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  color: var(--accent);
-  background: var(--accent-subtle);
-  padding: 2px var(--sp-2);
-  border-radius: var(--radius-full);
-  white-space: nowrap;
+.ruleQuotaWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.activateButton {
+.quotaResetAt {
+  font-size: 8px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.activateIconButton {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  width: 28px;
   height: 28px;
-  padding: 0 var(--sp-2);
-  border: 1px solid var(--accent);
+  border: none;
   border-radius: var(--radius-sm);
-  background: var(--accent-subtle);
+  background: transparent;
   color: var(--accent);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.ruleItemContainer:hover .activateIconButton {
+  opacity: 1;
+}
+
+.activateIconButton:hover {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.activateIconButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.activateIconButton:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+.quotaRefreshButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
-.activateButton:hover {
-  background: var(--accent);
-  color: var(--accent-text);
+.quotaRefreshButton:hover {
+  background: var(--surface-active);
+  color: var(--text-primary);
 }
 
-.activateButton:disabled {
-  opacity: 0.55;
+.quotaRefreshButton:disabled {
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
-.activateButton:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--accent-subtle);
+.spinner {
+  animation: spin 0.85s linear infinite;
+}
+
+.ruleTrendWrap {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.ruleTrendInlineMeta {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  padding-bottom: 1px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ruleMiniChart {
+  width: 132px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--bg-base) 85%, transparent);
+  border: 1px solid color-mix(in oklab, var(--border) 76%, transparent);
+}
+
+.ruleMiniBar {
+  opacity: 0.9;
+}
+
+.ruleMiniLine {
+  fill: none;
+  stroke: #ff8fb1;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ruleMiniPoint {
+  fill: #ff8fb1;
+}
+
+.ruleMiniHoverSlot {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.ruleMiniChartEmpty {
+  width: 132px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in oklab, var(--border) 75%, transparent);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-family: var(--font-mono);
 }
 
 /* Delete button */
+.editButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.ruleItemContainer:hover .editButton {
+  opacity: 1;
+}
+
+.editButton:hover {
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
+.editButton:focus-visible {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
 .deleteButton {
   display: flex;
   align-items: center;
@@ -488,6 +732,16 @@
 .deleteButton:focus-visible {
   opacity: 1;
   box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Rule Detail ── */
@@ -696,7 +950,19 @@
     min-height: 52px;
   }
 
+  .ruleItemContainer {
+    min-height: 80px;
+  }
+
+  .ruleTrendWrap {
+    display: none;
+  }
+
   .deleteButton {
+    opacity: 1;
+  }
+
+  .editButton {
     opacity: 1;
   }
 }

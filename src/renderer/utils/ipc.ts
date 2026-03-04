@@ -8,7 +8,12 @@ import type {
   ProxyStatus,
   RemoteRulesPullResult,
   RemoteRulesUploadResult,
+  RuleCardStatsItem,
+  RuleQuotaConfig,
+  RuleQuotaSnapshot,
+  RuleQuotaTestResult,
   SaveConfigResult,
+  StatsDimension,
   StatsSummaryResult,
 } from "@/types"
 
@@ -96,10 +101,57 @@ export const ipc = {
     return getInvoke()<{ ok: boolean }>("logs_clear")
   },
 
-  getLogsStatsSummary(hours?: number, ruleKey?: string): Promise<StatsSummaryResult> {
+  getLogsStatsSummary(
+    hours?: number,
+    ruleKeys?: string[],
+    ruleKey?: string,
+    dimension?: StatsDimension,
+    enableComparison?: boolean
+  ): Promise<StatsSummaryResult> {
     const args: Record<string, unknown> = {}
     if (typeof hours === "number") args.hours = hours
+    if (Array.isArray(ruleKeys)) args.ruleKeys = ruleKeys
     if (typeof ruleKey === "string") args.ruleKey = ruleKey
+    if (typeof dimension === "string") args.dimension = dimension
+    if (typeof enableComparison === "boolean") args.enableComparison = enableComparison
     return getInvoke()<StatsSummaryResult>("logs_stats_summary", args)
+  },
+
+  getRuleCardStats(groupId: string, hours?: number): Promise<RuleCardStatsItem[]> {
+    const args: Record<string, unknown> = { groupId }
+    if (typeof hours === "number") args.hours = hours
+    return getInvoke()<RuleCardStatsItem[]>("logs_stats_rule_cards", args)
+  },
+
+  clearLogsStats(beforeEpochMs?: number): Promise<{ ok: boolean }> {
+    const args: Record<string, unknown> = {}
+    if (typeof beforeEpochMs === "number") args.beforeEpochMs = beforeEpochMs
+    return getInvoke()<{ ok: boolean }>("logs_stats_clear", args)
+  },
+
+  getProviderQuota(groupId: string, providerId: string): Promise<RuleQuotaSnapshot> {
+    return getInvoke()<RuleQuotaSnapshot>("quota_get_rule", { groupId, ruleId: providerId })
+  },
+
+  getGroupQuotas(groupId: string): Promise<RuleQuotaSnapshot[]> {
+    return getInvoke()<RuleQuotaSnapshot[]>("quota_get_group", { groupId })
+  },
+
+  testRuleQuotaDraft(
+    groupId: string,
+    providerName: string,
+    providerToken: string,
+    providerApiAddress: string,
+    providerDefaultModel: string,
+    quota: RuleQuotaConfig
+  ): Promise<RuleQuotaTestResult> {
+    return getInvoke()<RuleQuotaTestResult>("quota_test_draft", {
+      groupId,
+      ruleName: providerName,
+      ruleToken: providerToken,
+      ruleApiAddress: providerApiAddress,
+      ruleDefaultModel: providerDefaultModel,
+      quota,
+    })
   },
 }

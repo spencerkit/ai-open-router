@@ -24,11 +24,17 @@ export type {
   LogEntryError,
   LogEntryPhase,
   LogEntryStatus,
+  Provider,
   ProxyMetrics,
   ProxyStatus,
+  QuotaStatus,
+  QuotaUnitType,
   Rule,
   RuleDirection,
   RuleProtocol,
+  RuleQuotaConfig,
+  RuleQuotaSnapshot,
+  RuleQuotaTestResult,
   TokenUsage,
 } from "./proxy"
 
@@ -119,19 +125,96 @@ export interface HourlyStatsPoint {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  totalDurationMs: number
+  totalCost: number
+  inputTps: number
+  outputTps: number
+}
+
+export type StatsDimension = "rule" | "protocol" | "status"
+
+export interface ComparisonSummary {
+  requestsDeltaPct: number
+  errorsDeltaPct: number
+  totalCostDeltaPct: number
+  inputTpsDeltaPct: number
+  outputTpsDeltaPct: number
+}
+
+export interface StatsCountBreakdownItem {
+  key: string
+  count: number
+  ratio: number
+}
+
+export interface StatsTokenBreakdownItem {
+  key: string
+  tokens: number
+  ratio: number
+}
+
+export interface StatsRuleCountBreakdownItem {
+  key: string
+  label: string
+  count: number
+  ratio: number
+}
+
+export interface StatsRuleTokenBreakdownItem {
+  key: string
+  label: string
+  tokens: number
+  ratio: number
+}
+
+export interface StatsBreakdowns {
+  errorsByStatus: StatsCountBreakdownItem[]
+  requestsByProtocol: StatsCountBreakdownItem[]
+  tokensByProtocol: StatsTokenBreakdownItem[]
+  requestsByRule: StatsRuleCountBreakdownItem[]
+  tokensByRule: StatsRuleTokenBreakdownItem[]
 }
 
 export interface StatsSummaryResult {
+  dimension: StatsDimension
   hours: number
   ruleKey?: string | null
+  ruleKeys?: string[] | null
   requests: number
   errors: number
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  totalCost: number
+  costCurrency?: string | null
+  inputTps: number
+  outputTps: number
+  peakInputTps: number
+  peakOutputTps: number
+  comparison?: ComparisonSummary | null
+  breakdowns?: StatsBreakdowns | null
   hourly: HourlyStatsPoint[]
   options: StatsRuleOption[]
+}
+
+export interface RuleCardHourlyPoint {
+  hour: string
+  requests: number
+  inputTokens: number
+  outputTokens: number
+  tokens: number
+}
+
+export interface RuleCardStatsItem {
+  groupId: string
+  ruleId: string
+  requests: number
+  inputTokens: number
+  outputTokens: number
+  tokens: number
+  totalCost: number
+  hourly: RuleCardHourlyPoint[]
 }
 
 export interface ClipboardTextResult {

@@ -1,6 +1,6 @@
 {
   "name": "ai-open-router",
-  "version": "0.2.1",
+  "version": "0.2.4",
   "description": "Desktop OpenAI <-> Anthropic compatible protocol router",
   "type": "commonjs",
   "scripts": {
@@ -9,7 +9,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write --unsafe .",
     "format": "biome format --write .",
-    "check": "npm run typecheck && npm run test",
+    "check": "npm run lint && npm run typecheck && npm run test:ci",
     "ci": "npm run check && npm run build",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -18,7 +18,16 @@
     "tauri:collect": "bash ./scripts/collect-tauri-artifacts.sh",
     "tauri:build": "CARGO_TARGET_DIR=\"$PWD/dist/target\" cargo tauri build && npm run tauri:collect",
     "tauri:build:win": "CARGO_TARGET_DIR=\"$PWD/dist/target\" cargo tauri build --target x86_64-pc-windows-gnu && npm run tauri:collect",
-    "test": "node --require ./scripts/register-ts.js --test",
+    "test": "npm run test:rust",
+    "test:ci": "npm run test:rust",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "mock:upstream": "node ./scripts/mock-upstream.js --host 127.0.0.1 --port 19001",
+    "screenshots:mock": "node ./scripts/capture-screenshots.js",
+    "bench:proxy": "node ./scripts/benchmark-proxy.js --config ./scripts/benchmark.example.json",
+    "bench:proxy:mock": "node ./scripts/run-benchmark-with-mock.js --config ./scripts/benchmark.example.json --output out/bench-report.json",
+    "version:check": "node ./scripts/check-version-sync.js",
+    "release:plan": "bash ./scripts/release-runner.sh --dry-run --bump auto",
+    "release:prepare": "bash ./scripts/release-runner.sh --bump auto",
     "prepare": "husky install"
   },
   "engines": {
@@ -26,6 +35,7 @@
     "npm": ">=10.0.0"
   },
   "dependencies": {
+    "echarts": "^5.6.0",
     "i18next": "^23.10.0",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
@@ -42,19 +52,8 @@
     "@vitejs/plugin-react": "^4.2.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.3.0",
+    "playwright": "^1.58.2",
     "typescript": "^5.2.2",
     "vite": "^5.1.0"
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "biome check --write --unsafe",
-      "biome format --write"
-    ],
-    "*.{json,jsonc}": [
-      "biome format --write"
-    ],
-    "*.md": [
-      "biome format --write"
-    ]
   }
 }

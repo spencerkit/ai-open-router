@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AI Open Router",
-  "version": "0.2.1",
-  "identifier": "com.local.aiopenrouter",
+  "version": "0.2.4",
+  "identifier": "art.shier.aiopenrouter",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
@@ -28,10 +28,7 @@
   "bundle": {
     "active": true,
     "targets": ["dmg", "nsis"],
-    "icon": [
-      "../assets/icon.ico",
-      "../assets/icon.icns"
-    ],
+    "icon": ["../assets/icon.ico", "../assets/icon.icns"],
     "windows": {
       "nsis": {
         "installerIcon": "../assets/icon.ico"

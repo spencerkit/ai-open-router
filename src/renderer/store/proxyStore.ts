@@ -19,6 +19,9 @@ import type {
   ProxyStatus,
   RemoteRulesPullResult,
   RemoteRulesUploadResult,
+  RuleCardStatsItem,
+  RuleQuotaSnapshot,
+  StatsDimension,
   StatsSummaryResult,
 } from "@/types"
 import { ipc } from "@/utils/ipc"
@@ -32,6 +35,9 @@ interface ProxyState {
   status: ProxyStatus | null
   logs: LogEntry[]
   logsStats: StatsSummaryResult | null
+  providerQuotas: Record<string, RuleQuotaSnapshot>
+  providerCardStatsByProviderKey: Record<string, RuleCardStatsItem>
+  quotaLoadingProviderKeys: Record<string, boolean>
   activeGroupId: string | null
   loading: boolean
   error: string | null
@@ -44,7 +50,13 @@ interface ProxyState {
   init: () => Promise<void>
   refreshStatus: () => Promise<void>
   refreshLogs: () => Promise<void>
-  refreshLogsStats: (hours?: number, ruleKey?: string) => Promise<void>
+  refreshLogsStats: (
+    hours?: number,
+    ruleKeys?: string[],
+    ruleKey?: string,
+    dimension?: StatsDimension,
+    enableComparison?: boolean
+  ) => Promise<void>
   saveConfig: (config: ProxyConfig) => Promise<void>
   exportGroupsBackup: () => Promise<GroupBackupExportResult>
   exportGroupsToFolder: () => Promise<GroupBackupExportResult>
@@ -56,6 +68,10 @@ interface ProxyState {
   readClipboardText: () => Promise<ClipboardTextResult>
   setActiveGroupId: (groupId: string | null) => void
   clearLogs: () => Promise<void>
+  clearLogsStats: (beforeEpochMs?: number) => Promise<void>
+  fetchGroupQuotas: (groupId: string) => Promise<void>
+  fetchGroupProviderCardStats: (groupId: string, hours?: number) => Promise<void>
+  fetchProviderQuota: (groupId: string, providerId: string) => Promise<void>
   startPolling: () => void
   stopPolling: () => void
   startServer: () => Promise<void>
@@ -68,6 +84,69 @@ interface ProxyState {
 const STATUS_POLL_INTERVAL = 3000
 const LOGS_POLL_INTERVAL = 3000
 const MAX_LOGS = 100
+const quotaKey = (groupId: string, providerId: string) => `${groupId}:${providerId}`
+const ACTIVE_GROUP_STORAGE_KEY = "ai-open-router.activeGroupId"
+
+const readPersistedActiveGroupId = (): string | null => {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_GROUP_STORAGE_KEY)
+    const value = raw?.trim()
+    return value ? value : null
+  } catch {
+    return null
+  }
+}
+
+const persistActiveGroupId = (groupId: string | null) => {
+  if (typeof window === "undefined") return
+  try {
+    if (groupId?.trim()) {
+      window.localStorage.setItem(ACTIVE_GROUP_STORAGE_KEY, groupId)
+      return
+    }
+    window.localStorage.removeItem(ACTIVE_GROUP_STORAGE_KEY)
+  } catch {}
+}
+
+function normalizeGroup(group: Partial<Group> & Pick<Group, "id" | "name">): Group {
+  const providers = group.providers ?? group.rules ?? []
+  const activeProviderId = group.activeProviderId ?? group.activeRuleId ?? null
+  return {
+    ...group,
+    providers,
+    activeProviderId,
+    rules: providers,
+    activeRuleId: activeProviderId,
+    models: group.models ?? [],
+  }
+}
+
+function normalizeConfig(config: ProxyConfig): ProxyConfig {
+  return {
+    ...config,
+    groups: (config.groups ?? []).map(group =>
+      normalizeGroup(group as Partial<Group> & Pick<Group, "id" | "name">)
+    ),
+  }
+}
+
+function buildSaveConfigPayload(config: ProxyConfig): ProxyConfig {
+  return {
+    ...config,
+    groups: (config.groups ?? []).map(group => {
+      const providers = group.providers ?? group.rules ?? []
+      const activeProviderId = group.activeProviderId ?? group.activeRuleId ?? null
+      return {
+        id: group.id,
+        name: group.name,
+        models: group.models ?? [],
+        providers,
+        activeProviderId,
+      } as Group
+    }),
+  }
+}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) {
@@ -94,7 +173,10 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   status: null,
   logs: [],
   logsStats: null,
-  activeGroupId: null,
+  providerQuotas: {},
+  providerCardStatsByProviderKey: {},
+  quotaLoadingProviderKeys: {},
+  activeGroupId: readPersistedActiveGroupId(),
   loading: false,
   error: null,
   statusIntervalId: null,
@@ -111,11 +193,12 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
 
       console.log("[Store] Fetching config and status...")
       // Fetch initial config and status in parallel
-      const [config, status, logsStats] = await Promise.all([
+      const [rawConfig, status, logsStats] = await Promise.all([
         ipc.getConfig(),
         ipc.getStatus(),
-        ipc.getLogsStatsSummary(),
+        ipc.getLogsStatsSummary(undefined, undefined, undefined, "rule", false),
       ])
+      const config = normalizeConfig(rawConfig)
 
       console.log("[Store] Config received:", config)
       console.log("[Store] Status received:", status)
@@ -170,9 +253,21 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   /**
    * Refresh request/token stats summary from IPC
    */
-  refreshLogsStats: async (hours?: number, ruleKey?: string) => {
+  refreshLogsStats: async (
+    hours?: number,
+    ruleKeys?: string[],
+    ruleKey?: string,
+    dimension?: StatsDimension,
+    enableComparison?: boolean
+  ) => {
     try {
-      const logsStats = await ipc.getLogsStatsSummary(hours, ruleKey)
+      const logsStats = await ipc.getLogsStatsSummary(
+        hours,
+        ruleKeys,
+        ruleKey,
+        dimension,
+        enableComparison
+      )
       set({ logsStats, error: null })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to refresh logs stats"
@@ -188,10 +283,10 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
     try {
       set({ loading: true, error: null })
 
-      const result = await ipc.saveConfig(config)
+      const result = await ipc.saveConfig(buildSaveConfigPayload(normalizeConfig(config)))
 
       set({
-        config: result.config,
+        config: normalizeConfig(result.config),
         status: result.status,
         loading: false,
       })
@@ -206,7 +301,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   /**
-   * Export all groups (including nested rules) to a JSON backup file
+   * Export all groups (including nested providers) to a JSON backup file
    */
   exportGroupsBackup: async () => {
     try {
@@ -220,7 +315,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   /**
-   * Export all groups/rules to a JSON file under a selected folder
+   * Export all groups/providers to a JSON file under a selected folder
    */
   exportGroupsToFolder: async () => {
     try {
@@ -234,7 +329,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   /**
-   * Export all groups/rules JSON content directly to clipboard
+   * Export all groups/providers JSON content directly to clipboard
    */
   exportGroupsToClipboard: async () => {
     try {
@@ -257,7 +352,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
 
       if (!result.canceled && result.config && result.status) {
         set({
-          config: result.config,
+          config: normalizeConfig(result.config),
           status: result.status,
           loading: false,
         })
@@ -286,7 +381,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
 
       if (!result.canceled && result.config && result.status) {
         set({
-          config: result.config,
+          config: normalizeConfig(result.config),
           status: result.status,
           loading: false,
         })
@@ -306,7 +401,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   /**
-   * Upload current groups/rules backup JSON to remote git repository
+   * Upload current groups/providers backup JSON to remote git repository
    */
   remoteRulesUpload: async (force?: boolean) => {
     try {
@@ -320,25 +415,22 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   /**
-   * Pull groups/rules backup JSON from remote git and replace local groups
+   * Pull groups/providers backup JSON from remote git and replace local groups
    */
   remoteRulesPull: async (force?: boolean) => {
     try {
-      set({ loading: true, error: null })
+      set({ error: null })
       const result = await ipc.remoteRulesPull(force)
       if (result.config && result.status) {
         set({
-          config: result.config,
+          config: normalizeConfig(result.config),
           status: result.status,
-          loading: false,
         })
-      } else {
-        set({ loading: false })
       }
       return result
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to pull remote rules"
-      set({ error: errorMessage, loading: false })
+      set({ error: errorMessage })
       throw error
     }
   },
@@ -361,6 +453,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
    * Set the active group ID
    */
   setActiveGroupId: (groupId: string | null) => {
+    persistActiveGroupId(groupId)
     set({ activeGroupId: groupId })
   },
 
@@ -374,6 +467,96 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to clear logs"
       set({ error: errorMessage })
+    }
+  },
+
+  clearLogsStats: async (beforeEpochMs?: number) => {
+    try {
+      await ipc.clearLogsStats(beforeEpochMs)
+      set({ logsStats: null, error: null })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to clear logs stats"
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  fetchGroupQuotas: async (groupId: string) => {
+    try {
+      if (!groupId.trim()) return
+      set({ error: null })
+      const snapshots = await ipc.getGroupQuotas(groupId)
+      set(state => {
+        const next = { ...state.providerQuotas }
+        for (const snapshot of snapshots) {
+          next[quotaKey(snapshot.groupId, snapshot.ruleId)] = snapshot
+        }
+        return { providerQuotas: next }
+      })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch group quotas"
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  fetchGroupProviderCardStats: async (groupId: string, hours?: number) => {
+    try {
+      if (!groupId.trim()) return
+      set({ error: null })
+      const items = await ipc.getRuleCardStats(groupId, hours)
+      set(state => {
+        const next = { ...state.providerCardStatsByProviderKey }
+        const groupPrefix = `${groupId}:`
+        for (const key of Object.keys(next)) {
+          if (key.startsWith(groupPrefix)) {
+            delete next[key]
+          }
+        }
+        for (const item of items) {
+          next[quotaKey(item.groupId, item.ruleId)] = item
+        }
+        return { providerCardStatsByProviderKey: next }
+      })
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to fetch group provider card stats"
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  fetchProviderQuota: async (groupId: string, providerId: string) => {
+    const key = quotaKey(groupId, providerId)
+    try {
+      set(state => ({
+        error: null,
+        quotaLoadingProviderKeys: {
+          ...state.quotaLoadingProviderKeys,
+          [key]: true,
+        },
+      }))
+      const snapshot = await ipc.getProviderQuota(groupId, providerId)
+      set(state => ({
+        providerQuotas: {
+          ...state.providerQuotas,
+          [key]: snapshot,
+        },
+        quotaLoadingProviderKeys: {
+          ...state.quotaLoadingProviderKeys,
+          [key]: false,
+        },
+      }))
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch provider quota"
+      set(state => ({
+        error: errorMessage,
+        quotaLoadingProviderKeys: {
+          ...state.quotaLoadingProviderKeys,
+          [key]: false,
+        },
+      }))
+      throw error
     }
   },
 

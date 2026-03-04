@@ -26,7 +26,51 @@
   color: var(--text-tertiary);
 }
 
+.tabRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  background: var(--bg-sunken);
+  border: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  width: fit-content;
+}
+
+.tabButton {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  font-weight: var(--weight-medium);
+  border-radius: var(--radius-sm);
+  height: 32px;
+  padding: 0 var(--sp-3);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tabButton:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.tabButtonActive {
+  background: var(--bg-raised);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
 .toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.statsToolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -49,6 +93,7 @@
 .advancedFilterGroup {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--sp-1);
   background: var(--bg-sunken);
   border: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
@@ -115,13 +160,18 @@
   height: 32px;
   padding: 0 var(--sp-3);
   border: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   background: transparent;
   color: var(--text-secondary);
   text-align: left;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .ruleOption + .ruleOption {
@@ -137,6 +187,126 @@
   background: color-mix(in oklab, var(--accent) 12%, transparent);
   color: var(--accent);
   font-weight: var(--weight-medium);
+}
+
+.ruleOptionActive .ruleOptionCheck {
+  border-color: color-mix(in oklab, var(--accent) 65%, transparent);
+  color: var(--accent);
+}
+
+.ruleOptionCheck {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  border-radius: 3px;
+  background: var(--bg-base);
+}
+
+.ruleDropdownActions {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+
+.ruleDropdownAction {
+  border: 1px solid color-mix(in oklab, var(--border) 75%, transparent);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  height: 24px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.ruleDropdownAction:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.ruleDropdownEmpty {
+  padding: var(--sp-3);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.ruleChipsRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.ruleSelectionText {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.ruleClearButton {
+  border: 1px solid color-mix(in oklab, var(--border) 75%, transparent);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  height: 26px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.ruleClearButton:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.ruleClearButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ruleChipList {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ruleChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  height: 24px;
+  padding: 0 8px 0 10px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+}
+
+.ruleChipRemove {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.ruleChipRemove:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
 .inlineInput:focus-visible {
@@ -196,6 +366,33 @@
   gap: var(--sp-2);
 }
 
+.chartCard {
+  position: relative;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2);
+}
+
+.trendChart {
+  width: 100%;
+  height: 320px;
+}
+
+.chartEmpty {
+  position: absolute;
+  inset: 0;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  background: color-mix(in oklab, var(--bg-raised) 92%, transparent);
+  border-radius: var(--radius-md);
+  pointer-events: none;
+}
+
 .metricsTitle {
   margin: 0;
   font-size: var(--text-sm);
@@ -209,7 +406,11 @@
   border-radius: var(--radius-md);
   padding: var(--sp-2) var(--sp-3);
   display: grid;
-  gap: 2px;
+  gap: 4px;
+}
+
+.summaryCardNotice {
+  border-style: dashed;
 }
 
 .summaryLabel {
@@ -228,6 +429,45 @@
 
 .summaryValueDanger {
   color: var(--danger);
+}
+
+.summaryPairRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.summaryPairRow strong {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+}
+
+.summaryDelta {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+}
+
+.summaryDeltaUp {
+  color: var(--success);
+}
+
+.summaryDeltaDown {
+  color: var(--danger);
+}
+
+.summaryNoticeText {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.summaryNoticeAction {
+  justify-self: flex-start;
+  margin-top: 2px;
 }
 
 /* Logs container */
@@ -414,6 +654,117 @@
   gap: var(--sp-3);
 }
 
+.resetStatsCalendar {
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  padding: var(--sp-2);
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.resetStatsCalendarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.resetStatsCalendarHeader strong {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.resetStatsCalendarNav {
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.resetStatsCalendarNav:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.resetStatsCalendarNav:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.resetStatsCalendarWeekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.resetStatsCalendarWeekdays span {
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.resetStatsCalendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.resetStatsCalendarDay {
+  border: 1px solid color-mix(in oklab, var(--border) 75%, transparent);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  height: 32px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.resetStatsCalendarDay:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.resetStatsCalendarDayMuted {
+  opacity: 0.55;
+}
+
+.resetStatsCalendarDayToday {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 55%, transparent);
+}
+
+.resetStatsCalendarDaySelected {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 65%, transparent);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  font-weight: var(--weight-semibold);
+}
+
+.resetStatsCalendarDay:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  background: var(--bg-sunken);
+}
+
+.resetStatsPickedDate {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.resetStatsPickedDate strong {
+  color: var(--text-primary);
+}
+
 @media (max-width: 960px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -421,6 +772,16 @@
 }
 
 @media (max-width: 640px) {
+  .tabRow {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .tabButton {
+    flex: 1;
+    min-width: 120px;
+  }
+
   .toolbarActions {
     width: 100%;
   }
@@ -440,14 +801,29 @@
   }
 
   .ruleCombobox {
-    width: 180px;
+    width: 100%;
   }
 
   .inlineSelect {
-    min-width: 120px;
+    min-width: 180px;
+  }
+
+  .ruleChipsRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ruleChipList {
+    width: 100%;
   }
 
   .summaryGrid {
     grid-template-columns: 1fr;
+  }
+
+  .trendChart,
+  .chartEmpty {
+    min-height: 260px;
+    height: 260px;
   }
 }

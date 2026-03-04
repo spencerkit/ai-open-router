@@ -35,7 +35,11 @@ AI Open Router 是基于 Tauri 的桌面应用，内置本地代理运行时。
    - 实时请求日志，包含状态、分组/规则信息、协议方向、上游目标、Token 用量等。
    - 日志详情可查看请求/响应头与请求/响应体（开启记录时）。
    - 支持按时间窗口和规则筛选统计，并在本地持久化保留。
-7. 桌面端运行行为
+7. 规则额度可视化
+   - 每条规则可单独配置额度查询接口与映射规则。
+   - 规则卡片直接显示剩余额度状态（`ok`、`low`、`empty` 等）。
+   - 通过 JSONPath/表达式适配不同 provider 的响应结构。
+8. 桌面端运行行为
    - 支持开机启动、关闭最小化到托盘。
    - 支持主题与语言切换。
    - 支持关于面板查看应用名称和版本。
@@ -62,7 +66,9 @@ AI Open Router 是基于 Tauri 的桌面应用，内置本地代理运行时。
 - 基础 tool call 字段映射
 - 流式行为：
   - 同协议转发时支持 SSE 透传
-  - 跨协议场景当前会强制关闭上游流式（`stream=false`）以保证稳定性
+  - OpenAI chat-completions -> Anthropic messages 支持 SSE 事件桥接转换
+  - 其他跨协议流式场景当前仍直通上游 SSE 字节流
+  - Anthropic 入口请求若未显式传 `stream`，默认按 `stream=true` 转发
 
 ### 模型路由
 
@@ -73,6 +79,43 @@ AI Open Router 是基于 Tauri 的桌面应用，内置本地代理运行时。
   - 通配后缀（如 `a1*`）
 - 规则 `modelMappings` 会在匹配后生效
 - 未命中映射时回落到规则 `defaultModel`
+
+### 规则额度查询
+
+- 每条规则支持配置：
+  - `enabled`、`provider`、`endpoint`、`method`
+  - `useRuleToken` / `customToken`
+  - `authHeader`、`authScheme`、`customHeaders`
+  - `response.remaining`、`response.unit`、`response.total`、`response.resetAt`
+  - `lowThresholdPercent`
+- 服务页可在规则卡片查看剩余额度，并支持单条刷新。
+
+映射示例：
+
+```json
+{
+  "response": {
+    "remaining": "$.data.remaining_balance",
+    "unit": "$.data.currency",
+    "total": "$.data.total_balance",
+    "resetAt": "$.data.reset_at"
+  }
+}
+```
+
+```json
+{
+  "response": {
+    "remaining": "$.data.remaining_balance/$.data.remaining_total",
+    "unit": "$.data.unit"
+  }
+}
+```
+
+表达式支持与安全约束：
+- 仅支持数字字面量、`+ - * /`、括号、`path('$.x.y')`
+- 支持内联写法（如 `$.a/$.b`）
+- 不执行脚本，不依赖 `eval` 或外部进程
 
 ### 桌面界面
 
@@ -90,6 +133,7 @@ AI Open Router 是基于 Tauri 的桌面应用，内置本地代理运行时。
 - 规则创建/编辑页：
   - 协议、Token、API 地址、默认模型
   - 模型映射
+  - 额度查询接口与剩余额度映射配置
   - Token 明文/隐藏切换
 - 日志页：
   - 请求列表、状态筛选、刷新、清空
@@ -189,6 +233,54 @@ npm run test
 npm run ci
 ```
 
+发布流程请参考：`docs/release-process.md`
+数据库与本地持久化说明请参考：`docs/dev-database.md`
+
+## 调试指南
+
+```bash
+# 启动桌面开发模式
+npm start
+
+# 仅启动前端
+npm run dev
+
+# 检查本地代理状态
+curl http://localhost:8899/healthz
+curl http://localhost:8899/metrics-lite
+
+# 发布前校验版本一致性
+npm run version:check
+
+# 发布规划 dry-run（不改文件）
+npm run release:plan
+```
+
+排查建议：
+- 请求异常时先看应用内日志页，再检查 `GET /healthz` 与 `GET /metrics-lite`。
+- 测试失败时执行 `npm run test:rust` 直接验证后端单测。
+- 若仅发布相关 CI 失败，本地先运行 `npm run release:plan -- --from-tag <tag>` 复现。
+- 若发布说明为空，确认 `CHANGELOG.md` 中存在 `## vX.Y.Z - YYYY-MM-DD` 小节。
+
+## 发布速查
+
+```bash
+# 1) 预览版本号和 changelog（建议指定基线 tag）
+npm run release:plan -- --from-tag v0.2.1
+
+# 2) 生成版本升级与 changelog
+npm run release:prepare -- --from-tag v0.2.1
+
+# 3) 提交发布变更并发起 PR
+git checkout -b release/vX.Y.Z
+git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json CHANGELOG.md
+git commit -m "chore(release): vX.Y.Z"
+
+# 4) 合并到 main（CI 会自动创建 vX.Y.Z tag 并触发 Release Build）
+```
+
+完整流程见：`docs/release-process.md`
+
 ## 打包命令
 
 ```bash
@@ -210,7 +302,11 @@ npm run tauri:collect
 
 ## 配置与持久化
 
-首次启动会在应用数据目录生成 `config.json`。
+首次启动会在应用数据目录生成以下文件：
+
+- `config.json`：基础配置
+- `providers.sqlite`：分组与 Provider（原规则）配置
+- `request-stats.sqlite`：请求统计事件数据
 
 核心配置：
 - `server`：host、port、本地 Bearer 鉴权
@@ -218,12 +314,12 @@ npm run tauri:collect
 - `logging`：请求体记录与脱敏规则
 - `ui`：主题、语言、启动与托盘行为
 - `remoteGit`：远程同步配置
-- `groups[]`：id/name/models/rules/activeRuleId
+- `groups[]`：运行态存在；持久化以 `providers.sqlite` 为准
 
 数据行为：
 - 请求日志列表在内存中保存（默认最多 100 条）
-- 聚合统计持久化到应用数据目录（`request-stats.json`）
-- 统计保留周期为 90 天
+- 聚合统计基于 `request-stats.sqlite` 事件数据实时汇总
+- 统计数据当前默认持续保留（无自动过期清理）
 - 导入备份会覆盖当前全部分组与规则
 
 ## 安全说明

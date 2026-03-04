@@ -13,7 +13,10 @@ import {
   SettingsPage,
 } from "@/pages"
 import { useProxyStore } from "@/store"
-import { formatServerAddressForDisplay, resolveReachableServerBaseUrls } from "@/utils/serverAddress"
+import {
+  formatServerAddressForDisplay,
+  resolveReachableServerBaseUrls,
+} from "@/utils/serverAddress"
 
 /**
  * Main App Component
@@ -103,7 +106,9 @@ const App: React.FC = () => {
 
   console.log("[App] About to render layout")
 
-  if (loading && !error) {
+  const isInitialLoading = loading && !error && !config && !status
+
+  if (isInitialLoading) {
     console.log("[App] Showing loading screen")
     return (
       <div className="loading-screen">
@@ -135,8 +140,8 @@ const App: React.FC = () => {
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/logs/:traceId" element={<LogDetailPage />} />
         <Route path="/groups/:groupId/edit" element={<GroupEditPage />} />
-        <Route path="/groups/:groupId/rules/new" element={<RuleCreatePage />} />
-        <Route path="/groups/:groupId/rules/:ruleId/edit" element={<RuleEditPage />} />
+        <Route path="/groups/:groupId/providers/new" element={<RuleCreatePage />} />
+        <Route path="/groups/:groupId/providers/:providerId/edit" element={<RuleEditPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

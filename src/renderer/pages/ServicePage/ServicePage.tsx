@@ -11,41 +11,96 @@ import styles from "./ServicePage.module.css"
 
 /**
  * ServicePage Component
- * Main page for managing proxy groups and rules
+ * Main page for managing proxy groups and providers
  */
 export const ServicePage: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { config, saveConfig, status } = useProxyStore()
+  const {
+    config,
+    saveConfig,
+    status,
+    activeGroupId,
+    setActiveGroupId,
+    providerQuotas,
+    providerCardStatsByProviderKey,
+    quotaLoadingProviderKeys,
+    fetchGroupQuotas,
+    fetchGroupProviderCardStats,
+    fetchProviderQuota,
+  } = useProxyStore()
   const { showToast } = useLogs()
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
-  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null)
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
   const [showAddGroupModal, setShowAddGroupModal] = useState(false)
   const [showDeleteGroupModal, setShowDeleteGroupModal] = useState(false)
-  const [showDeleteRuleModal, setShowDeleteRuleModal] = useState(false)
-  const [pendingDeleteRuleId, setPendingDeleteRuleId] = useState<string | null>(null)
-  const [activatingRuleId, setActivatingRuleId] = useState<string | null>(null)
+  const [showDeleteProviderModal, setShowDeleteProviderModal] = useState(false)
+  const [pendingDeleteProviderId, setPendingDeleteProviderId] = useState<string | null>(null)
+  const [activatingProviderId, setActivatingProviderId] = useState<string | null>(null)
   const [newGroupName, setNewGroupName] = useState("")
   const [newGroupId, setNewGroupId] = useState("")
+  const providerCardStatsHours = 24
+  const providerCardStatsRefreshIntervalMs = 10_000
 
   const groups = config?.groups ?? []
   const activeGroup = groups.find(g => g.id === activeGroupId)
   const activeGroupModels = Array.isArray(activeGroup?.models) ? activeGroup.models : []
-  const activeRule = activeGroup?.rules.find(r => r.id === selectedRuleId) ?? null
-  const pendingDeleteRule = activeGroup?.rules.find(r => r.id === pendingDeleteRuleId) ?? null
+  const activeProvider = activeGroup?.providers.find(item => item.id === selectedProviderId) ?? null
+  const pendingDeleteProvider =
+    activeGroup?.providers.find(item => item.id === pendingDeleteProviderId) ?? null
+  const quotaAutoRefreshIntervalMs = React.useMemo(() => {
+    const minutes = config?.ui?.quotaAutoRefreshMinutes
+    if (!Number.isInteger(minutes) || !minutes || minutes < 1 || minutes > 1440) {
+      return 5 * 60 * 1000
+    }
+    return minutes * 60 * 1000
+  }, [config?.ui?.quotaAutoRefreshMinutes])
 
-  // Auto-select first group if none selected
+  // Auto-select first valid group if selection is empty/invalid
   React.useEffect(() => {
-    if (!activeGroupId && groups.length > 0) {
+    if (groups.length === 0) {
+      if (activeGroupId !== null) {
+        setActiveGroupId(null)
+      }
+      return
+    }
+
+    const activeGroupExists = !!groups.find(group => group.id === activeGroupId)
+    if (!activeGroupExists) {
       setActiveGroupId(groups[0].id)
     }
-  }, [groups, activeGroupId])
+  }, [groups, activeGroupId, setActiveGroupId])
+
+  React.useEffect(() => {
+    if (!activeGroupId) return
+    void fetchGroupQuotas(activeGroupId)
+  }, [activeGroupId, fetchGroupQuotas])
+
+  React.useEffect(() => {
+    if (!activeGroupId) return
+    void fetchGroupProviderCardStats(activeGroupId, providerCardStatsHours)
+  }, [activeGroupId, fetchGroupProviderCardStats])
+
+  React.useEffect(() => {
+    if (!activeGroupId) return
+    const timer = window.setInterval(() => {
+      void fetchGroupQuotas(activeGroupId)
+    }, quotaAutoRefreshIntervalMs)
+    return () => window.clearInterval(timer)
+  }, [activeGroupId, fetchGroupQuotas, quotaAutoRefreshIntervalMs])
+
+  React.useEffect(() => {
+    if (!activeGroupId) return
+    const timer = window.setInterval(() => {
+      void fetchGroupProviderCardStats(activeGroupId, providerCardStatsHours)
+    }, providerCardStatsRefreshIntervalMs)
+    return () => window.clearInterval(timer)
+  }, [activeGroupId, fetchGroupProviderCardStats])
 
   const handleSelectGroup = (groupId: string) => {
     setActiveGroupId(groupId)
-    setSelectedRuleId(null)
-    setShowDeleteRuleModal(false)
-    setPendingDeleteRuleId(null)
+    setSelectedProviderId(null)
+    setShowDeleteProviderModal(false)
+    setPendingDeleteProviderId(null)
   }
 
   const openAddGroupModal = () => {
@@ -76,8 +131,8 @@ export const ServicePage: React.FC = () => {
       id: normalizedId,
       name: newGroupName.trim(),
       models: [],
-      activeRuleId: null,
-      rules: [],
+      activeProviderId: null,
+      providers: [],
     }
 
     const newConfig: ProxyConfig = {
@@ -111,22 +166,25 @@ export const ServicePage: React.FC = () => {
     }
   }
 
-  const handleRequestDeleteRule = (ruleId: string) => {
-    setPendingDeleteRuleId(ruleId)
-    setShowDeleteRuleModal(true)
+  const handleRequestDeleteProvider = (providerId: string) => {
+    setPendingDeleteProviderId(providerId)
+    setShowDeleteProviderModal(true)
   }
 
-  const handleActivateRule = async (ruleId: string) => {
+  const handleActivateProvider = async (providerId: string) => {
     if (!activeGroupId || !config) return
-    if (activeGroup?.activeRuleId === ruleId) return
+    if (activeGroup?.activeProviderId === providerId) return
 
-    setActivatingRuleId(ruleId)
+    setActivatingProviderId(providerId)
     try {
       const newGroups = config.groups.map(group => {
         if (group.id !== activeGroupId) {
           return group
         }
-        return { ...group, activeRuleId: ruleId }
+        return {
+          ...group,
+          activeProviderId: providerId,
+        }
       })
 
       await saveConfig({
@@ -137,23 +195,27 @@ export const ServicePage: React.FC = () => {
     } catch (error) {
       showToast(t("errors.saveFailed", { message: String(error) }), "error")
     } finally {
-      setActivatingRuleId(null)
+      setActivatingProviderId(null)
     }
   }
 
-  const handleDeleteRule = async () => {
-    if (!activeGroupId || !config || !pendingDeleteRuleId) return
+  const handleDeleteProvider = async () => {
+    if (!activeGroupId || !config || !pendingDeleteProviderId) return
 
     const newGroups = config.groups.map(group => {
       if (group.id === activeGroupId) {
-        const newRules = group.rules.filter(r => r.id !== pendingDeleteRuleId)
+        const newProviders = group.providers.filter(item => item.id !== pendingDeleteProviderId)
         const newActiveId =
-          group.activeRuleId === pendingDeleteRuleId
-            ? newRules.length > 0
-              ? newRules[0].id
+          group.activeProviderId === pendingDeleteProviderId
+            ? newProviders.length > 0
+              ? newProviders[0].id
               : null
-            : group.activeRuleId
-        return { ...group, rules: newRules, activeRuleId: newActiveId }
+            : group.activeProviderId
+        return {
+          ...group,
+          providers: newProviders,
+          activeProviderId: newActiveId,
+        }
       }
       return group
     })
@@ -161,12 +223,21 @@ export const ServicePage: React.FC = () => {
     const newConfig = { ...config, groups: newGroups }
     try {
       await saveConfig(newConfig)
-      setSelectedRuleId(null)
-      setShowDeleteRuleModal(false)
-      setPendingDeleteRuleId(null)
+      setSelectedProviderId(null)
+      setShowDeleteProviderModal(false)
+      setPendingDeleteProviderId(null)
       showToast(t("toast.ruleDeleted"), "success")
     } catch (error) {
       showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
+  }
+
+  const handleRefreshProviderQuota = async (providerId: string) => {
+    if (!activeGroupId) return
+    try {
+      await fetchProviderQuota(activeGroupId, providerId)
+    } catch (error) {
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
     }
   }
 
@@ -194,6 +265,33 @@ export const ServicePage: React.FC = () => {
     if (!activeGroup) return []
     return serverBaseUrls.map(baseUrl => `${baseUrl}/oc/${activeGroup.id}`)
   }, [activeGroup, serverBaseUrls])
+
+  const activeGroupQuotaByProviderId = React.useMemo(() => {
+    const map: Record<string, (typeof providerQuotas)[string] | undefined> = {}
+    if (!activeGroup) return map
+    for (const provider of activeGroup.providers) {
+      map[provider.id] = providerQuotas[`${activeGroup.id}:${provider.id}`]
+    }
+    return map
+  }, [activeGroup, providerQuotas])
+
+  const activeGroupQuotaLoadingByProviderId = React.useMemo(() => {
+    const map: Record<string, boolean> = {}
+    if (!activeGroup) return map
+    for (const provider of activeGroup.providers) {
+      map[provider.id] = !!quotaLoadingProviderKeys[`${activeGroup.id}:${provider.id}`]
+    }
+    return map
+  }, [activeGroup, quotaLoadingProviderKeys])
+
+  const activeGroupProviderCardStatsByProviderId = React.useMemo(() => {
+    const map: Record<string, (typeof providerCardStatsByProviderKey)[string] | undefined> = {}
+    if (!activeGroup) return map
+    for (const provider of activeGroup.providers) {
+      map[provider.id] = providerCardStatsByProviderKey[`${activeGroup.id}:${provider.id}`]
+    }
+    return map
+  }, [activeGroup, providerCardStatsByProviderKey])
 
   return (
     <div className={styles.servicePage}>
@@ -233,7 +331,7 @@ export const ServicePage: React.FC = () => {
                     >
                       <span className={styles.groupName}>{group.name}</span>
                       <span className={styles.groupPath}>/{group.id}</span>
-                      <span className={styles.groupRuleCount}>{group.rules.length}</span>
+                      <span className={styles.groupRuleCount}>{group.providers.length}</span>
                     </button>
                   </li>
                 ))}
@@ -258,7 +356,7 @@ export const ServicePage: React.FC = () => {
                 <div className={styles.groupMeta}>
                   <span className={styles.metaChip}>/{activeGroup.id}</span>
                   <span className={styles.metaChip}>
-                    {t("servicePage.rulesCount", { count: activeGroup.rules.length })}
+                    {t("servicePage.rulesCount", { count: activeGroup.providers.length })}
                   </span>
                   <span className={styles.metaChip}>
                     {t("servicePage.modelsCount", { count: activeGroupModels.length })}
@@ -303,41 +401,45 @@ export const ServicePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Rule List */}
+            {/* Provider List */}
             <RuleList
-              rules={activeGroup.rules}
-              activeRuleId={activeGroup.activeRuleId}
-              onSelect={setSelectedRuleId}
-              onActivate={handleActivateRule}
-              activatingRuleId={activatingRuleId}
-              onDelete={handleRequestDeleteRule}
+              providers={activeGroup.providers}
+              activeProviderId={activeGroup.activeProviderId}
+              onSelect={setSelectedProviderId}
+              onActivate={handleActivateProvider}
+              activatingProviderId={activatingProviderId}
+              quotaByRuleId={activeGroupQuotaByProviderId}
+              quotaLoadingByRuleId={activeGroupQuotaLoadingByProviderId}
+              cardStatsByRuleId={activeGroupProviderCardStatsByProviderId}
+              onRefreshQuota={handleRefreshProviderQuota}
+              onDelete={handleRequestDeleteProvider}
               groupName={activeGroup.name}
               groupId={activeGroup.id}
             />
 
-            {/* Rule Detail (when rule is selected) */}
-            {selectedRuleId && activeRule && (
+            {/* Provider Detail (when provider is selected) */}
+            {selectedProviderId && activeProvider && (
               <div className={styles.ruleDetail}>
-                <h3>{activeRule.name}</h3>
+                <h3>{activeProvider.name}</h3>
                 <div className={styles.ruleInfo}>
                   <div className={styles.ruleInfoItem}>
                     <span className={styles.label}>{t("servicePage.ruleProtocol")}:</span>
-                    <span>{t(`ruleProtocol.${activeRule.protocol}`)}</span>
+                    <span>{t(`ruleProtocol.${activeProvider.protocol}`)}</span>
                   </div>
                   <div className={styles.ruleInfoItem}>
                     <span className={styles.label}>{t("servicePage.apiAddress")}:</span>
-                    <span>{activeRule.apiAddress}</span>
+                    <span>{activeProvider.apiAddress}</span>
                   </div>
                   <div className={styles.ruleInfoItem}>
                     <span className={styles.label}>{t("servicePage.defaultModel")}:</span>
-                    <span>{activeRule.defaultModel}</span>
+                    <span>{activeProvider.defaultModel}</span>
                   </div>
                 </div>
                 <div className={styles.ruleActions}>
                   <Button
                     variant="danger"
                     size="small"
-                    onClick={() => handleRequestDeleteRule(activeRule.id)}
+                    onClick={() => handleRequestDeleteProvider(activeProvider.id)}
                   >
                     {t("servicePage.deleteRule")}
                   </Button>
@@ -411,32 +513,32 @@ export const ServicePage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Delete Rule Modal */}
+      {/* Delete Provider Modal */}
       <Modal
-        open={showDeleteRuleModal}
+        open={showDeleteProviderModal}
         onClose={() => {
-          setShowDeleteRuleModal(false)
-          setPendingDeleteRuleId(null)
+          setShowDeleteProviderModal(false)
+          setPendingDeleteProviderId(null)
         }}
         title={t("deleteRuleModal.title")}
       >
         <div className={styles.modalContent}>
           <p>
             {t("deleteRuleModal.confirmText", {
-              model: pendingDeleteRule?.name ?? "",
+              model: pendingDeleteProvider?.name ?? "",
             })}
           </p>
           <div className={styles.modalActions}>
             <Button
               variant="default"
               onClick={() => {
-                setShowDeleteRuleModal(false)
-                setPendingDeleteRuleId(null)
+                setShowDeleteProviderModal(false)
+                setPendingDeleteProviderId(null)
               }}
             >
               {t("common.cancel")}
             </Button>
-            <Button variant="danger" onClick={handleDeleteRule}>
+            <Button variant="danger" onClick={handleDeleteProvider}>
               {t("deleteRuleModal.confirmDelete")}
             </Button>
           </div>
