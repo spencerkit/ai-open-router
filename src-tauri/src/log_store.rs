@@ -59,6 +59,33 @@ impl LogStore {
         self.append_to_dev_file(&entry_for_dev_file);
     }
 
+    /// Upsert one log entry keyed by trace id and keep queue order stable.
+    pub fn upsert_by_trace_id(&self, entry: LogEntry) {
+        #[cfg(debug_assertions)]
+        let entry_for_dev_file = entry.clone();
+
+        let mut guard = self.inner.lock().expect("log mutex poisoned");
+        let mut replaced = false;
+        for existing in guard.iter_mut().rev() {
+            if existing.trace_id == entry.trace_id {
+                *existing = entry.clone();
+                replaced = true;
+                break;
+            }
+        }
+
+        if !replaced {
+            guard.push_back(entry);
+            while guard.len() > self.limit {
+                let _ = guard.pop_front();
+            }
+        }
+        drop(guard);
+
+        #[cfg(debug_assertions)]
+        self.append_to_dev_file(&entry_for_dev_file);
+    }
+
     /// Return at most `max` latest logs in chronological order.
     pub fn list(&self, max: usize) -> Vec<LogEntry> {
         let guard = self.inner.lock().expect("log mutex poisoned");

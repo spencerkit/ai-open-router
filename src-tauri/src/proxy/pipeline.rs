@@ -3,8 +3,9 @@
 //! Handles auth, routing, request/response mapping, upstream I/O, streaming, metrics, and final logging.
 
 use super::observability::{
-    apply_headers, extract_token_usage, finalize_log, log_simple, plain_headers,
-    proxy_error_response, response_headers_json, response_headers_sse, StreamTokenAccumulator,
+    append_processing_log, apply_headers, extract_token_usage, finalize_log, log_simple,
+    plain_downstream_headers, plain_headers, proxy_error_response, response_headers_json,
+    response_headers_sse, StreamTokenAccumulator,
 };
 use super::routing::{
     assert_rule_ready, build_rule_headers, detect_entry_protocol, refresh_route_index_if_needed,
@@ -24,6 +25,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use chrono::Utc;
 use futures_util::TryStreamExt;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
@@ -137,6 +139,8 @@ pub(super) async fn handle_proxy_request(
 ) -> Response {
     let trace_id = Uuid::new_v4().to_string();
     let started = std::time::Instant::now();
+    let request_timestamp = Utc::now().to_rfc3339();
+    let request_headers_plain = plain_downstream_headers(&headers);
 
     if method != Method::POST {
         let payload = json!({"error": {"code": "not_found", "message": "Use POST /oc/:groupId/:endpoint (messages/chat/completions/responses)"}});
@@ -317,6 +321,7 @@ pub(super) async fn handle_proxy_request(
             state.metrics.increment_error();
             finalize_log(
                 &state,
+                &request_timestamp,
                 &trace_id,
                 &method,
                 &parsed_path,
@@ -325,6 +330,8 @@ pub(super) async fn handle_proxy_request(
                 &entry,
                 Some(&requested_model),
                 Some(&target_model),
+                None,
+                Some(request_headers_plain.clone()),
                 None,
                 Some(request_body.clone()),
                 None,
@@ -359,6 +366,7 @@ pub(super) async fn handle_proxy_request(
             state.metrics.increment_error();
             finalize_log(
                 &state,
+                &request_timestamp,
                 &trace_id,
                 &method,
                 &parsed_path,
@@ -368,6 +376,8 @@ pub(super) async fn handle_proxy_request(
                 Some(&requested_model),
                 Some(&target_model),
                 Some(&upstream_url),
+                Some(request_headers_plain.clone()),
+                None,
                 Some(request_body.clone()),
                 None,
                 Some(json!({
@@ -396,6 +406,24 @@ pub(super) async fn handle_proxy_request(
     state.metrics.increment_request(stream);
 
     let upstream_headers = build_rule_headers(&target_protocol, &active_route.rule);
+    append_processing_log(
+        &state,
+        &request_timestamp,
+        &trace_id,
+        &method,
+        &parsed_path,
+        &active_route.group_name,
+        &active_route.rule,
+        &entry,
+        Some(&requested_model),
+        Some(&target_model),
+        Some(&upstream_url),
+        Some(request_headers_plain.clone()),
+        Some(upstream_headers.clone()),
+        Some(request_body.clone()),
+        Some(upstream_body.clone()),
+        capture_body,
+    );
     let request_timeout_ms = resolve_request_timeout_ms(stream, &entry, &target_protocol);
 
     let upstream_resp = match state
@@ -419,6 +447,7 @@ pub(super) async fn handle_proxy_request(
             state.metrics.increment_error();
             finalize_log(
                 &state,
+                &request_timestamp,
                 &trace_id,
                 &method,
                 &parsed_path,
@@ -428,6 +457,8 @@ pub(super) async fn handle_proxy_request(
                 Some(&requested_model),
                 Some(&target_model),
                 Some(&upstream_url),
+                Some(request_headers_plain.clone()),
+                Some(upstream_headers.clone()),
                 Some(request_body.clone()),
                 Some(upstream_body.clone()),
                 Some(json!({
@@ -484,6 +515,9 @@ pub(super) async fn handle_proxy_request(
         let stream_requested_model = requested_model.clone();
         let stream_target_model = target_model.clone();
         let stream_upstream_url = upstream_url.clone();
+        let stream_request_timestamp = request_timestamp.clone();
+        let stream_request_headers = request_headers_plain.clone();
+        let stream_forward_request_headers = upstream_headers.clone();
         let stream_request_body = request_body.clone();
         let stream_upstream_body = upstream_body.clone();
         let stream_upstream_headers = upstream_headers_plain.clone();
@@ -592,6 +626,7 @@ pub(super) async fn handle_proxy_request(
             let mut response_headers = response_headers_sse(&stream_trace_id);
             finalize_log(
                 &stream_state,
+                &stream_request_timestamp,
                 &stream_trace_id,
                 &stream_method,
                 &stream_parsed_path,
@@ -601,6 +636,8 @@ pub(super) async fn handle_proxy_request(
                 Some(&stream_requested_model),
                 Some(&stream_target_model),
                 Some(&stream_upstream_url),
+                Some(stream_request_headers),
+                Some(stream_forward_request_headers),
                 Some(stream_request_body),
                 Some(stream_upstream_body),
                 stream_response_body,
@@ -654,6 +691,7 @@ pub(super) async fn handle_proxy_request(
             state.metrics.increment_error();
             finalize_log(
                 &state,
+                &request_timestamp,
                 &trace_id,
                 &method,
                 &parsed_path,
@@ -663,6 +701,8 @@ pub(super) async fn handle_proxy_request(
                 Some(&requested_model),
                 Some(&target_model),
                 Some(&upstream_url),
+                Some(request_headers_plain.clone()),
+                Some(upstream_headers.clone()),
                 Some(request_body.clone()),
                 Some(upstream_body.clone()),
                 Some(json!({
@@ -701,6 +741,7 @@ pub(super) async fn handle_proxy_request(
             state.metrics.increment_error();
             finalize_log(
                 &state,
+                &request_timestamp,
                 &trace_id,
                 &method,
                 &parsed_path,
@@ -710,6 +751,8 @@ pub(super) async fn handle_proxy_request(
                 Some(&requested_model),
                 Some(&target_model),
                 Some(&upstream_url),
+                Some(request_headers_plain.clone()),
+                Some(upstream_headers.clone()),
                 Some(request_body.clone()),
                 Some(upstream_body.clone()),
                 Some(json!({
@@ -749,6 +792,7 @@ pub(super) async fn handle_proxy_request(
         state.metrics.increment_error();
         finalize_log(
             &state,
+            &request_timestamp,
             &trace_id,
             &method,
             &parsed_path,
@@ -758,6 +802,8 @@ pub(super) async fn handle_proxy_request(
             Some(&requested_model),
             Some(&target_model),
             Some(&upstream_url),
+            Some(request_headers_plain.clone()),
+            Some(upstream_headers.clone()),
             Some(request_body.clone()),
             Some(upstream_body.clone()),
             Some(upstream_json.clone()),
@@ -797,6 +843,7 @@ pub(super) async fn handle_proxy_request(
 
     finalize_log(
         &state,
+        &request_timestamp,
         &trace_id,
         &method,
         &parsed_path,
@@ -806,6 +853,8 @@ pub(super) async fn handle_proxy_request(
         Some(&requested_model),
         Some(&target_model),
         Some(&upstream_url),
+        Some(request_headers_plain),
+        Some(upstream_headers),
         Some(request_body),
         Some(upstream_body),
         Some(output_body),
