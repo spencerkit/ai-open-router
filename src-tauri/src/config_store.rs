@@ -177,7 +177,11 @@ impl ConfigStore {
         for group in groups {
             let models_json = serde_json::to_string(&group.models)
                 .map_err(|e| format!("serialize group models failed: {e}"))?;
-            let provider_ids: Vec<String> = group.providers.iter().map(|provider| provider.id.clone()).collect();
+            let provider_ids: Vec<String> = group
+                .providers
+                .iter()
+                .map(|provider| provider.id.clone())
+                .collect();
             let provider_ids_json = serde_json::to_string(&provider_ids)
                 .map_err(|e| format!("serialize provider ids failed: {e}"))?;
             tx.execute(
@@ -299,7 +303,9 @@ fn load_groups_from_relational_tables(conn: &Connection) -> Result<Vec<Group>, S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::entities::{default_rule_cost_config, default_rule_quota_config, Rule, RuleProtocol};
+    use crate::domain::entities::{
+        default_rule_cost_config, default_rule_quota_config, Rule, RuleProtocol,
+    };
     use std::collections::HashMap;
     use uuid::Uuid;
 

@@ -199,7 +199,11 @@ pub(super) fn build_route_index(config: &ProxyConfig) -> RouteIndex {
     for group in &config.groups {
         let resolution = match group.active_provider_id.as_ref() {
             Some(active_rule_id) => {
-                match group.providers.iter().find(|rule| rule.id == *active_rule_id) {
+                match group
+                    .providers
+                    .iter()
+                    .find(|rule| rule.id == *active_rule_id)
+                {
                     Some(rule) => RouteResolution::Ready(ActiveRoute {
                         group_name: group.name.clone(),
                         group_models: group.models.clone(),

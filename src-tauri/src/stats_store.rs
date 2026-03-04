@@ -207,8 +207,8 @@ impl StatsStore {
         };
 
         let options = query_rule_options(&guard).unwrap_or_default();
-        let current = aggregate_window(&guard, window_start, now, &selection, dimension)
-            .unwrap_or_default();
+        let current =
+            aggregate_window(&guard, window_start, now, &selection, dimension).unwrap_or_default();
 
         let (peak_input_tps, peak_output_tps) = compute_peaks(&current.hourly);
         let current_duration_seconds =
@@ -268,7 +268,11 @@ impl StatsStore {
         }
     }
 
-    pub fn summarize_rule_cards(&self, group_id: &str, hours: Option<u32>) -> Vec<RuleCardStatsItem> {
+    pub fn summarize_rule_cards(
+        &self,
+        group_id: &str,
+        hours: Option<u32>,
+    ) -> Vec<RuleCardStatsItem> {
         let normalized_group_id = group_id.trim();
         if normalized_group_id.is_empty() {
             return vec![];
@@ -300,9 +304,8 @@ impl StatsStore {
             Err(_) => return vec![],
         };
 
-        let totals_rows = match totals_stmt.query_map(
-            params![start_ms, end_ms, normalized_group_id],
-            |row| {
+        let totals_rows =
+            match totals_stmt.query_map(params![start_ms, end_ms, normalized_group_id], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, i64>(1)? as u64,
@@ -310,11 +313,10 @@ impl StatsStore {
                     row.get::<_, i64>(3)? as u64,
                     row.get::<_, f64>(4)?,
                 ))
-            },
-        ) {
-            Ok(rows) => rows,
-            Err(_) => return vec![],
-        };
+            }) {
+                Ok(rows) => rows,
+                Err(_) => return vec![],
+            };
 
         let mut totals_map: BTreeMap<String, (u64, u64, u64, f64)> = BTreeMap::new();
         for row in totals_rows.flatten() {
@@ -338,9 +340,8 @@ impl StatsStore {
         };
 
         let mut points: BTreeMap<String, Vec<RuleCardHourlyPoint>> = BTreeMap::new();
-        if let Ok(rows) = hourly_stmt.query_map(
-            params![start_ms, end_ms, normalized_group_id],
-            |row| {
+        if let Ok(rows) =
+            hourly_stmt.query_map(params![start_ms, end_ms, normalized_group_id], |row| {
                 let input_tokens = row.get::<_, i64>(3)? as u64;
                 let output_tokens = row.get::<_, i64>(4)? as u64;
                 Ok((
@@ -353,8 +354,8 @@ impl StatsStore {
                         tokens: input_tokens + output_tokens,
                     },
                 ))
-            },
-        ) {
+            })
+        {
             for row in rows.flatten() {
                 points.entry(row.0).or_default().push(row.1);
             }
@@ -362,16 +363,20 @@ impl StatsStore {
 
         totals_map
             .into_iter()
-            .map(|(rule_id, (requests, input_tokens, output_tokens, total_cost))| RuleCardStatsItem {
-                group_id: normalized_group_id.to_string(),
-                rule_id: rule_id.clone(),
-                requests,
-                input_tokens,
-                output_tokens,
-                tokens: input_tokens + output_tokens,
-                total_cost,
-                hourly: points.remove(&rule_id).unwrap_or_default(),
-            })
+            .map(
+                |(rule_id, (requests, input_tokens, output_tokens, total_cost))| {
+                    RuleCardStatsItem {
+                        group_id: normalized_group_id.to_string(),
+                        rule_id: rule_id.clone(),
+                        requests,
+                        input_tokens,
+                        output_tokens,
+                        tokens: input_tokens + output_tokens,
+                        total_cost,
+                        hourly: points.remove(&rule_id).unwrap_or_default(),
+                    }
+                },
+            )
             .collect()
     }
 
@@ -459,7 +464,9 @@ fn query_rule_options(conn: &Connection) -> Result<Vec<StatsRuleOption>, String>
     let rows = stmt
         .query_map([], |row| {
             let group_id = row.get::<_, String>(0)?;
-            let group_name = row.get::<_, Option<String>>(1)?.unwrap_or_else(|| group_id.clone());
+            let group_name = row
+                .get::<_, Option<String>>(1)?
+                .unwrap_or_else(|| group_id.clone());
             let rule_id = row.get::<_, String>(2)?;
             let key = format!("{group_id}::{rule_id}");
             Ok(StatsRuleOption {
@@ -557,7 +564,9 @@ fn aggregate_window(
         .prepare(&currency_sql)
         .map_err(|e| format!("prepare currency query failed: {e}"))?;
     let currency_rows = currency_stmt
-        .query_map(params_from_iter(currency_args), |row| row.get::<_, String>(0))
+        .query_map(params_from_iter(currency_args), |row| {
+            row.get::<_, String>(0)
+        })
         .map_err(|e| format!("query currencies failed: {e}"))?;
     for row in currency_rows.flatten() {
         let currency = row.trim();
@@ -811,7 +820,8 @@ fn compute_peaks(hourly: &BTreeMap<String, HourlyStatsPoint>) -> (f64, f64) {
     let mut peak_output_tps: f64 = 0.0;
     for point in hourly.values() {
         let duration_seconds = duration_seconds_metric(point.total_duration_ms, point.requests);
-        peak_input_tps = peak_input_tps.max(token_speed_metric(point.input_tokens, duration_seconds));
+        peak_input_tps =
+            peak_input_tps.max(token_speed_metric(point.input_tokens, duration_seconds));
         peak_output_tps =
             peak_output_tps.max(token_speed_metric(point.output_tokens, duration_seconds));
     }

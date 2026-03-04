@@ -138,10 +138,7 @@ pub fn decode_request(body: &Value, options: &MapOptions) -> Result<CanonicalReq
         max_tokens: non_null(body, "max_tokens"),
         temperature: non_null(body, "temperature"),
         top_p: non_null(body, "top_p"),
-        stream: body
-            .get("stream")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true),
+        stream: body.get("stream").and_then(|v| v.as_bool()).unwrap_or(true),
         system: non_null(body, "system"),
         tools,
         tool_choice,

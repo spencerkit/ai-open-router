@@ -460,8 +460,7 @@ mod tests {
     use super::{evaluate_expression, extract_json_path, parse_quota_payload};
     use crate::models::{
         default_quota_low_threshold_percent, default_rule_cost_config, default_rule_quota_config,
-        QuotaStatus, QuotaUnitType,
-        RuleQuotaResponseMapping,
+        QuotaStatus, QuotaUnitType, RuleQuotaResponseMapping,
     };
     use crate::models::{Rule, RuleProtocol};
     use serde_json::{json, Value};

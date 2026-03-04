@@ -53,7 +53,10 @@ pub fn validate_config(config: &ProxyConfig) -> Result<(), String> {
                 return Err(format!("provider.id is required in group {}", group.id));
             }
             if provider.default_model.trim().is_empty() {
-                return Err(format!("provider.defaultModel required for {}", provider.id));
+                return Err(format!(
+                    "provider.defaultModel required for {}",
+                    provider.id
+                ));
             }
         }
         if let Some(active) = &group.active_provider_id {

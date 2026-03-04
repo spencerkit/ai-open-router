@@ -251,13 +251,18 @@ fn normalize_input_tokens(usage: &Value, raw_input_tokens: u64, cache_read_token
         .and_then(|details| details.get("cached_tokens"))
         .and_then(|value| value.as_u64())
         .is_some();
-    let has_openai_prompt_fields = usage.get("prompt_tokens").and_then(|value| value.as_u64()).is_some()
+    let has_openai_prompt_fields = usage
+        .get("prompt_tokens")
+        .and_then(|value| value.as_u64())
+        .is_some()
         || usage
             .get("completion_tokens")
             .and_then(|value| value.as_u64())
             .is_some();
 
-    if (has_openai_cached_details || has_openai_prompt_fields) && raw_input_tokens >= cache_read_tokens {
+    if (has_openai_cached_details || has_openai_prompt_fields)
+        && raw_input_tokens >= cache_read_tokens
+    {
         raw_input_tokens.saturating_sub(cache_read_tokens)
     } else {
         raw_input_tokens

@@ -280,7 +280,9 @@ mod tests {
     use super::{
         MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS, NON_STREAM_REQUEST_TIMEOUT_MS,
     };
-    use crate::models::{default_rule_cost_config, default_rule_quota_config, Group, Rule, RuleProtocol};
+    use crate::models::{
+        default_rule_cost_config, default_rule_quota_config, Group, Rule, RuleProtocol,
+    };
     use serde_json::{json, Value};
     use std::collections::HashMap;
 

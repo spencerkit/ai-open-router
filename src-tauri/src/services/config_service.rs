@@ -39,7 +39,8 @@ pub async fn import_groups_payload(
     state: &SharedState,
     parsed: Value,
 ) -> AppResult<(usize, ProxyConfig, bool, ProxyStatus)> {
-    let imported_groups = extract_groups_from_import_payload(&parsed).map_err(AppError::validation)?;
+    let imported_groups =
+        extract_groups_from_import_payload(&parsed).map_err(AppError::validation)?;
     let prev = state.config_store.get();
     let mut next = prev.clone();
     next.groups = merge_imported_groups(&prev.groups, &imported_groups);
@@ -114,7 +115,12 @@ fn merge_group_by_provider_name(current: &Group, imported: &Group) -> Group {
     let imported_active_name = imported
         .active_provider_id
         .as_ref()
-        .and_then(|active_id| imported.providers.iter().find(|provider| provider.id == *active_id))
+        .and_then(|active_id| {
+            imported
+                .providers
+                .iter()
+                .find(|provider| provider.id == *active_id)
+        })
         .map(|provider| provider.name.clone());
 
     for imported_provider in &imported.providers {
@@ -134,7 +140,10 @@ fn merge_group_by_provider_name(current: &Group, imported: &Group) -> Group {
 
     let mut next_active_provider_id = current.active_provider_id.clone();
     if let Some(active_name) = imported_active_name {
-        if let Some(provider) = providers.iter().find(|provider| provider.name == active_name) {
+        if let Some(provider) = providers
+            .iter()
+            .find(|provider| provider.name == active_name)
+        {
             next_active_provider_id = Some(provider.id.clone());
         }
     }
@@ -170,7 +179,10 @@ fn normalize_group_provider_ids(mut group: Group) -> Group {
         if let Some(next_active_id) = old_to_new_id.get(&active_id) {
             group.active_provider_id = Some(next_active_id.clone());
         } else {
-            let exists = group.providers.iter().any(|provider| provider.id == active_id);
+            let exists = group
+                .providers
+                .iter()
+                .any(|provider| provider.id == active_id);
             if !exists {
                 group.active_provider_id = None;
             }
@@ -236,13 +248,19 @@ mod tests {
             "group-a",
             "Local",
             Some("p-local"),
-            vec![provider("p-local", "alpha", "old-model"), provider("p-keep", "keep", "m2")],
+            vec![
+                provider("p-local", "alpha", "old-model"),
+                provider("p-keep", "keep", "m2"),
+            ],
         )];
         let imported = vec![group(
             "group-a",
             "Imported",
             Some("p-import"),
-            vec![provider("p-import", "alpha", "new-model"), provider("p-new", "beta", "m3")],
+            vec![
+                provider("p-import", "alpha", "new-model"),
+                provider("p-new", "beta", "m3"),
+            ],
         )];
 
         let merged = merge_imported_groups(&current, &imported);
@@ -270,8 +288,18 @@ mod tests {
 
     #[test]
     fn import_merge_keeps_local_groups_missing_in_import() {
-        let current = vec![group("group-local", "Local", None, vec![provider("p1", "x", "m1")])];
-        let imported = vec![group("group-new", "New", None, vec![provider("p2", "y", "m2")])];
+        let current = vec![group(
+            "group-local",
+            "Local",
+            None,
+            vec![provider("p1", "x", "m1")],
+        )];
+        let imported = vec![group(
+            "group-new",
+            "New",
+            None,
+            vec![provider("p2", "y", "m2")],
+        )];
         let merged = merge_imported_groups(&current, &imported);
         assert_eq!(merged.len(), 2);
         assert!(merged.iter().any(|group| group.id == "group-local"));
