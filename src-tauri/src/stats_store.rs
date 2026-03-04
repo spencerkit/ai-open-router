@@ -323,25 +323,27 @@ impl StatsStore {
 
         let current = aggregate_window(&guard, window_start, now, &selection, dimension);
         let (peak_rpm, peak_input_tpm, peak_output_tpm) = compute_peaks(&current.hourly);
-        let rpm = rate_metric(current.requests, requested_hours);
-        let input_tpm = rate_metric(current.input_tokens, requested_hours);
-        let output_tpm = rate_metric(current.output_tokens, requested_hours);
+        let current_active_minutes = active_minutes(&current.hourly);
+        let rpm = rate_metric(current.requests, current_active_minutes);
+        let input_tpm = rate_metric(current.input_tokens, current_active_minutes);
+        let output_tpm = rate_metric(current.output_tokens, current_active_minutes);
 
         let comparison = if enable_comparison {
             let previous_start = window_start - Duration::hours(requested_hours as i64);
             let previous =
                 aggregate_window(&guard, previous_start, window_start, &selection, dimension);
+            let previous_active_minutes = active_minutes(&previous.hourly);
             Some(ComparisonSummary {
                 requests_delta_pct: pct_delta(current.requests as f64, previous.requests as f64),
                 errors_delta_pct: pct_delta(current.errors as f64, previous.errors as f64),
-                rpm_delta_pct: pct_delta(rpm, rate_metric(previous.requests, requested_hours)),
+                rpm_delta_pct: pct_delta(rpm, rate_metric(previous.requests, previous_active_minutes)),
                 input_tpm_delta_pct: pct_delta(
                     input_tpm,
-                    rate_metric(previous.input_tokens, requested_hours),
+                    rate_metric(previous.input_tokens, previous_active_minutes),
                 ),
                 output_tpm_delta_pct: pct_delta(
                     output_tpm,
-                    rate_metric(previous.output_tokens, requested_hours),
+                    rate_metric(previous.output_tokens, previous_active_minutes),
                 ),
             })
         } else {
@@ -557,12 +559,21 @@ fn normalize_dimension(dimension: Option<&str>) -> StatsDimension {
     }
 }
 
-fn rate_metric(total: u64, hours: u32) -> f64 {
-    let minutes = (hours as f64) * 60.0;
+fn active_minutes(hourly: &BTreeMap<String, HourlyStatsPoint>) -> f64 {
+    let active_hours = hourly.values().filter(|point| point.requests > 0).count() as f64;
+    let minutes = active_hours * 60.0;
     if minutes <= 0.0 {
+        1.0
+    } else {
+        minutes
+    }
+}
+
+fn rate_metric(total: u64, active_minutes: f64) -> f64 {
+    if active_minutes <= 0.0 {
         0.0
     } else {
-        total as f64 / minutes
+        total as f64 / active_minutes
     }
 }
 
