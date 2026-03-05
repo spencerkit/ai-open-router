@@ -106,6 +106,11 @@ pub fn openai_responses_req_to_claude(openai_req: &[u8], model: &str) -> Result<
                     }
 
                     let role = item.get("role").and_then(|r| r.as_str()).unwrap_or("user");
+                    // Claude only supports "user" and "assistant" roles
+                    let claude_role = match role {
+                        "assistant" => "assistant",
+                        _ => "user" // Map developer, system, user all to user
+                    };
                     let mut content = Vec::new();
 
                     if let Some(parts) = item.get("content").and_then(|c| c.as_array()) {
@@ -117,7 +122,7 @@ pub fn openai_responses_req_to_claude(openai_req: &[u8], model: &str) -> Result<
                             }
                         }
                     }
-                    messages.push(json!({"role": role, "content": content}));
+                    messages.push(json!({"role": claude_role, "content": content}));
                 }
                 Some("function_call") => {
                     let call_id = item.get("call_id").and_then(|c| c.as_str()).unwrap_or("");
