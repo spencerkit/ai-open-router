@@ -612,6 +612,45 @@ fn contract_openai_to_anthropic_request_snapshot() {
 /// Test that null parameters/input_schema are handled correctly
 
 #[test]
+/// Ensures OpenAI tool parameters drop top-level `$schema` metadata.
+fn openai_chat_tools_strip_schema_field() {
+    use super::MapperSurface;
+    use super::map_request_by_surface;
+
+    let anthropic_input = json!({
+        "model": "claude-3-5-sonnet-20241022",
+        "messages": [{"role": "user", "content": "hello"}],
+        "tools": [{
+            "name": "test_tool",
+            "description": "A test tool",
+            "input_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" }
+                }
+            }
+        }]
+    });
+
+    let out = map_request_by_surface(
+        MapperSurface::AnthropicMessages,
+        MapperSurface::OpenaiChatCompletions,
+        &anthropic_input,
+        true,
+        "gpt-4"
+    ).expect("mapping should succeed");
+
+    let parameters = &out["tools"][0]["function"]["parameters"];
+    assert_eq!(parameters["type"], "object");
+    assert!(
+        parameters.get("$schema").is_none(),
+        "top-level $schema should be removed, got: {}",
+        parameters
+    );
+}
+
+#[test]
 /// Test that null parameters/input_schema are handled correctly
 fn tool_null_parameters_handled_correctly() {
     use super::MapperSurface;

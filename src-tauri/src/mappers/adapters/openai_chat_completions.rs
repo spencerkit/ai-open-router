@@ -20,6 +20,20 @@ fn non_null(body: &Value, key: &str) -> Option<Value> {
     body.get(key).filter(|v| !v.is_null()).cloned()
 }
 
+/// Removes any OpenAI `$schema` metadata before forwarding tool parameter unions.
+/// Returns a default empty object schema if input is null.
+pub fn strip_schema_field(schema: &Value) -> Value {
+    if schema.is_null() {
+        return json!({"type": "object", "properties": {}});
+    }
+    if let Some(mut map) = schema.as_object().cloned() {
+        map.remove("$schema");
+        Value::Object(map)
+    } else {
+        schema.clone()
+    }
+}
+
 /// Normalizes mixed OpenAI content shapes into canonical text blocks.
 fn parse_text_blocks(content: &Value) -> Vec<CanonicalBlock> {
     if let Some(arr) = content.as_array() {
@@ -366,7 +380,7 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
                     "function": {
                         "name": tool.name,
                         "description": tool.description.clone().unwrap_or(Value::Null),
-                        "parameters": tool.input_schema,
+                        "parameters": strip_schema_field(&tool.input_schema),
                     }
                 })
             })
