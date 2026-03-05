@@ -2,7 +2,7 @@
 //! Anthropic Messages API -> OpenAI Responses API
 
 use super::{Transformer, StreamContext};
-use super::convert::{claude_openai, openai_claude};
+use super::convert::{claude_openai, openai_claude, claude_openai_stream};
 
 pub struct MessagesToResponsesTransformer {
     model: String,
@@ -19,17 +19,25 @@ impl Transformer for MessagesToResponsesTransformer {
         claude_openai::claude_req_to_openai(claude_req, &self.model)
     }
 
-    fn transform_response(&self, target_resp: &[u8], _is_streaming: bool) -> Result<Vec<u8>, String> {
-        openai_claude::openai_resp_to_claude(target_resp)
+    fn transform_response(&self, target_resp: &[u8], is_streaming: bool) -> Result<Vec<u8>, String> {
+        if is_streaming {
+            Ok(target_resp.to_vec())
+        } else {
+            openai_claude::openai_resp_to_claude(target_resp)
+        }
     }
 
     fn transform_response_with_context(
         &self,
         target_resp: &[u8],
-        _is_streaming: bool,
-        _ctx: &mut StreamContext,
+        is_streaming: bool,
+        ctx: &mut StreamContext,
     ) -> Result<Vec<u8>, String> {
-        openai_claude::openai_resp_to_claude(target_resp)
+        if is_streaming {
+            claude_openai_stream::claude_stream_to_openai(target_resp, ctx)
+        } else {
+            openai_claude::openai_resp_to_claude(target_resp)
+        }
     }
 
     fn name(&self) -> &str {
