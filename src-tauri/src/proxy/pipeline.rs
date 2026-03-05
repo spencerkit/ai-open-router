@@ -492,7 +492,7 @@ pub(super) async fn handle_proxy_request(
         .unwrap_or_default()
         .to_lowercase();
 
-    if stream && upstream_ct.contains("text/event-stream") {
+    if upstream_ct.contains("text/event-stream") {
         let source_surface = surface_from_rule_protocol(&target_protocol);
         let target_surface = surface_from_entry(&entry);
         let mut stream_bridge = if upstream_is_error {
