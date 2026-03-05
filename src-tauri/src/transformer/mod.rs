@@ -9,6 +9,9 @@ pub mod registry;
 pub mod types;
 pub mod messages_to_responses;
 
+#[cfg(test)]
+mod tests;
+
 pub use types::StreamContext;
 pub use messages_to_responses::MessagesToResponsesTransformer;
 
