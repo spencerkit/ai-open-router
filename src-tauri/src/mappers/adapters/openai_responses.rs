@@ -401,13 +401,27 @@ pub fn encode_request(request: &CanonicalRequest) -> Value {
         out["instructions"] = json!(system_chunks.join("\n\n"));
     }
 
+    // Map Anthropic thinking to OpenAI reasoning
     if let Some(thinking) = &request.thinking {
-        out["thinking"] = thinking.clone();
+        if let Some(thinking_obj) = thinking.as_object() {
+            if let Some(thinking_type) = thinking_obj.get("type").and_then(|v| v.as_str()) {
+                let effort = match thinking_type {
+                    "enabled" => "medium",
+                    "adaptive" => "high",
+                    _ => "medium", // fallback
+                };
+                out["reasoning"] = json!({
+                    "effort": effort
+                });
+            }
+        }
     }
 
-    if let Some(context_management) = &request.context_management {
-        out["context_management"] = context_management.clone();
-    }
+    // Note: context_management is not forwarded as OpenAI API currently rejects it
+    // with "Unsupported parameter" error despite being in the SDK types.
+    // if let Some(context_management) = &request.context_management {
+    //     out["context_management"] = context_management.clone();
+    // }
 
     out
 }
@@ -431,6 +445,7 @@ pub fn decode_response(responses: &Value, request_model: &str) -> CanonicalRespo
 
     let mut text = String::new();
     let mut tool_calls = vec![];
+    let mut reasoning_text = String::new();
     if let Some(arr) = responses.get("output").and_then(|v| v.as_array()) {
         for item in arr {
             let item_type = item
@@ -465,7 +480,27 @@ pub fn decode_response(responses: &Value, request_model: &str) -> CanonicalRespo
                     },
                 }));
             }
+
+            // Extract reasoning content and map to thinking
+            if item_type == "reasoning" {
+                if let Some(content_arr) = item.get("content").and_then(|v| v.as_array()) {
+                    for content_item in content_arr {
+                        if content_item.get("type").and_then(|v| v.as_str()) == Some("reasoning_text") {
+                            reasoning_text.push_str(
+                                content_item.get("reasoning")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default(),
+                            );
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    // Prepend reasoning as thinking block if present
+    if !reasoning_text.is_empty() {
+        text = format!("<thinking>\n{}\n</thinking>\n\n{}", reasoning_text, text);
     }
 
     chat_like["choices"][0]["message"]["content"] = json!(text);
@@ -908,5 +943,321 @@ impl OpenaiChatToResponsesStreamMapper {
         ));
 
         self.completed = true;
+    }
+}
+
+/// Stream mapper that converts OpenAI Responses SSE events into Anthropic Messages SSE.
+pub(crate) struct OpenaiResponsesToAnthropicStreamMapper {
+    request_model: String,
+    upstream_id: Option<String>,
+    upstream_model: Option<String>,
+    message_started: bool,
+    message_stopped: bool,
+    next_block_index: usize,
+    accumulated_text: String,
+    tool_states: HashMap<String, ResponsesToolState>,
+    output_index_to_tool_id: HashMap<usize, String>,
+    final_stop_reason: Option<String>,
+    final_usage: Option<Value>,
+}
+
+#[derive(Clone)]
+struct ResponsesToolState {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+impl OpenaiResponsesToAnthropicStreamMapper {
+    /// Creates a stream mapper that converts responses SSE events into Anthropic messages SSE.
+    pub(crate) fn new(request_model: &str) -> Self {
+        Self {
+            request_model: request_model.to_string(),
+            upstream_id: None,
+            upstream_model: None,
+            message_started: false,
+            message_stopped: false,
+            next_block_index: 0,
+            accumulated_text: String::new(),
+            tool_states: HashMap::new(),
+            output_index_to_tool_id: HashMap::new(),
+            final_stop_reason: None,
+            final_usage: None,
+        }
+    }
+
+    /// Consumes one responses SSE JSON payload and emits Anthropic messages SSE events.
+    pub(crate) fn on_stream_payload(
+        &mut self,
+        event: Option<&str>,
+        payload: &Value,
+    ) -> Vec<(String, Value)> {
+        let mut out = Vec::new();
+        self.update_common_metadata(payload);
+        let event_name = self.resolve_event_name(event, payload);
+
+        if let Some(name) = event_name.as_deref() {
+            match name {
+                "response.created" => {
+                    self.ensure_message_start(&mut out);
+                }
+                "response.output_text.delta" => {
+                    self.ensure_message_start(&mut out);
+                    if let Some(text) = payload
+                        .get("delta")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| payload.get("text").and_then(|v| v.as_str()))
+                    {
+                        self.emit_text_delta(text, &mut out);
+                    }
+                }
+                "response.output_item.added" => {
+                    self.ensure_message_start(&mut out);
+                    if let Some(item) = payload.get("item") {
+                        if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
+                            let output_index = payload
+                                .get("output_index")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0) as usize;
+                            let call_id = item
+                                .get("call_id")
+                                .or_else(|| item.get("id"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("call_unknown")
+                                .to_string();
+                            let name = item
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            self.output_index_to_tool_id
+                                .insert(output_index, call_id.clone());
+                            self.tool_states.insert(
+                                call_id.clone(),
+                                ResponsesToolState {
+                                    id: call_id,
+                                    name,
+                                    arguments: String::new(),
+                                },
+                            );
+                        }
+                    }
+                }
+                "response.function_call_arguments.delta" => {
+                    self.ensure_message_start(&mut out);
+                    if let Some(_item) = payload.get("item") {
+                        let output_index = payload
+                            .get("output_index")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as usize;
+                        if let Some(call_id) = self.output_index_to_tool_id.get(&output_index) {
+                            if let Some(delta) = payload.get("delta").and_then(|v| v.as_str()) {
+                                if let Some(state) = self.tool_states.get_mut(call_id) {
+                                    state.arguments.push_str(delta);
+                                }
+                            }
+                        }
+                    }
+                }
+                "response.output_item.done" | "response.done" | "response.completed" => {
+                    if let Some(response) = payload.get("response") {
+                        if let Some(usage) = response.get("usage") {
+                            self.final_usage = Some(usage.clone());
+                        }
+                        if let Some(status) = response.get("status").and_then(|v| v.as_str()) {
+                            self.final_stop_reason = Some(match status {
+                                "completed" => "end_turn",
+                                "incomplete" => "max_tokens",
+                                "failed" => "error",
+                                _ => "end_turn",
+                            }
+                            .to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    /// Handles done event.
+    pub(crate) fn on_done(&mut self) -> Vec<(String, Value)> {
+        self.emit_final_events()
+    }
+
+    /// Performs finish.
+    pub(crate) fn finish(&mut self) -> Vec<(String, Value)> {
+        self.emit_final_events()
+    }
+
+    /// Builds final Anthropic message JSON.
+    pub(crate) fn final_message_json(&self) -> Option<Value> {
+        if !self.message_stopped {
+            return None;
+        }
+        let mut content = Vec::new();
+        if !self.accumulated_text.is_empty() {
+            content.push(json!({
+                "type": "text",
+                "text": self.accumulated_text,
+            }));
+        }
+        for (_, state) in &self.tool_states {
+            content.push(json!({
+                "type": "tool_use",
+                "id": state.id,
+                "name": state.name,
+                "input": serde_json::from_str::<Value>(&state.arguments).unwrap_or(json!({})),
+            }));
+        }
+        Some(json!({
+            "id": self.message_id(),
+            "type": "message",
+            "role": "assistant",
+            "content": content,
+            "model": self.message_model(),
+            "stop_reason": self.final_stop_reason.clone().unwrap_or_else(|| "end_turn".to_string()),
+            "usage": self.anthropic_usage(),
+        }))
+    }
+
+    fn update_common_metadata(&mut self, payload: &Value) {
+        if let Some(response) = payload.get("response") {
+            if self.upstream_id.is_none() {
+                self.upstream_id = response.get("id").and_then(|v| v.as_str()).map(String::from);
+            }
+            if self.upstream_model.is_none() {
+                self.upstream_model = response
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+            }
+        }
+    }
+
+    fn resolve_event_name(&self, event: Option<&str>, payload: &Value) -> Option<String> {
+        if let Some(e) = event {
+            return Some(e.to_string());
+        }
+        payload
+            .get("type")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    }
+
+    fn ensure_message_start(&mut self, out: &mut Vec<(String, Value)>) {
+        if self.message_started {
+            return;
+        }
+        out.push((
+            "message_start".to_string(),
+            json!({
+                "type": "message_start",
+                "message": {
+                    "id": self.message_id(),
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [],
+                    "model": self.message_model(),
+                    "usage": { "input_tokens": 0, "output_tokens": 0 },
+                }
+            }),
+        ));
+        self.message_started = true;
+    }
+
+    fn emit_text_delta(&mut self, text: &str, out: &mut Vec<(String, Value)>) {
+        if text.is_empty() {
+            return;
+        }
+        self.accumulated_text.push_str(text);
+        out.push((
+            "content_block_delta".to_string(),
+            json!({
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": { "type": "text_delta", "text": text },
+            }),
+        ));
+    }
+
+    fn emit_final_events(&mut self) -> Vec<(String, Value)> {
+        if self.message_stopped {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        if !self.accumulated_text.is_empty() {
+            out.push((
+                "content_block_stop".to_string(),
+                json!({
+                    "type": "content_block_stop",
+                    "index": 0,
+                }),
+            ));
+        }
+        for (idx, (_, state)) in self.tool_states.iter().enumerate() {
+            out.push((
+                "content_block_start".to_string(),
+                json!({
+                    "type": "content_block_start",
+                    "index": idx + 1,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": state.id,
+                        "name": state.name,
+                    },
+                }),
+            ));
+            out.push((
+                "content_block_stop".to_string(),
+                json!({
+                    "type": "content_block_stop",
+                    "index": idx + 1,
+                }),
+            ));
+        }
+        out.push((
+            "message_delta".to_string(),
+            json!({
+                "type": "message_delta",
+                "delta": {
+                    "stop_reason": self.final_stop_reason.clone().unwrap_or_else(|| "end_turn".to_string()),
+                },
+                "usage": self.anthropic_usage(),
+            }),
+        ));
+        out.push((
+            "message_stop".to_string(),
+            json!({ "type": "message_stop" }),
+        ));
+        self.message_stopped = true;
+        out
+    }
+
+    fn message_id(&self) -> String {
+        self.upstream_id
+            .clone()
+            .unwrap_or_else(|| format!("msg_{}", Uuid::new_v4().simple()))
+    }
+
+    fn message_model(&self) -> String {
+        self.upstream_model
+            .clone()
+            .or_else(|| Some(self.request_model.clone()))
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+
+    fn anthropic_usage(&self) -> Value {
+        if let Some(usage) = &self.final_usage {
+            return json!({
+                "input_tokens": usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                "output_tokens": usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+            });
+        }
+        json!({
+            "input_tokens": 0,
+            "output_tokens": 0,
+        })
     }
 }

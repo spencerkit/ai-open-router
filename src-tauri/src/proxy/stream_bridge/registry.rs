@@ -1,7 +1,8 @@
 use super::emit::{push_sse_data_json, push_sse_done, push_sse_event};
 use crate::mappers::{
     map_response_by_surface, MapperSurface, OpenaiChatToAnthropicStreamMapper,
-    OpenaiChatToResponsesStreamMapper, OpenaiResponsesToChatStreamMapper,
+    OpenaiChatToResponsesStreamMapper, OpenaiResponsesToAnthropicStreamMapper,
+    OpenaiResponsesToChatStreamMapper,
 };
 use axum::body::Bytes;
 use serde_json::Value;
@@ -24,6 +25,11 @@ const BRIDGE_REGISTRY: &[(MapperSurface, MapperSurface, BridgeBuilder)] = &[
         MapperSurface::OpenaiChatCompletions,
         MapperSurface::OpenaiResponses,
         build_openai_chat_to_responses_bridge,
+    ),
+    (
+        MapperSurface::OpenaiResponses,
+        MapperSurface::AnthropicMessages,
+        build_openai_responses_to_anthropic_bridge,
     ),
 ];
 
@@ -82,6 +88,11 @@ fn build_openai_responses_to_chat_bridge(request_model: &str) -> Box<DynBridgeAd
 /// Constructs `OpenAI Chat -> OpenAI Responses` adapter.
 fn build_openai_chat_to_responses_bridge(request_model: &str) -> Box<DynBridgeAdapter> {
     Box::new(OpenaiChatToResponsesBridgeAdapter::new(request_model))
+}
+
+/// Constructs `OpenAI Responses -> Anthropic Messages` adapter.
+fn build_openai_responses_to_anthropic_bridge(request_model: &str) -> Box<DynBridgeAdapter> {
+    Box::new(OpenaiResponsesToAnthropicBridgeAdapter::new(request_model))
 }
 
 struct OpenaiChatToAnthropicBridgeAdapter {
@@ -256,5 +267,46 @@ impl BridgeAdapter for OpenaiChatToResponsesBridgeAdapter {
     /// Returns cached non-stream mapped output.
     fn final_response_json(&self) -> Option<Value> {
         self.non_stream_output.clone()
+    }
+}
+
+struct OpenaiResponsesToAnthropicBridgeAdapter {
+    mapper: OpenaiResponsesToAnthropicStreamMapper,
+}
+
+impl OpenaiResponsesToAnthropicBridgeAdapter {
+    /// Creates adapter and initializes its dedicated stream mapper.
+    fn new(request_model: &str) -> Self {
+        Self {
+            mapper: OpenaiResponsesToAnthropicStreamMapper::new(request_model),
+        }
+    }
+}
+
+impl BridgeAdapter for OpenaiResponsesToAnthropicBridgeAdapter {
+    /// Converts one responses SSE JSON frame into Anthropic message events.
+    fn on_json_frame(&mut self, event: Option<&str>, payload: &Value, out: &mut Vec<Bytes>) {
+        for (event, payload) in self.mapper.on_stream_payload(event, payload) {
+            push_sse_event(out, &event, &payload);
+        }
+    }
+
+    /// Converts upstream stream completion marker into Anthropic terminal events.
+    fn on_done_frame(&mut self, out: &mut Vec<Bytes>) {
+        for (event, payload) in self.mapper.on_done() {
+            push_sse_event(out, &event, &payload);
+        }
+    }
+
+    /// Flushes final Anthropic events on stream teardown.
+    fn finish(&mut self, out: &mut Vec<Bytes>) {
+        for (event, payload) in self.mapper.finish() {
+            push_sse_event(out, &event, &payload);
+        }
+    }
+
+    /// Returns final Anthropic non-stream message JSON.
+    fn final_response_json(&self) -> Option<Value> {
+        self.mapper.final_message_json()
     }
 }

@@ -28,7 +28,9 @@ pub use response::{
 };
 pub(crate) use adapters::anthropic_messages::OpenaiChatToAnthropicStreamMapper;
 pub(crate) use adapters::openai_chat_completions::OpenaiResponsesToChatStreamMapper;
-pub(crate) use adapters::openai_responses::OpenaiChatToResponsesStreamMapper;
+pub(crate) use adapters::openai_responses::{
+    OpenaiChatToResponsesStreamMapper, OpenaiResponsesToAnthropicStreamMapper,
+};
 
 #[cfg(test)]
 mod tests;
