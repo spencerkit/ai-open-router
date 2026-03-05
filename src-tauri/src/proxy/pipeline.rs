@@ -868,7 +868,7 @@ pub(super) fn build_upstream_body(
     let converted = match (entry.endpoint, target_protocol) {
         // OpenAI Responses -> Claude Messages
         (EntryEndpoint::Responses, RuleProtocol::Anthropic) => {
-            claude_openai_responses::openai_responses_to_claude(&request_bytes)?
+            claude_openai_responses::openai_responses_req_to_claude(&request_bytes, target_model)?
         }
         // Claude Messages -> OpenAI Responses
         (EntryEndpoint::Messages, RuleProtocol::Openai) => {
@@ -920,11 +920,11 @@ fn map_response_body(
     let converted = match (entry.endpoint, target_protocol) {
         // Claude Messages -> OpenAI Responses (response)
         (EntryEndpoint::Responses, RuleProtocol::Anthropic) => {
-            claude_openai_responses::claude_req_to_openai_responses(&response_bytes, "")
+            claude_openai_responses::claude_resp_to_openai_responses(&response_bytes)
         }
         // OpenAI Responses -> Claude Messages (response)
         (EntryEndpoint::Messages, RuleProtocol::Openai) => {
-            claude_openai_responses::openai_responses_to_claude(&response_bytes)
+            claude_openai_responses::openai_responses_resp_to_claude(&response_bytes)
         }
         // OpenAI Chat -> Claude Messages (response)
         (EntryEndpoint::Messages, RuleProtocol::OpenaiCompletion) => {
@@ -932,7 +932,7 @@ fn map_response_body(
         }
         // Claude Messages -> OpenAI Chat (response)
         (EntryEndpoint::ChatCompletions, RuleProtocol::Anthropic) => {
-            openai_claude::openai_resp_to_claude(&response_bytes)
+            claude_openai_responses::claude_resp_to_openai_responses(&response_bytes)
         }
         _ => return upstream_json.clone(),
     };
