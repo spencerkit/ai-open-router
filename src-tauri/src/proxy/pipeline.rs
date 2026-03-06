@@ -19,6 +19,7 @@ use super::{
 };
 use crate::models::RuleProtocol;
 use crate::transformer::StreamContext;
+use crate::transformer::convert::{claude_openai_stream, claude_openai_responses_stream};
 use axum::body::{to_bytes, Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, Method, StatusCode};
@@ -491,9 +492,8 @@ pub(super) async fn handle_proxy_request(
         .to_lowercase();
 
     if upstream_ct.contains("text/event-stream") {
-        // TODO: Implement streaming with new transformer architecture
-        let transformer = None::<()>;
         let mut stream_ctx = StreamContext::new();
+        stream_ctx.model_name = target_model.clone();
         let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(32);
         let stream_state = state.clone();
         let stream_trace_id = trace_id.clone();
@@ -508,6 +508,7 @@ pub(super) async fn handle_proxy_request(
             protocol: entry.protocol,
             endpoint: entry.endpoint,
         };
+        let stream_target_protocol = target_protocol.clone();
         let stream_requested_model = requested_model.clone();
         let stream_target_model = target_model.clone();
         let stream_upstream_url = upstream_url.clone();
@@ -521,6 +522,7 @@ pub(super) async fn handle_proxy_request(
         let stream_upstream_status = upstream_status;
         let stream_upstream_is_error = upstream_is_error;
         let stream_started = started;
+        let mut stream_ctx_moved = stream_ctx;
 
         tokio::spawn(async move {
             let mut bytes_stream = upstream_resp.bytes_stream();
@@ -534,7 +536,21 @@ pub(super) async fn handle_proxy_request(
                 match bytes_stream.try_next().await {
                     Ok(Some(bytes)) => {
                         usage_acc.consume_chunk(bytes.as_ref());
-                        let outgoing_chunks = vec![bytes];
+                        let outgoing_chunks = match (stream_entry.endpoint, stream_target_protocol.clone()) {
+                            (EntryEndpoint::Responses, RuleProtocol::Anthropic) => {
+                                match claude_openai_responses_stream::claude_stream_to_openai_responses(bytes.as_ref(), &mut stream_ctx_moved) {
+                                    Ok(converted) => vec![Bytes::from(converted)],
+                                    Err(_) => vec![bytes]
+                                }
+                            }
+                            (EntryEndpoint::ChatCompletions, RuleProtocol::Anthropic) => {
+                                match claude_openai_stream::claude_stream_to_openai(bytes.as_ref(), &mut stream_ctx_moved) {
+                                    Ok(converted) => vec![Bytes::from(converted)],
+                                    Err(_) => vec![bytes]
+                                }
+                            }
+                            _ => vec![bytes]
+                        };
 
                         for outgoing in outgoing_chunks {
                             if stream_capture_body && !stream_body_truncated {

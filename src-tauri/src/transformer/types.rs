@@ -197,15 +197,22 @@ pub struct ClaudeStreamEvent {
 pub struct StreamContext {
     pub message_start_sent: bool,
     pub content_block_started: bool,
+    pub thinking_block_started: bool,
     pub tool_block_started: bool,
+    pub tool_block_pending: bool,
     pub message_id: String,
     pub model_name: String,
     pub input_tokens: i32,
     pub output_tokens: i32,
     pub content_index: i32,
+    pub thinking_index: i32,
+    pub tool_index: i32,
     pub finish_reason_sent: bool,
     pub current_tool_call: Option<OpenAIToolCall>,
     pub tool_call_buffer: String,
+    pub current_tool_id: String,
+    pub current_tool_name: String,
+    pub tool_arguments: String,
 }
 
 impl StreamContext {
@@ -213,15 +220,22 @@ impl StreamContext {
         Self {
             message_start_sent: false,
             content_block_started: false,
+            thinking_block_started: false,
             tool_block_started: false,
+            tool_block_pending: false,
             message_id: String::new(),
             model_name: String::new(),
             input_tokens: 0,
             output_tokens: 0,
             content_index: 0,
+            thinking_index: 0,
+            tool_index: 0,
             finish_reason_sent: false,
             current_tool_call: None,
             tool_call_buffer: String::new(),
+            current_tool_id: String::new(),
+            current_tool_name: String::new(),
+            tool_arguments: String::new(),
         }
     }
 }
