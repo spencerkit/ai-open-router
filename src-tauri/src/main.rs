@@ -12,6 +12,7 @@ mod commands;
 mod config;
 mod config_store;
 mod domain;
+mod integration_store;
 mod log_store;
 mod mappers;
 mod models;
@@ -27,6 +28,8 @@ use commands::{
     app_report_renderer_error, app_start_server, app_stop_server, config_export_groups,
     config_export_groups_clipboard, config_export_groups_folder, config_get, config_import_groups,
     config_import_groups_json, config_remote_rules_pull, config_remote_rules_upload, config_save,
+    integration_add_target, integration_list_targets, integration_pick_directory,
+    integration_remove_target, integration_update_target, integration_write_group_entry,
     logs_clear, logs_list, logs_stats_clear, logs_stats_rule_cards, logs_stats_summary,
     provider_test_model, quota_get_group, quota_get_rule, quota_test_draft,
 };
@@ -69,6 +72,12 @@ async fn main() {
             config_import_groups_json,
             config_remote_rules_upload,
             config_remote_rules_pull,
+            integration_list_targets,
+            integration_pick_directory,
+            integration_add_target,
+            integration_update_target,
+            integration_remove_target,
+            integration_write_group_entry,
             app_read_clipboard_text,
             logs_list,
             logs_clear,

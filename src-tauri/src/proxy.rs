@@ -438,7 +438,7 @@ mod tests {
     /// Resolves target model uses group and rule mapping for this module's workflow.
     fn resolve_target_model_uses_group_and_rule_mapping() {
         let mut mappings = HashMap::new();
-        mappings.insert("m1".to_string(), "gpt-x".to_string());
+        mappings.insert("sonnet".to_string(), "claude-sonnet-4-5".to_string());
         let rule = Rule {
             id: "r1".to_string(),
             name: "rule".to_string(),
@@ -453,13 +453,45 @@ mod tests {
         let group = Group {
             id: "g1".to_string(),
             name: "Group".to_string(),
-            models: vec!["m1".to_string()],
+            models: vec!["sonnet".to_string()],
             active_provider_id: Some("r1".to_string()),
             providers: vec![rule.clone()],
         };
 
-        let model = resolve_target_model(&rule, &group.models, &json!({ "model": "m1" }));
-        assert_eq!(model, "gpt-x");
+        let model = resolve_target_model(
+            &rule,
+            &group.models,
+            &json!({ "model": "claude-3-7-sonnet-20250219" }),
+        );
+        assert_eq!(model, "claude-sonnet-4-5");
+    }
+
+    #[test]
+    /// Resolves target model uses case-insensitive fuzzy group matching.
+    fn resolve_target_model_matches_group_model_fuzzily_case_insensitive() {
+        let mut mappings = HashMap::new();
+        mappings.insert("codex-mini".to_string(), "gpt-5-codex-mini".to_string());
+        let rule = Rule {
+            id: "r1".to_string(),
+            name: "rule".to_string(),
+            protocol: RuleProtocol::Openai,
+            token: "t".to_string(),
+            api_address: "https://api.example.com".to_string(),
+            default_model: "fallback".to_string(),
+            model_mappings: mappings,
+            quota: default_rule_quota_config(),
+            cost: default_rule_cost_config(),
+        };
+        let group = Group {
+            id: "g1".to_string(),
+            name: "Group".to_string(),
+            models: vec!["codex-mini".to_string()],
+            active_provider_id: Some("r1".to_string()),
+            providers: vec![rule.clone()],
+        };
+
+        let model = resolve_target_model(&rule, &group.models, &json!({ "model": "GPT-5-CODEX-MINI" }));
+        assert_eq!(model, "gpt-5-codex-mini");
     }
 
     #[test]

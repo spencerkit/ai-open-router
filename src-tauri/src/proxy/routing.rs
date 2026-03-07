@@ -293,15 +293,20 @@ fn find_group_model_match<'a>(group_models: &'a [String], requested: &str) -> Op
     best
 }
 
-/// Returns whether model match is true.
+/// Returns true when `candidate` fuzzily matches `requested` (case-insensitive).
 fn is_model_match(candidate: &str, requested: &str) -> bool {
+    let candidate = candidate.trim();
+    let requested = requested.trim();
+    if candidate.is_empty() || requested.is_empty() {
+        return false;
+    }
+
     if candidate == requested {
         return true;
     }
 
-    if let Some(prefix) = candidate.strip_suffix('*') {
-        return !prefix.is_empty() && requested.starts_with(prefix);
-    }
+    let candidate_lower = candidate.to_ascii_lowercase();
+    let requested_lower = requested.to_ascii_lowercase();
 
-    requested.starts_with(candidate) && requested.as_bytes().get(candidate.len()) == Some(&b'-')
+    requested_lower.contains(&candidate_lower)
 }

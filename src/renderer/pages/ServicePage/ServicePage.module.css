@@ -336,6 +336,7 @@
 .groupActions {
   display: flex;
   gap: var(--sp-2);
+  flex-wrap: wrap;
 }
 
 /* ── Rule List ── */
@@ -1001,6 +1002,176 @@
   padding: var(--sp-2) 0;
 }
 
+.integrationModalContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.integrationModalHint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.integrationHiddenHint {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.integrationEntryUrl {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-raised));
+  min-width: 0;
+}
+
+.integrationEntryUrl code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.integrationLoading {
+  padding: var(--sp-4);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  color: var(--text-tertiary);
+  text-align: center;
+  font-size: var(--text-sm);
+}
+
+.integrationSectionList {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.integrationSection {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.integrationSectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.integrationSectionTitleWrap {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.integrationSectionTitleWrap h4 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.integrationSectionTitleWrap p {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.integrationEmpty {
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.integrationTargetList {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.integrationTargetItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  border: 1px solid color-mix(in oklab, var(--border) 84%, transparent);
+  background: color-mix(in oklab, var(--bg-raised) 92%, transparent);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.integrationTargetLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.integrationTargetLabel input[type="checkbox"] {
+  margin-top: 2px;
+}
+
+.integrationTargetPath {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.integrationTargetPathWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.integrationTargetWriteDetail {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.integrationModalActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.integrationSelectedCount {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.integrationModalActionsRight {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
 .modalContent .formGroup {
   margin-bottom: var(--sp-5);
 }
@@ -1042,6 +1213,20 @@
   .groupHeader {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .integrationTargetItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .integrationModalActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .integrationModalActionsRight {
+    justify-content: flex-end;
   }
 
   .entryUrl {

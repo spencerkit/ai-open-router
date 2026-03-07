@@ -89,6 +89,36 @@ export const zhCN = {
     firstRunStepRoute: "复制生成的入口 URL 到你的客户端或网关。",
   },
 
+  integration: {
+    openWrite: "将当前分组地址写入客户端",
+    modalTitle: "一键写入客户端配置",
+    modalHint: "将当前分组入口地址 {{path}} 写入你勾选的客户端配置目录。",
+    hiddenDirHint:
+      "如果目录是隐藏目录（如 .claude / .codex），可直接使用默认起始目录选择；也可在系统对话框中使用快捷键显示隐藏目录（macOS: Cmd+Shift+. / Linux: Ctrl+H）。",
+    addConfig: "添加配置",
+    changeConfigDirectory: "更换配置目录",
+    emptyTargets: "暂无配置目录，点击“添加配置”后可加入并勾选写入。",
+    selectedCount: "已选择 {{count}} 个配置",
+    confirmWrite: "写入配置",
+    writeToDetail: "写入位置：{{filePath}}（字段：{{fieldPath}}）",
+    toastTargetAdded: "{{client}} 配置已添加",
+    toastTargetUpdated: "{{client}} 配置目录已更新",
+    toastWriteSuccess: "写入成功：已更新 {{count}} 个配置",
+    toastWritePartial: "部分写入失败：成功 {{succeeded}}，失败 {{failed}}。{{message}}",
+    claude: {
+      title: "Claude",
+      hint: "默认目录 ~/.claude；写入 settings.json 的 env.ANTHROPIC_BASE_URL。",
+    },
+    codex: {
+      title: "Codex",
+      hint: "默认目录 ~/.codex；写入 config.toml 的 model_providers.aor_shared.base_url。",
+    },
+    opencode: {
+      title: "OpenCode",
+      hint: "默认目录 ~/.config/opencode；写入 opencode.json(c) 的 provider.aor_shared.options.baseURL。",
+    },
+  },
+
   // Rule Directions
   ruleDirection: {
     oc: "OpenAI -> Anthropic",
@@ -347,11 +377,13 @@ export const zhCN = {
   // Modals
   modal: {
     addGroupTitle: "添加分组",
-    groupNameLabel: "分组名称",
-    groupNamePlaceholder: "例如 claude",
-    groupIdLabel: "分组 ID",
-    groupIdPlaceholder: "例如 claude",
-    groupIdHint: "请求路径将固定为 `/oc/{{id}}`，创建后不可修改。",
+    groupNameLabel: "分组名称（用于展示）",
+    groupNamePlaceholder: "例如 生产环境",
+    groupNameHint: "主要用于页面展示和区分分组，不影响客户端请求路径。",
+    groupIdLabel: "分组 ID（用于请求路径）",
+    groupIdPlaceholder: "例如 prod",
+    groupIdHint:
+      "用于客户端请求前缀 `/oc/{{id}}`。仅支持字母、数字、-、_，创建后不可修改。",
     create: "创建",
     cancel: "取消",
     save: "保存",
@@ -512,9 +544,10 @@ export const zhCN = {
     title: "编辑分组",
     sectionBasic: "基础信息",
     sectionModels: "分组模型",
-    groupIdImmutable: "分组 ID 用于请求路径，创建后不可修改。",
+    groupNameHint: "仅用于页面展示，不影响客户端请求路径。",
+    groupIdImmutable: "用于客户端请求前缀 `/oc/{groupId}`，创建后不可修改。",
     modelMatchHint:
-      "支持前缀匹配：填写 ops 可匹配 ops-1/ops-2；填写 ops* 可匹配所有以 ops 开头的模型。",
+      "支持模糊匹配（忽略大小写）：填写 sonnet 可匹配 claude-3-7-sonnet 等模型。",
     noModels: "暂无模型，添加后即可在 Provider 中配置映射。",
     newModelPlaceholder: "例如 a1",
   },

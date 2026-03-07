@@ -227,3 +227,31 @@ export interface AppInfo {
   name: string
   version: string
 }
+
+export type IntegrationClientKind = "claude" | "codex" | "opencode"
+
+export interface IntegrationTarget {
+  id: string
+  kind: IntegrationClientKind
+  configDir: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface IntegrationWriteItem {
+  targetId: string
+  kind?: IntegrationClientKind | null
+  configDir: string
+  filePath?: string | null
+  ok: boolean
+  message?: string | null
+}
+
+export interface IntegrationWriteResult {
+  ok: boolean
+  groupId: string
+  entryUrl: string
+  succeeded: number
+  failed: number
+  items: IntegrationWriteItem[]
+}

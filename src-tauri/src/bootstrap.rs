@@ -4,6 +4,7 @@
 
 use crate::app_state::{apply_launch_on_startup_setting, AppState, SharedState};
 use crate::config_store::ConfigStore;
+use crate::integration_store::IntegrationStore;
 use crate::log_store::LogStore;
 use crate::models::AppInfo;
 use crate::proxy::ProxyRuntime;
@@ -339,6 +340,8 @@ pub fn setup_app(app: &mut App, app_name: &str, app_version: &str) -> Result<(),
     let config_path = app_data_dir.join("config.json");
     let config_store = ConfigStore::new(config_path);
     let _ = config_store.initialize();
+    let integration_store = IntegrationStore::new(app_data_dir.join("client-integrations.json"));
+    let _ = integration_store.initialize();
 
     let log_store = LogStore::with_dev_log_file(
         100,
@@ -364,6 +367,7 @@ pub fn setup_app(app: &mut App, app_name: &str, app_version: &str) -> Result<(),
             version: app_version.to_string(),
         },
         config_store,
+        integration_store,
         runtime,
         renderer_ready: AtomicBool::new(false),
     });

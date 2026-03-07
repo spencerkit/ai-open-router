@@ -1,11 +1,11 @@
-import { Copy, Pencil, Plus, Trash2 } from "lucide-react"
+import { Copy, Pencil, Plus, Trash2, Upload } from "lucide-react"
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { shallow } from "zustand/shallow"
 import { Button, Input, Modal } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import { useProxyStore } from "@/store"
-import type { Group, ProxyConfig } from "@/types"
+import type { Group, IntegrationClientKind, IntegrationTarget, ProxyConfig } from "@/types"
 import { ipc } from "@/utils/ipc"
 import { resolveReachableServerBaseUrls } from "@/utils/serverAddress"
 import { RuleList } from "./RuleList"
@@ -65,6 +65,13 @@ export const ServicePage: React.FC = () => {
   const [pendingDeleteProviderId, setPendingDeleteProviderId] = useState<string | null>(null)
   const [activatingProviderId, setActivatingProviderId] = useState<string | null>(null)
   const [testingProviderIds, setTestingProviderIds] = useState<Record<string, boolean>>({})
+  const [showIntegrationWriteModal, setShowIntegrationWriteModal] = useState(false)
+  const [integrationTargets, setIntegrationTargets] = useState<IntegrationTarget[]>([])
+  const [integrationLoading, setIntegrationLoading] = useState(false)
+  const [integrationWriting, setIntegrationWriting] = useState(false)
+  const [integrationAddingKind, setIntegrationAddingKind] = useState<IntegrationClientKind | null>(null)
+  const [integrationUpdatingTargetId, setIntegrationUpdatingTargetId] = useState<string | null>(null)
+  const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<Record<string, boolean>>({})
   const [newGroupName, setNewGroupName] = useState("")
   const [newGroupId, setNewGroupId] = useState("")
   const providerCardStatsHours = 24
@@ -80,6 +87,39 @@ export const ServicePage: React.FC = () => {
   const activeGroupModels = Array.isArray(activeGroup?.models) ? activeGroup.models : []
   const pendingDeleteProvider =
     activeGroup?.providers.find(item => item.id === pendingDeleteProviderId) ?? null
+  const integrationSections = useMemo(
+    () => [
+      {
+        kind: "claude" as const,
+        title: t("integration.claude.title"),
+        hint: t("integration.claude.hint"),
+      },
+      {
+        kind: "codex" as const,
+        title: t("integration.codex.title"),
+        hint: t("integration.codex.hint"),
+      },
+      {
+        kind: "opencode" as const,
+        title: t("integration.opencode.title"),
+        hint: t("integration.opencode.hint"),
+      },
+    ],
+    [t]
+  )
+  const selectedIntegrationTargetIds = useMemo(() => {
+    return Object.entries(selectedIntegrationIds)
+      .filter(([, checked]) => checked)
+      .map(([id]) => id)
+  }, [selectedIntegrationIds])
+  const integrationTargetsByKind = useMemo<Record<IntegrationClientKind, IntegrationTarget[]>>(
+    () => ({
+      claude: integrationTargets.filter(item => item.kind === "claude"),
+      codex: integrationTargets.filter(item => item.kind === "codex"),
+      opencode: integrationTargets.filter(item => item.kind === "opencode"),
+    }),
+    [integrationTargets]
+  )
   const quotaAutoRefreshIntervalMs = React.useMemo(() => {
     const minutes = config?.ui?.quotaAutoRefreshMinutes
     if (!Number.isInteger(minutes) || !minutes || minutes < 1 || minutes > 1440) {
@@ -335,6 +375,157 @@ export const ServicePage: React.FC = () => {
     }
   }
 
+  const getIntegrationClientLabel = (kind: IntegrationClientKind): string => {
+    switch (kind) {
+      case "claude":
+        return t("integration.claude.title")
+      case "codex":
+        return t("integration.codex.title")
+      case "opencode":
+      default:
+        return t("integration.opencode.title")
+    }
+  }
+
+  const loadIntegrationTargets = React.useCallback(async () => {
+    setIntegrationLoading(true)
+    try {
+      const targets = await ipc.integrationListTargets()
+      setIntegrationTargets(targets)
+    } catch (error) {
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
+    } finally {
+      setIntegrationLoading(false)
+    }
+  }, [showToast, t])
+
+  const openIntegrationWriteModal = async () => {
+    if (!activeGroup) return
+    setShowIntegrationWriteModal(true)
+    setSelectedIntegrationIds({})
+    await loadIntegrationTargets()
+  }
+
+  const closeIntegrationWriteModal = () => {
+    if (integrationWriting) return
+    setShowIntegrationWriteModal(false)
+    setSelectedIntegrationIds({})
+  }
+
+  const handleAddIntegrationTarget = async (kind: IntegrationClientKind) => {
+    setIntegrationAddingKind(kind)
+    try {
+      const pickedDir = await ipc.integrationPickDirectory(undefined, kind)
+      if (!pickedDir) return
+      const created = await ipc.integrationAddTarget(kind, pickedDir)
+      setIntegrationTargets(prev => [...prev, created])
+      setSelectedIntegrationIds(prev => ({ ...prev, [created.id]: true }))
+      showToast(
+        t("integration.toastTargetAdded", {
+          client: getIntegrationClientLabel(kind),
+        }),
+        "success"
+      )
+    } catch (error) {
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
+    } finally {
+      setIntegrationAddingKind(null)
+    }
+  }
+
+  const handleUpdateIntegrationTarget = async (target: IntegrationTarget) => {
+    setIntegrationUpdatingTargetId(target.id)
+    try {
+      const pickedDir = await ipc.integrationPickDirectory(target.configDir)
+      if (!pickedDir) return
+      const updated = await ipc.integrationUpdateTarget(target.id, pickedDir)
+      setIntegrationTargets(prev =>
+        prev.map(item => {
+          if (item.id !== updated.id) return item
+          return updated
+        })
+      )
+      setSelectedIntegrationIds(prev => ({ ...prev, [updated.id]: true }))
+      showToast(
+        t("integration.toastTargetUpdated", {
+          client: getIntegrationClientLabel(target.kind),
+        }),
+        "success"
+      )
+    } catch (error) {
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
+    } finally {
+      setIntegrationUpdatingTargetId(null)
+    }
+  }
+
+  const handleToggleIntegrationTarget = (targetId: string, checked: boolean) => {
+    setSelectedIntegrationIds(prev => ({
+      ...prev,
+      [targetId]: checked,
+    }))
+  }
+
+  const handleWriteIntegrationTargets = async () => {
+    if (!activeGroup) return
+    if (selectedIntegrationTargetIds.length === 0) return
+
+    setIntegrationWriting(true)
+    try {
+      const result = await ipc.integrationWriteGroupEntry(activeGroup.id, selectedIntegrationTargetIds)
+      if (result.failed === 0) {
+        showToast(
+          t("integration.toastWriteSuccess", {
+            count: result.succeeded,
+          }),
+          "success"
+        )
+        setShowIntegrationWriteModal(false)
+        setSelectedIntegrationIds({})
+        return
+      }
+      const firstError =
+        result.items.find(item => !item.ok)?.message ?? t("errors.unknownError")
+      showToast(
+        t("integration.toastWritePartial", {
+          succeeded: result.succeeded,
+          failed: result.failed,
+          message: firstError,
+        }),
+        "error"
+      )
+    } catch (error) {
+      showToast(t("errors.operationFailed", { message: String(error) }), "error")
+    } finally {
+      setIntegrationWriting(false)
+    }
+  }
+
+  const buildWriteTargetFilePath = (target: IntegrationTarget): string => {
+    const withSlash = target.configDir.endsWith("/") || target.configDir.endsWith("\\")
+    switch (target.kind) {
+      case "claude":
+        return `${target.configDir}${withSlash ? "" : "/"}settings.json`
+      case "codex":
+        return `${target.configDir}${withSlash ? "" : "/"}config.toml`
+      case "opencode":
+      default:
+        return `${target.configDir}${withSlash ? "" : "/"}opencode.json(c)`
+    }
+  }
+
+  const getWriteTargetField = (kind: IntegrationClientKind): string => {
+    switch (kind) {
+      case "claude":
+        return "env.ANTHROPIC_BASE_URL"
+      case "codex":
+        return "model_providers.aor_shared.base_url"
+      case "opencode":
+      default:
+        return "provider.aor_shared.options.baseURL"
+    }
+  }
+
   const serverBaseUrls = React.useMemo(() => {
     return resolveReachableServerBaseUrls({
       statusAddress: status?.address,
@@ -348,6 +539,9 @@ export const ServicePage: React.FC = () => {
     if (!activeGroup) return []
     return serverBaseUrls.map(baseUrl => `${baseUrl}/oc/${activeGroup.id}`)
   }, [activeGroup, serverBaseUrls])
+  const preferredEntryUrl = React.useMemo(() => {
+    return entryUrls.find(url => !url.includes("://localhost")) ?? entryUrls[0] ?? ""
+  }, [entryUrls])
 
   const activeGroupQuotaByProviderId = React.useMemo(() => {
     const map: Record<string, (typeof providerQuotas)[string] | undefined> = {}
@@ -493,6 +687,16 @@ export const ServicePage: React.FC = () => {
                 <Button
                   variant="default"
                   size="small"
+                  icon={Upload}
+                  onClick={() => {
+                    void openIntegrationWriteModal()
+                  }}
+                  title={t("integration.openWrite")}
+                  aria-label={t("integration.openWrite")}
+                />
+                <Button
+                  variant="default"
+                  size="small"
                   icon={Pencil}
                   onClick={() => navigate(`/groups/${activeGroup.id}/edit`)}
                   title={t("servicePage.editGroup")}
@@ -535,17 +739,141 @@ export const ServicePage: React.FC = () => {
         )}
       </div>
 
+      <Modal
+        open={showIntegrationWriteModal}
+        onClose={closeIntegrationWriteModal}
+        title={t("integration.modalTitle")}
+        size="large"
+      >
+        <div className={styles.integrationModalContent}>
+          <p className={styles.integrationModalHint}>
+            {t("integration.modalHint", {
+              path: activeGroup ? `/oc/${activeGroup.id}` : "/oc/group-id",
+            })}
+          </p>
+          <p className={styles.integrationHiddenHint}>{t("integration.hiddenDirHint")}</p>
+          {preferredEntryUrl ? (
+            <div className={styles.integrationEntryUrl}>
+              <code>{preferredEntryUrl}</code>
+              <Button
+                variant="ghost"
+                size="small"
+                icon={Copy}
+                onClick={() => {
+                  void handleCopyEntryUrl(preferredEntryUrl)
+                }}
+                title={t("servicePage.copyEntryUrl")}
+                aria-label={t("servicePage.copyEntryUrl")}
+              />
+            </div>
+          ) : null}
+
+          {integrationLoading ? (
+            <div className={styles.integrationLoading}>{t("common.loading")}</div>
+          ) : (
+            <div className={styles.integrationSectionList}>
+              {integrationSections.map(section => {
+                const targets = integrationTargetsByKind[section.kind]
+                return (
+                  <section key={section.kind} className={styles.integrationSection}>
+                    <div className={styles.integrationSectionHeader}>
+                      <div className={styles.integrationSectionTitleWrap}>
+                        <h4>{section.title}</h4>
+                        <p>{section.hint}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="small"
+                        icon={Plus}
+                        loading={integrationAddingKind === section.kind}
+                        disabled={
+                          integrationWriting ||
+                          integrationUpdatingTargetId !== null ||
+                          (integrationAddingKind !== null && integrationAddingKind !== section.kind)
+                        }
+                        onClick={() => {
+                          void handleAddIntegrationTarget(section.kind)
+                        }}
+                      >
+                        {t("integration.addConfig")}
+                      </Button>
+                    </div>
+
+                    {targets.length === 0 ? (
+                      <div className={styles.integrationEmpty}>{t("integration.emptyTargets")}</div>
+                    ) : (
+                      <ul className={styles.integrationTargetList}>
+                        {targets.map(target => (
+                          <li key={target.id} className={styles.integrationTargetItem}>
+                            <label className={styles.integrationTargetLabel}>
+                              <input
+                                type="checkbox"
+                                checked={!!selectedIntegrationIds[target.id]}
+                                onChange={event =>
+                                  handleToggleIntegrationTarget(target.id, event.target.checked)
+                                }
+                                disabled={integrationWriting || integrationUpdatingTargetId !== null}
+                              />
+                              <span className={styles.integrationTargetPathWrap}>
+                                <span className={styles.integrationTargetPath}>{target.configDir}</span>
+                                <span className={styles.integrationTargetWriteDetail}>
+                                  {t("integration.writeToDetail", {
+                                    filePath: buildWriteTargetFilePath(target),
+                                    fieldPath: getWriteTargetField(target.kind),
+                                  })}
+                                </span>
+                              </span>
+                            </label>
+                            <Button
+                              variant="default"
+                              size="small"
+                              loading={integrationUpdatingTargetId === target.id}
+                              disabled={integrationWriting || integrationUpdatingTargetId !== null}
+                              onClick={() => {
+                                void handleUpdateIntegrationTarget(target)
+                              }}
+                            >
+                              {t("integration.changeConfigDirectory")}
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )
+              })}
+            </div>
+          )}
+
+          <div className={styles.integrationModalActions}>
+            <span className={styles.integrationSelectedCount}>
+              {t("integration.selectedCount", { count: selectedIntegrationTargetIds.length })}
+            </span>
+            <div className={styles.integrationModalActionsRight}>
+              <Button variant="default" onClick={closeIntegrationWriteModal} disabled={integrationWriting}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  void handleWriteIntegrationTargets()
+                }}
+                loading={integrationWriting}
+                disabled={
+                  selectedIntegrationTargetIds.length === 0 ||
+                  integrationUpdatingTargetId !== null ||
+                  integrationAddingKind !== null
+                }
+              >
+                {t("integration.confirmWrite")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={showAddGroupModal} onClose={closeAddGroupModal} title={t("modal.addGroupTitle")}>
         <div className={styles.modalContent}>
-          <div className={styles.formGroup}>
-            <label htmlFor="groupName">{t("modal.groupNameLabel")}</label>
-            <Input
-              id="groupName"
-              value={newGroupName}
-              onChange={e => setNewGroupName(e.target.value)}
-              placeholder={t("modal.groupNamePlaceholder")}
-            />
-          </div>
           <div className={styles.formGroup}>
             <label htmlFor="groupId">{t("modal.groupIdLabel")}</label>
             <Input
@@ -557,6 +885,16 @@ export const ServicePage: React.FC = () => {
             <p className={styles.formHint}>
               {t("modal.groupIdHint", { id: newGroupId.trim() || "group-id" })}
             </p>
+          </div>
+          <div className={styles.formGroup}>
+            <label htmlFor="groupName">{t("modal.groupNameLabel")}</label>
+            <Input
+              id="groupName"
+              value={newGroupName}
+              onChange={e => setNewGroupName(e.target.value)}
+              placeholder={t("modal.groupNamePlaceholder")}
+            />
+            <p className={styles.formHint}>{t("modal.groupNameHint")}</p>
           </div>
           <div className={styles.modalActions}>
             <Button variant="default" onClick={closeAddGroupModal}>

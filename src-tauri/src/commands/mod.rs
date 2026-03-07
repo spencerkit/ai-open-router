@@ -4,6 +4,7 @@
 
 mod app;
 mod config;
+mod integration;
 mod logs;
 mod provider;
 mod quota;
@@ -16,6 +17,10 @@ pub use app::{
 pub use config::{
     config_export_groups, config_export_groups_clipboard, config_export_groups_folder, config_get,
     config_import_groups, config_import_groups_json, config_save,
+};
+pub use integration::{
+    integration_add_target, integration_list_targets, integration_pick_directory,
+    integration_remove_target, integration_update_target, integration_write_group_entry,
 };
 pub use logs::{
     logs_clear, logs_list, logs_stats_clear, logs_stats_rule_cards, logs_stats_summary,

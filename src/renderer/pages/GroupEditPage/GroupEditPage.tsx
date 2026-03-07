@@ -145,13 +145,14 @@ export const GroupEditPage: React.FC = () => {
           </div>
 
           <div className={styles.formGroup}>
-            <label htmlFor="groupName">{t("servicePage.groupName")}</label>
+            <label htmlFor="groupName">{t("modal.groupNameLabel")}</label>
             <Input
               id="groupName"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder={t("modal.groupNamePlaceholder")}
             />
+            <p className={styles.hint}>{t("groupEditPage.groupNameHint")}</p>
           </div>
         </div>
 

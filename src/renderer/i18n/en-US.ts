@@ -90,6 +90,36 @@ export const enUS = {
     firstRunStepRoute: "Copy the generated entry URL into your client or gateway.",
   },
 
+  integration: {
+    openWrite: "Write current group address to client",
+    modalTitle: "Write Client Config",
+    modalHint: "Write current group entry URL {{path}} into selected client config directories.",
+    hiddenDirHint:
+      "For hidden directories (such as .claude / .codex), the picker now starts from the default path. You can also reveal hidden dirs in system dialog (macOS: Cmd+Shift+. / Linux: Ctrl+H).",
+    addConfig: "Add Config",
+    changeConfigDirectory: "Change Directory",
+    emptyTargets: "No config directory yet. Click Add Config to register one.",
+    selectedCount: "{{count}} selected",
+    confirmWrite: "Write Now",
+    writeToDetail: "Target: {{filePath}} (field: {{fieldPath}})",
+    toastTargetAdded: "{{client}} config added",
+    toastTargetUpdated: "{{client}} directory updated",
+    toastWriteSuccess: "Write succeeded: {{count}} config(s) updated",
+    toastWritePartial: "Partial failure: {{succeeded}} succeeded, {{failed}} failed. {{message}}",
+    claude: {
+      title: "Claude",
+      hint: "Default: ~/.claude; writes env.ANTHROPIC_BASE_URL in settings.json.",
+    },
+    codex: {
+      title: "Codex",
+      hint: "Default: ~/.codex; writes model_providers.aor_shared.base_url in config.toml.",
+    },
+    opencode: {
+      title: "OpenCode",
+      hint: "Default: ~/.config/opencode; writes provider.aor_shared.options.baseURL in opencode.json(c).",
+    },
+  },
+
   // Rule Directions
   ruleDirection: {
     oc: "OpenAI -> Anthropic",
@@ -356,11 +386,13 @@ export const enUS = {
   // Modals
   modal: {
     addGroupTitle: "Add Group",
-    groupNameLabel: "Group Name",
-    groupNamePlaceholder: "e.g. claude",
-    groupIdLabel: "Group ID",
-    groupIdPlaceholder: "e.g. claude",
-    groupIdHint: "Request path is fixed to `/oc/{{id}}` and cannot be changed after creation.",
+    groupNameLabel: "Group Name (display only)",
+    groupNamePlaceholder: "e.g. Production",
+    groupNameHint: "Used for display and identification in UI only; does not affect client request path.",
+    groupIdLabel: "Group ID (request path)",
+    groupIdPlaceholder: "e.g. prod",
+    groupIdHint:
+      "Used to build client route prefix `/oc/{{id}}`. Allowed characters: letters, numbers, - and _. Cannot be changed after creation.",
     create: "Create",
     cancel: "Cancel",
     save: "Save",
@@ -523,9 +555,11 @@ export const enUS = {
     title: "Edit Group",
     sectionBasic: "Basic",
     sectionModels: "Group Models",
-    groupIdImmutable: "Group ID is used in request path and cannot be changed after creation.",
+    groupNameHint: "Display-only field in UI; does not affect client request path.",
+    groupIdImmutable:
+      "Used for client route prefix `/oc/{groupId}` and cannot be changed after creation.",
     modelMatchHint:
-      "Prefix match is supported: `ops` matches `ops-1/ops-2`; `ops*` matches any model starting with `ops`.",
+      "Fuzzy match is supported (case-insensitive): `sonnet` can match models like `claude-3-7-sonnet`.",
     noModels: "No models yet. Add models to enable rule mappings.",
     newModelPlaceholder: "e.g. a1",
   },
