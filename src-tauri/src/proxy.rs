@@ -16,7 +16,7 @@ use tokio::task::JoinHandle;
 mod net;
 mod observability;
 mod pipeline;
-mod routing;
+pub(crate) mod routing;
 
 const MAX_REQUEST_BODY_BYTES: usize = 10 * 1024 * 1024;
 const MAX_STREAM_LOG_BODY_BYTES: usize = 256 * 1024;

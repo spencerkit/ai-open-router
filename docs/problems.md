@@ -231,3 +231,49 @@
   - 当请求本身是流式，且响应头不是 `event-stream/json` 但为 `text/plain`（或空）时，进入流式分支并对首块进行 SSE 前缀探测。
   - 若首块以 `event:` / `data:`（或注释行 `:`）开头，则按 SSE 正常处理。
   - 若首块不符合 SSE 前缀，则快速失败，避免把非 SSE 文本误当流。
+
+## 2026-03-07: `to=update_plan` / `to=shell` 指令文本泄漏（未转为可执行 tool）
+
+- 现象:
+  - 响应里出现类似:
+    - `to=update_plan ... {"plan":[...]}`
+    - `to=shell ... {"command":["apply_patch","*** Begin Patch ..."]}`
+  - 这类内容展示为普通文本，随后 `stop_reason=end_turn`，流程暂停，不会继续执行对应工具。
+- 典型 traceId:
+  - `26034077-5bb0-4ff3-acce-8c78b67ba33c`
+  - `fa6ef9ba-a9e7-4cee-8450-07f28bb36c0b`
+  - `a38dbe79-b5f8-4c69-bc4a-e23ab67d2f80`
+- 调试日志位置:
+  - `app_data_dir/proxy-dev-logs.jsonl`
+  - 本机示例: `/home/spencer/.local/share/art.shier.aiopenrouter/proxy-dev-logs.jsonl`
+
+### 根因
+
+- 该类内容来自上游 `output_text`，不是结构化 `function_call` / `tool_use`。
+- 当前文本兜底只支持两类:
+  - `[Tool Call: <tool_name>(<json_object>)]`
+  - `{"command":["bash","-lc","..."], ...}`（仅归一到 `Bash`）
+- `to=update_plan` 与 `to=shell + apply_patch` 不在现有解析规则内，因此不会转为工具调用。
+- 同时受白名单约束:
+  - 仅本次请求 `tools` 中声明的工具名允许被反解析。
+  - 该批日志里 `tools` 有 `TaskUpdate/Bash` 等，但没有 `update_plan`、`apply_patch`。
+
+### 影响
+
+- 模型“有执行意图”的文本无法落地执行，表现为“说要做但没做”。
+- 伪指令文本会进入会话历史，增加后续继续漂移为伪调用的概率。
+
+### 兼容建议（先记录，后续按需实现）
+
+- 对 `to=update_plan`:
+  - 不建议直接执行为同名 tool（当前工具集中无该名）。
+  - 可在安全前提下映射到 `TaskUpdate` 体系；若缺任务 `id`，则仅记录日志并丢弃该段文本。
+- 对 `to=shell` + `apply_patch`:
+  - 若未声明 `apply_patch`，保持 fail-closed。
+  - 可选兜底: 当 `Bash` 已声明时，将 `apply_patch` 补丁文本安全改写为 `Bash` heredoc 调用（需做 patch 边界与大小校验）。
+- 可观测性:
+  - 增加日志字段:
+    - `tool_intent_detected`
+    - `tool_intent_name`
+    - `tool_intent_decision`（`execute` / `rewrite` / `drop`）
+    - `tool_intent_reason`

@@ -95,7 +95,7 @@ pub(super) fn detect_entry_protocol(suffix: &str) -> Option<PathEntry> {
 ///
 /// Note that OpenAI paths intentionally omit `/v1` so callers can control versioning
 /// via `rule.apiAddress` (for example `https://host` vs `https://host/v1`).
-pub(super) fn resolve_upstream_path(target_protocol: &RuleProtocol) -> &'static str {
+pub(crate) fn resolve_upstream_path(target_protocol: &RuleProtocol) -> &'static str {
     match target_protocol {
         RuleProtocol::Anthropic => "/v1/messages",
         RuleProtocol::Openai => "/responses",
@@ -110,7 +110,7 @@ pub(super) fn resolve_upstream_path(target_protocol: &RuleProtocol) -> &'static 
 /// - If `apiAddress` already includes a prefix path (for example `/v1`),
 ///   append default path under that prefix (`/v1` + `/responses` => `/v1/responses`).
 /// - If `default_path` already starts with the prefix path, do not duplicate it.
-pub(super) fn resolve_upstream_url(
+pub(crate) fn resolve_upstream_url(
     api_address: &str,
     default_path: &str,
 ) -> Result<String, String> {
@@ -141,7 +141,7 @@ pub(super) fn resolve_upstream_url(
 ///
 /// - Anthropic uses `x-api-key` + `Anthropic-version`.
 /// - OpenAI surfaces use standard `Authorization: Bearer ...`.
-pub(super) fn build_rule_headers(protocol: &RuleProtocol, rule: &Rule) -> HashMap<String, String> {
+pub(crate) fn build_rule_headers(protocol: &RuleProtocol, rule: &Rule) -> HashMap<String, String> {
     let mut headers = HashMap::new();
     headers.insert("content-type".to_string(), "application/json".to_string());
     match protocol {

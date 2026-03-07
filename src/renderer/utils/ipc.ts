@@ -4,6 +4,7 @@ import type {
   GroupBackupExportResult,
   GroupBackupImportResult,
   LogEntry,
+  ProviderModelTestResult,
   ProxyConfig,
   ProxyStatus,
   RemoteRulesPullResult,
@@ -180,6 +181,13 @@ export const ipc = {
       ruleApiAddress: providerApiAddress,
       ruleDefaultModel: providerDefaultModel,
       quota,
+    })
+  },
+
+  testProviderModel(groupId: string, providerId: string): Promise<ProviderModelTestResult> {
+    return getInvoke()<ProviderModelTestResult>("provider_test_model", {
+      groupId,
+      providerId,
     })
   },
 }

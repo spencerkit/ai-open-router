@@ -370,12 +370,14 @@ pub fn setup_app(app: &mut App, app_name: &str, app_version: &str) -> Result<(),
 
     apply_launch_on_startup_setting(app.handle(), state.config_store.get().ui.launch_on_startup);
 
-    let runtime_clone = state.runtime.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Err(err) = runtime_clone.start().await {
-            eprintln!("proxy auto-start failed: {err}");
-        }
-    });
+    if state.config_store.get().ui.auto_start_server {
+        let runtime_clone = state.runtime.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(err) = runtime_clone.start().await {
+                eprintln!("proxy auto-start failed: {err}");
+            }
+        });
+    }
 
     let tray_ready = if state.config_store.get().ui.close_to_tray {
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| create_tray(app.handle()))) {

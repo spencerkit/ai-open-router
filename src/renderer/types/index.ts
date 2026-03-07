@@ -25,6 +25,7 @@ export type {
   LogEntryPhase,
   LogEntryStatus,
   Provider,
+  ProviderModelTestResult,
   ProxyMetrics,
   ProxyStatus,
   QuotaStatus,
@@ -212,6 +213,7 @@ export interface RuleCardStatsItem {
   requests: number
   inputTokens: number
   outputTokens: number
+  cacheTokens: number
   tokens: number
   totalCost: number
   hourly: RuleCardHourlyPoint[]
