@@ -487,7 +487,7 @@ mod tests {
         .expect("mapping should succeed");
 
         assert_eq!(out["model"], "gpt-4.1");
-        assert_eq!(out["stream"], false);
+        assert_eq!(out["stream"], true);
         assert_eq!(out["input"][0]["type"], "message");
     }
 
