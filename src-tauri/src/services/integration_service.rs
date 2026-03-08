@@ -2,6 +2,7 @@
 //! Service-layer operations for external client integrations.
 //! Handles target persistence and one-click write for Claude/Codex/OpenCode configs.
 
+use crate::api::dto::{AgentConfig, AgentConfigFile};
 use crate::app_state::SharedState;
 use crate::models::{
     IntegrationClientKind, IntegrationTarget, IntegrationWriteItem, IntegrationWriteResult,
@@ -590,4 +591,238 @@ mod tests {
         assert!(output.contains("aor_shared"));
         assert!(output.contains("base_url"));
     }
+}
+
+/// Reads Agent configuration file content.
+pub fn read_agent_config(
+    state: &SharedState,
+    target_id: &str,
+) -> AppResult<AgentConfigFile> {
+    let targets = state.integration_store.list();
+    let target = targets
+        .into_iter()
+        .find(|t| t.id == target_id)
+        .ok_or_else(|| AppError::not_found(format!("target not found: {}", target_id)))?;
+
+    let config_dir = PathBuf::from(&target.config_dir);
+    let (file_path, content) = match target.kind {
+        IntegrationClientKind::Claude => {
+            let path = config_dir.join("settings.json");
+            let content = if path.exists() {
+                std::fs::read_to_string(&path).unwrap_or_else(|_| "{}".to_string())
+            } else {
+                "{}".to_string()
+            };
+            (path, content)
+        }
+        IntegrationClientKind::Codex => {
+            let path = config_dir.join("config.toml");
+            let content = if path.exists() {
+                std::fs::read_to_string(&path).unwrap_or_else(|_| "".to_string())
+            } else {
+                "".to_string()
+            };
+            (path, content)
+        }
+        IntegrationClientKind::Opencode => {
+            let path = resolve_opencode_config_path(&config_dir)?;
+            let content = if path.exists() {
+                std::fs::read_to_string(&path).unwrap_or_else(|_| "{}".to_string())
+            } else {
+                "{}".to_string()
+            };
+            (path, content)
+        }
+    };
+
+    let parsed_config = parse_agent_config(&target.kind, &content).ok();
+
+    Ok(AgentConfigFile {
+        target_id: target.id,
+        kind: target.kind,
+        config_dir: target.config_dir,
+        file_path: file_path.to_string_lossy().to_string(),
+        content,
+        parsed_config,
+    })
+}
+
+/// Parses configuration file into AgentConfig.
+fn parse_agent_config(kind: &IntegrationClientKind, content: &str) -> AppResult<AgentConfig> {
+    match kind {
+        IntegrationClientKind::Claude => parse_claude_config(content),
+        IntegrationClientKind::Opencode => parse_opencode_config(content),
+        IntegrationClientKind::Codex => parse_codex_config(content),
+    }
+}
+
+fn parse_claude_config(content: &str) -> AppResult<AgentConfig> {
+    use serde_json::Value;
+
+    if content.trim().is_empty() {
+        return Ok(AgentConfig {
+            url: None,
+            api_token: None,
+            model: None,
+            timeout: None,
+            always_thinking_enabled: None,
+            include_coauthored_by: None,
+            skip_dangerous_mode_permission_prompt: None,
+        });
+    }
+
+    let parsed = serde_json::from_str::<Value>(content)
+        .or_else(|_| json5::from_str::<Value>(content))
+        .map_err(|e| AppError::validation(format!("parse settings.json failed: {}", e)))?;
+
+    let Value::Object(root) = parsed else {
+        return Ok(AgentConfig {
+            url: None,
+            api_token: None,
+            model: None,
+            timeout: None,
+            always_thinking_enabled: None,
+            include_coauthored_by: None,
+            skip_dangerous_mode_permission_prompt: None,
+        });
+    };
+
+    // Extract env field
+    let env = root.get("env").and_then(|v| v.as_object());
+    let url = env
+        .and_then(|e| e.get("ANTHROPIC_BASE_URL"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let api_token = env
+        .and_then(|e| e.get("ANTHROPIC_AUTH_TOKEN"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let model = env
+        .and_then(|e| e.get("ANTHROPIC_MODEL"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let timeout = env
+        .and_then(|e| e.get("API_TIMEOUT_MS"))
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse::<u64>().ok());
+
+    // Extract behavior options
+    let always_thinking_enabled = root
+        .get("alwaysThinkingEnabled")
+        .and_then(|v| v.as_bool());
+    let include_coauthored_by = root.get("includeCoAuthoredBy").and_then(|v| v.as_bool());
+    let skip_dangerous_mode_permission_prompt = root
+        .get("skipDangerousModePermissionPrompt")
+        .and_then(|v| v.as_bool());
+
+    Ok(AgentConfig {
+        url,
+        api_token,
+        model,
+        timeout,
+        always_thinking_enabled,
+        include_coauthored_by,
+        skip_dangerous_mode_permission_prompt,
+    })
+}
+
+fn parse_opencode_config(content: &str) -> AppResult<AgentConfig> {
+    use serde_json::Value;
+
+    if content.trim().is_empty() {
+        return Ok(AgentConfig {
+            url: None,
+            api_token: None,
+            model: None,
+            timeout: None,
+            always_thinking_enabled: None,
+            include_coauthored_by: None,
+            skip_dangerous_mode_permission_prompt: None,
+        });
+    }
+
+    let parsed = serde_json::from_str::<Value>(content)
+        .or_else(|_| json5::from_str::<Value>(content))
+        .map_err(|e| AppError::validation(format!("parse opencode config failed: {}", e)))?;
+
+    let Value::Object(root) = parsed else {
+        return Ok(AgentConfig {
+            url: None,
+            api_token: None,
+            model: None,
+            timeout: None,
+            always_thinking_enabled: None,
+            include_coauthored_by: None,
+            skip_dangerous_mode_permission_prompt: None,
+        });
+    };
+
+    // Extract provider config
+    let provider = root.get("provider").and_then(|v| v.as_object());
+    let url = provider
+        .and_then(|p| p.values().next())
+        .and_then(|v| v.get("options"))
+        .and_then(|o| o.get("baseURL"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let timeout = provider
+        .and_then(|p| p.values().next())
+        .and_then(|v| v.get("options"))
+        .and_then(|o| o.get("timeout"))
+        .and_then(|v| v.as_u64());
+    let model = root.get("model").and_then(|v| v.as_str()).map(String::from);
+
+    Ok(AgentConfig {
+        url,
+        api_token: None,
+        model,
+        timeout,
+        always_thinking_enabled: None,
+        include_coauthored_by: None,
+        skip_dangerous_mode_permission_prompt: None,
+    })
+}
+
+fn parse_codex_config(content: &str) -> AppResult<AgentConfig> {
+    use toml_edit::DocumentMut;
+
+    if content.trim().is_empty() {
+        return Ok(AgentConfig {
+            url: None,
+            api_token: None,
+            model: None,
+            timeout: None,
+            always_thinking_enabled: None,
+            include_coauthored_by: None,
+            skip_dangerous_mode_permission_prompt: None,
+        });
+    }
+
+    let doc = content
+        .parse::<DocumentMut>()
+        .map_err(|e| AppError::validation(format!("parse config.toml failed: {}", e)))?;
+
+    let url = doc["model_providers"]
+        .as_table()
+        .and_then(|mp| mp.get("aor_shared"))
+        .and_then(|a| a.get("base_url"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let api_token = doc["model_providers"]
+        .as_table()
+        .and_then(|mp| mp.get("aor_shared"))
+        .and_then(|a| a.get("api_key"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let model = doc["model"].as_str().map(String::from);
+
+    Ok(AgentConfig {
+        url,
+        api_token,
+        model,
+        timeout: None,
+        always_thinking_enabled: None,
+        include_coauthored_by: None,
+        skip_dangerous_mode_permission_prompt: None,
+    })
 }
