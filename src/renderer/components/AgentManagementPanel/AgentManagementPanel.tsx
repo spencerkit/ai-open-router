@@ -17,9 +17,10 @@ const AGENT_TYPES: IntegrationClientKind[] = ["claude", "codex", "opencode"]
 
 interface Props {
   activeGroupId?: string
+  onClose?: () => void
 }
 
-export const AgentManagementPanel: React.FC<Props> = ({ activeGroupId }) => {
+export const AgentManagementPanel: React.FC<Props> = ({ activeGroupId, onClose }) => {
   const { t } = useTranslation()
   const [step, setStep] = useState<Step>("selectType")
   const [targets, setTargets] = useState<IntegrationTarget[]>([])
