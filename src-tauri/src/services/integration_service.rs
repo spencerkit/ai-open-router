@@ -636,7 +636,7 @@ pub fn read_agent_config(
     let content = serde_json::to_string(&Value::Object(root.clone()))
         .unwrap_or_else(|_| "{}".to_string());
 
-    let parsed_config = parse_agent_config_from_map(&target.kind, &root).ok();
+    let parsed_config = parse_agent_config(&target.kind, &root).ok();
 
     Ok(AgentConfigFile {
         target_id: target.id,
@@ -704,199 +704,24 @@ fn toml_value_to_value(v: &toml_edit::Value) -> Value {
     }
 }
 
-/// Parses configuration file into AgentConfig.
-fn parse_agent_config(kind: &IntegrationClientKind, content: &str) -> AppResult<AgentConfig> {
-    match kind {
-        IntegrationClientKind::Claude => parse_claude_config(content),
-        IntegrationClientKind::Opencode => parse_opencode_config(content),
-        IntegrationClientKind::Codex => parse_codex_config(content),
-    }
-}
 
-/// Parses configuration from JSON-like Map into AgentConfig.
-fn parse_agent_config_from_map(
+/// Parses configuration into AgentConfig.
+fn parse_agent_config(
     kind: &IntegrationClientKind,
     root: &Map<String, Value>,
 ) -> AppResult<AgentConfig> {
     match kind {
-        IntegrationClientKind::Claude => parse_claude_config_from_map(root),
-        IntegrationClientKind::Opencode => parse_opencode_config_from_map(root),
-        IntegrationClientKind::Codex => parse_codex_config_from_map(root),
+        IntegrationClientKind::Claude => parse_claude_config(root),
+        IntegrationClientKind::Opencode => parse_opencode_config(root),
+        IntegrationClientKind::Codex => parse_codex_config(root),
     }
 }
 
-fn parse_claude_config(content: &str) -> AppResult<AgentConfig> {
-    use serde_json::Value;
 
-    if content.trim().is_empty() {
-        return Ok(AgentConfig {
-            url: None,
-            api_token: None,
-            model: None,
-            timeout: None,
-            always_thinking_enabled: None,
-            include_coauthored_by: None,
-            skip_dangerous_mode_permission_prompt: None,
-        });
-    }
 
-    let parsed = serde_json::from_str::<Value>(content)
-        .or_else(|_| json5::from_str::<Value>(content))
-        .map_err(|e| AppError::validation(format!("parse settings.json failed: {}", e)))?;
-
-    let Value::Object(root) = parsed else {
-        return Ok(AgentConfig {
-            url: None,
-            api_token: None,
-            model: None,
-            timeout: None,
-            always_thinking_enabled: None,
-            include_coauthored_by: None,
-            skip_dangerous_mode_permission_prompt: None,
-        });
-    };
-
-    // Extract env field
-    let env = root.get("env").and_then(|v| v.as_object());
-    let url = env
-        .and_then(|e| e.get("ANTHROPIC_BASE_URL"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let api_token = env
-        .and_then(|e| e.get("ANTHROPIC_AUTH_TOKEN"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let model = env
-        .and_then(|e| e.get("ANTHROPIC_MODEL"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let timeout = env
-        .and_then(|e| e.get("API_TIMEOUT_MS"))
-        .and_then(|v| v.as_str())
-        .and_then(|s| s.parse::<u64>().ok());
-
-    // Extract behavior options
-    let always_thinking_enabled = root
-        .get("alwaysThinkingEnabled")
-        .and_then(|v| v.as_bool());
-    let include_coauthored_by = root.get("includeCoAuthoredBy").and_then(|v| v.as_bool());
-    let skip_dangerous_mode_permission_prompt = root
-        .get("skipDangerousModePermissionPrompt")
-        .and_then(|v| v.as_bool());
-
-    Ok(AgentConfig {
-        url,
-        api_token,
-        model,
-        timeout,
-        always_thinking_enabled,
-        include_coauthored_by,
-        skip_dangerous_mode_permission_prompt,
-    })
-}
-
-fn parse_opencode_config(content: &str) -> AppResult<AgentConfig> {
-    use serde_json::Value;
-
-    if content.trim().is_empty() {
-        return Ok(AgentConfig {
-            url: None,
-            api_token: None,
-            model: None,
-            timeout: None,
-            always_thinking_enabled: None,
-            include_coauthored_by: None,
-            skip_dangerous_mode_permission_prompt: None,
-        });
-    }
-
-    let parsed = serde_json::from_str::<Value>(content)
-        .or_else(|_| json5::from_str::<Value>(content))
-        .map_err(|e| AppError::validation(format!("parse opencode config failed: {}", e)))?;
-
-    let Value::Object(root) = parsed else {
-        return Ok(AgentConfig {
-            url: None,
-            api_token: None,
-            model: None,
-            timeout: None,
-            always_thinking_enabled: None,
-            include_coauthored_by: None,
-            skip_dangerous_mode_permission_prompt: None,
-        });
-    };
-
-    // Extract provider.aor_shared config
-    let provider = root.get("provider").and_then(|v| v.as_object());
-    let aor_shared = provider.and_then(|p| p.get("aor_shared")).and_then(|v| v.as_object());
-    let url = aor_shared
-        .and_then(|a| a.get("options"))
-        .and_then(|o| o.get("baseURL"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let timeout = aor_shared
-        .and_then(|a| a.get("options"))
-        .and_then(|o| o.get("timeout"))
-        .and_then(|v| v.as_u64());
-    let model = root.get("model").and_then(|v| v.as_str()).map(String::from);
-
-    Ok(AgentConfig {
-        url,
-        api_token: None,
-        model,
-        timeout,
-        always_thinking_enabled: None,
-        include_coauthored_by: None,
-        skip_dangerous_mode_permission_prompt: None,
-    })
-}
-
-fn parse_codex_config(content: &str) -> AppResult<AgentConfig> {
-    use toml_edit::DocumentMut;
-
-    if content.trim().is_empty() {
-        return Ok(AgentConfig {
-            url: None,
-            api_token: None,
-            model: None,
-            timeout: None,
-            always_thinking_enabled: None,
-            include_coauthored_by: None,
-            skip_dangerous_mode_permission_prompt: None,
-        });
-    }
-
-    let doc = content
-        .parse::<DocumentMut>()
-        .map_err(|e| AppError::validation(format!("parse config.toml failed: {}", e)))?;
-
-    let url = doc["model_providers"]
-        .as_table()
-        .and_then(|mp| mp.get("aor_shared"))
-        .and_then(|a| a.get("base_url"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let api_token = doc["model_providers"]
-        .as_table()
-        .and_then(|mp| mp.get("aor_shared"))
-        .and_then(|a| a.get("api_key"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let model = doc["model"].as_str().map(String::from);
-
-    Ok(AgentConfig {
-        url,
-        api_token,
-        model,
-        timeout: None,
-        always_thinking_enabled: None,
-        include_coauthored_by: None,
-        skip_dangerous_mode_permission_prompt: None,
-    })
-}
 
 /// Parses Claude config from JSON-like Map.
-fn parse_claude_config_from_map(root: &Map<String, Value>) -> AppResult<AgentConfig> {
+fn parse_claude_config(root: &Map<String, Value>) -> AppResult<AgentConfig> {
     // Extract env field
     let env = root.get("env").and_then(|v| v.as_object());
     let url = env
@@ -937,7 +762,7 @@ fn parse_claude_config_from_map(root: &Map<String, Value>) -> AppResult<AgentCon
 }
 
 /// Parses OpenCode config from JSON-like Map.
-fn parse_opencode_config_from_map(root: &Map<String, Value>) -> AppResult<AgentConfig> {
+fn parse_opencode_config(root: &Map<String, Value>) -> AppResult<AgentConfig> {
     // Extract provider.aor_shared config
     let provider = root.get("provider").and_then(|v| v.as_object());
     let aor_shared = provider
@@ -966,7 +791,7 @@ fn parse_opencode_config_from_map(root: &Map<String, Value>) -> AppResult<AgentC
 }
 
 /// Parses Codex config from JSON-like Map.
-fn parse_codex_config_from_map(root: &Map<String, Value>) -> AppResult<AgentConfig> {
+fn parse_codex_config(root: &Map<String, Value>) -> AppResult<AgentConfig> {
     let model_providers = root.get("model_providers").and_then(|v| v.as_object());
     let aor_shared = model_providers
         .and_then(|mp| mp.get("aor_shared"))
