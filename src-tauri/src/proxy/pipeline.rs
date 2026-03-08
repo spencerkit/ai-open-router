@@ -18,8 +18,10 @@ use super::{
     STREAM_REQUEST_TIMEOUT_MS,
 };
 use crate::models::{RuleProtocol, TokenUsage};
+use crate::transformer::convert::{
+    claude_openai_responses_stream, claude_openai_stream, openai_chat_responses_stream,
+};
 use crate::transformer::StreamContext;
-use crate::transformer::convert::{claude_openai_stream, claude_openai_responses_stream, openai_chat_responses_stream};
 use axum::body::{to_bytes, Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, Method, StatusCode};
@@ -165,35 +167,30 @@ pub(super) async fn handle_proxy_request(
         return proxy_error_response(500, "proxy_error", &msg, None, "proxy", &trace_id);
     }
 
-    let (
-        auth_enabled,
-        expected_auth,
-        capture_body,
-        strict_mode,
-        text_tool_call_fallback_enabled,
-    ) = match state.config.read() {
-        Ok(cfg) => {
-            let expected = format!("Bearer {}", cfg.server.local_bearer_token);
-            (
-                cfg.server.auth_enabled,
-                expected,
-                cfg.logging.capture_body,
-                cfg.compat.strict_mode,
-                cfg.compat.text_tool_call_fallback_enabled,
-            )
-        }
-        Err(_) => {
-            state.metrics.increment_error();
-            return proxy_error_response(
-                500,
-                "proxy_error",
-                "Failed to acquire config lock",
-                None,
-                "proxy",
-                &trace_id,
-            );
-        }
-    };
+    let (auth_enabled, expected_auth, capture_body, strict_mode, text_tool_call_fallback_enabled) =
+        match state.config.read() {
+            Ok(cfg) => {
+                let expected = format!("Bearer {}", cfg.server.local_bearer_token);
+                (
+                    cfg.server.auth_enabled,
+                    expected,
+                    cfg.logging.capture_body,
+                    cfg.compat.strict_mode,
+                    cfg.compat.text_tool_call_fallback_enabled,
+                )
+            }
+            Err(_) => {
+                state.metrics.increment_error();
+                return proxy_error_response(
+                    500,
+                    "proxy_error",
+                    "Failed to acquire config lock",
+                    None,
+                    "proxy",
+                    &trace_id,
+                );
+            }
+        };
 
     if auth_enabled {
         let auth = headers
@@ -559,7 +556,8 @@ pub(super) async fn handle_proxy_request(
         let stream_upstream_status = upstream_status;
         let stream_upstream_is_error = upstream_is_error;
         let stream_started = started;
-        let stream_transform = select_stream_transform(stream_entry.endpoint, &stream_target_protocol);
+        let stream_transform =
+            select_stream_transform(stream_entry.endpoint, &stream_target_protocol);
         let mut stream_ctx_moved = stream_ctx;
         let mut stream_probe_sse = sse_fallback_probe_enabled;
 
@@ -1018,8 +1016,8 @@ pub(super) fn build_upstream_body(
 ) -> Result<Value, String> {
     use crate::transformer::convert::*;
 
-    let request_bytes = serde_json::to_vec(request_body)
-        .map_err(|e| format!("serialize request: {}", e))?;
+    let request_bytes =
+        serde_json::to_vec(request_body).map_err(|e| format!("serialize request: {}", e))?;
 
     // Determine conversion based on entry and target
     let converted = match (entry.endpoint, target_protocol) {
@@ -1051,8 +1049,8 @@ pub(super) fn build_upstream_body(
         }
     };
 
-    let mut result: Value = serde_json::from_slice(&converted)
-        .map_err(|e| format!("parse converted: {}", e))?;
+    let mut result: Value =
+        serde_json::from_slice(&converted).map_err(|e| format!("parse converted: {}", e))?;
 
     // Ensure model is set
     if result.is_object() {
@@ -1198,7 +1196,6 @@ pub(super) fn resolve_request_timeout_ms(
     NON_STREAM_REQUEST_TIMEOUT_MS
 }
 
-
 /// Preserve request object shape while enforcing resolved forwarded model.
 fn passthrough_with_model(request_body: &Value, target_model: &str) -> Value {
     let mut with_model = if request_body.is_object() {
@@ -1277,7 +1274,9 @@ fn transform_sse_event(
 ) -> Result<Vec<u8>, String> {
     match transform {
         StreamTransform::None => Ok(event.to_vec()),
-        StreamTransform::ClaudeToOpenAIChat => claude_openai_stream::claude_stream_to_openai(event, ctx),
+        StreamTransform::ClaudeToOpenAIChat => {
+            claude_openai_stream::claude_stream_to_openai(event, ctx)
+        }
         StreamTransform::ClaudeToOpenAIResponses => {
             claude_openai_responses_stream::claude_stream_to_openai_responses(event, ctx)
         }
@@ -1338,8 +1337,7 @@ fn looks_like_sse_prelude(chunk: &[u8]) -> bool {
 mod tests {
     use super::{
         find_sse_delimiter, looks_like_sse_prelude, merge_token_usage, pop_sse_event,
-        select_stream_transform,
-        EntryEndpoint, StreamTransform,
+        select_stream_transform, EntryEndpoint, StreamTransform,
     };
     use crate::models::{RuleProtocol, TokenUsage};
 
@@ -1374,8 +1372,12 @@ mod tests {
 
     #[test]
     fn looks_like_sse_prelude_accepts_event_or_data_lines() {
-        assert!(looks_like_sse_prelude(b"event: response.created\ndata: {}\n\n"));
-        assert!(looks_like_sse_prelude(b"  data: {\"type\":\"response.created\"}\n\n"));
+        assert!(looks_like_sse_prelude(
+            b"event: response.created\ndata: {}\n\n"
+        ));
+        assert!(looks_like_sse_prelude(
+            b"  data: {\"type\":\"response.created\"}\n\n"
+        ));
         assert!(looks_like_sse_prelude("\u{feff}event: ping\n\n".as_bytes()));
     }
 
@@ -1439,8 +1441,8 @@ mod tests {
             cache_write_tokens: 0,
         };
 
-        let merged = merge_token_usage(Some(upstream.clone()), Some(output))
-            .expect("usage should exist");
+        let merged =
+            merge_token_usage(Some(upstream.clone()), Some(output)).expect("usage should exist");
         assert_eq!(merged.input_tokens, upstream.input_tokens);
         assert_eq!(merged.output_tokens, upstream.output_tokens);
         assert_eq!(merged.cache_read_tokens, upstream.cache_read_tokens);

@@ -20,7 +20,7 @@ mod tests {
 
         let result = claude_openai::claude_req_to_openai(
             serde_json::to_vec(&claude_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());
@@ -53,7 +53,7 @@ mod tests {
         });
 
         let result = openai_claude::openai_resp_to_claude(
-            serde_json::to_vec(&openai_resp).unwrap().as_slice()
+            serde_json::to_vec(&openai_resp).unwrap().as_slice(),
         );
 
         assert!(result.is_ok());
@@ -61,7 +61,10 @@ mod tests {
         assert_eq!(claude_resp["type"], "message");
         assert_eq!(claude_resp["role"], "assistant");
         assert_eq!(claude_resp["content"][0]["type"], "text");
-        assert_eq!(claude_resp["content"][0]["text"], "Hello! How can I help you?");
+        assert_eq!(
+            claude_resp["content"][0]["text"],
+            "Hello! How can I help you?"
+        );
         assert_eq!(claude_resp["stop_reason"], "end_turn");
     }
 
@@ -216,12 +219,20 @@ mod tests {
         assert_eq!(responses_resp["object"], "response");
         assert_eq!(responses_resp["status"], "completed");
         assert_eq!(responses_resp["output"][0]["type"], "message");
-        assert_eq!(responses_resp["output"][0]["content"][0]["type"], "output_text");
-        assert_eq!(responses_resp["output"][0]["content"][0]["text"], "Working on it");
+        assert_eq!(
+            responses_resp["output"][0]["content"][0]["type"],
+            "output_text"
+        );
+        assert_eq!(
+            responses_resp["output"][0]["content"][0]["text"],
+            "Working on it"
+        );
         assert_eq!(responses_resp["output"][1]["type"], "function_call");
         assert_eq!(responses_resp["output"][1]["call_id"], "call_1");
         assert_eq!(responses_resp["output"][1]["name"], "list_files");
-        let args = responses_resp["output"][1]["arguments"].as_str().unwrap_or("");
+        let args = responses_resp["output"][1]["arguments"]
+            .as_str()
+            .unwrap_or("");
         assert!(args.contains("\"path\":\".\""));
         assert_eq!(responses_resp["usage"]["input_tokens"], 11);
         assert_eq!(responses_resp["usage"]["output_tokens"], 7);
@@ -233,7 +244,8 @@ mod tests {
         let mut ctx = StreamContext::new();
         let event = b"event: message_start\ndata: {\"type\":\"error\",\"error\":{\"message\":\"upstream boom\"}}\n\n";
 
-        let result = claude_openai_responses_stream::claude_stream_to_openai_responses(event, &mut ctx);
+        let result =
+            claude_openai_responses_stream::claude_stream_to_openai_responses(event, &mut ctx);
         assert!(result.is_err());
         let err = result.err().unwrap_or_default();
         assert!(err.contains("upstream error"));
@@ -252,10 +264,22 @@ mod tests {
         let done = b"data: [DONE]\n\n";
 
         let mut out = Vec::new();
-        out.extend(claude_openai_responses_stream::openai_responses_stream_to_claude(created, &mut ctx).expect("created"));
-        out.extend(claude_openai_responses_stream::openai_responses_stream_to_claude(added, &mut ctx).expect("added"));
-        out.extend(claude_openai_responses_stream::openai_responses_stream_to_claude(delta, &mut ctx).expect("delta"));
-        out.extend(claude_openai_responses_stream::openai_responses_stream_to_claude(completed, &mut ctx).expect("completed"));
+        out.extend(
+            claude_openai_responses_stream::openai_responses_stream_to_claude(created, &mut ctx)
+                .expect("created"),
+        );
+        out.extend(
+            claude_openai_responses_stream::openai_responses_stream_to_claude(added, &mut ctx)
+                .expect("added"),
+        );
+        out.extend(
+            claude_openai_responses_stream::openai_responses_stream_to_claude(delta, &mut ctx)
+                .expect("delta"),
+        );
+        out.extend(
+            claude_openai_responses_stream::openai_responses_stream_to_claude(completed, &mut ctx)
+                .expect("completed"),
+        );
 
         let s = String::from_utf8(out.clone()).expect("utf8");
         assert!(s.contains("event: message_start"));
@@ -268,8 +292,9 @@ mod tests {
         assert!(s.contains("\"stop_reason\":\"end_turn\""));
         assert!(s.contains("event: message_stop"));
 
-        let done_out = claude_openai_responses_stream::openai_responses_stream_to_claude(done, &mut ctx)
-            .expect("done");
+        let done_out =
+            claude_openai_responses_stream::openai_responses_stream_to_claude(done, &mut ctx)
+                .expect("done");
         assert!(done_out.is_empty());
 
         let after_done = String::from_utf8(out).expect("utf8");
@@ -449,7 +474,10 @@ mod tests {
         let claude_resp: serde_json::Value = serde_json::from_slice(&result).expect("json");
 
         assert_eq!(claude_resp["content"][0]["type"], "text");
-        assert_eq!(claude_resp["content"][0]["text"], "[Tool Call: Bash({command:pwd})]");
+        assert_eq!(
+            claude_resp["content"][0]["text"],
+            "[Tool Call: Bash({command:pwd})]"
+        );
         assert_eq!(claude_resp["stop_reason"], "end_turn");
     }
 
@@ -664,7 +692,7 @@ mod tests {
 
         let result = openai_chat_responses::openai_chat_to_responses(
             serde_json::to_vec(&chat_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());
@@ -703,7 +731,7 @@ mod tests {
 
         let result = openai_chat_responses::openai_chat_to_responses(
             serde_json::to_vec(&chat_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());
@@ -745,7 +773,7 @@ mod tests {
 
         let result = openai_chat_responses::openai_chat_to_responses(
             serde_json::to_vec(&chat_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());
@@ -787,7 +815,7 @@ mod tests {
         });
 
         let result = openai_chat_responses::openai_responses_to_chat(
-            serde_json::to_vec(&resp).unwrap().as_slice()
+            serde_json::to_vec(&resp).unwrap().as_slice(),
         );
 
         assert!(result.is_ok());
@@ -803,7 +831,10 @@ mod tests {
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0]["id"], "call_456");
         assert_eq!(tool_calls[0]["function"]["name"], "get_weather");
-        assert_eq!(tool_calls[0]["function"]["arguments"], "{\"location\":\"NYC\"}");
+        assert_eq!(
+            tool_calls[0]["function"]["arguments"],
+            "{\"location\":\"NYC\"}"
+        );
 
         let usage = &chat_resp["usage"];
         assert_eq!(usage["prompt_tokens"], 10);
@@ -841,7 +872,7 @@ mod tests {
 
         let result = openai_chat_responses::openai_responses_req_to_chat(
             serde_json::to_vec(&resp_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());
@@ -889,7 +920,7 @@ mod tests {
         });
 
         let result = openai_chat_responses::openai_chat_resp_to_responses(
-            serde_json::to_vec(&chat_resp).unwrap().as_slice()
+            serde_json::to_vec(&chat_resp).unwrap().as_slice(),
         );
 
         assert!(result.is_ok());
@@ -928,7 +959,7 @@ mod tests {
 
         let result = openai_chat_responses::openai_responses_req_to_chat(
             serde_json::to_vec(&resp_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());
@@ -957,7 +988,7 @@ mod tests {
 
         let result = openai_chat_responses::openai_responses_req_to_chat(
             serde_json::to_vec(&resp_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());
@@ -984,7 +1015,7 @@ mod tests {
 
         let result = openai_chat_responses::openai_responses_req_to_chat(
             serde_json::to_vec(&resp_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());
@@ -1019,7 +1050,7 @@ mod tests {
 
         let result = openai_chat_responses::openai_responses_req_to_chat(
             serde_json::to_vec(&resp_req).unwrap().as_slice(),
-            "gpt-4"
+            "gpt-4",
         );
 
         assert!(result.is_ok());

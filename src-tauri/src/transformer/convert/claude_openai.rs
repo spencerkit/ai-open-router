@@ -1,13 +1,13 @@
 //! Claude to OpenAI conversion
 //! Reference: ccNexus/internal/transformer/convert/claude_openai.go
 
-use crate::transformer::types::*;
 use super::common::*;
+use crate::transformer::types::*;
 use serde_json::{json, Value};
 
 pub fn claude_req_to_openai(claude_req: &[u8], model: &str) -> Result<Vec<u8>, String> {
-    let req: ClaudeRequest = serde_json::from_slice(claude_req)
-        .map_err(|e| format!("parse claude request: {}", e))?;
+    let req: ClaudeRequest =
+        serde_json::from_slice(claude_req).map_err(|e| format!("parse claude request: {}", e))?;
 
     let mut messages = Vec::new();
 
@@ -58,8 +58,9 @@ pub fn claude_req_to_openai(claude_req: &[u8], model: &str) -> Result<Vec<u8>, S
                             let id = block.get("id").and_then(|i| i.as_str()).unwrap_or("");
                             let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
                             if !id.is_empty() && !name.is_empty() {
-                                let args = serde_json::to_string(block.get("input").unwrap_or(&json!({})))
-                                    .unwrap_or_default();
+                                let args =
+                                    serde_json::to_string(block.get("input").unwrap_or(&json!({})))
+                                        .unwrap_or_default();
                                 tool_calls.push(OpenAIToolCall {
                                     index: None,
                                     id: id.to_string(),
@@ -72,10 +73,13 @@ pub fn claude_req_to_openai(claude_req: &[u8], model: &str) -> Result<Vec<u8>, S
                             }
                         }
                         "tool_result" => {
-                            let call_id = block.get("tool_use_id").and_then(|i| i.as_str()).unwrap_or("");
+                            let call_id = block
+                                .get("tool_use_id")
+                                .and_then(|i| i.as_str())
+                                .unwrap_or("");
                             if !call_id.is_empty() {
                                 let content = extract_tool_result_content(
-                                    block.get("content").unwrap_or(&Value::Null)
+                                    block.get("content").unwrap_or(&Value::Null),
                                 );
                                 tool_results.push(OpenAIMessage {
                                     role: "tool".to_string(),
@@ -98,7 +102,11 @@ pub fn claude_req_to_openai(claude_req: &[u8], model: &str) -> Result<Vec<u8>, S
                     messages.push(OpenAIMessage {
                         role: msg.role.clone(),
                         content,
-                        tool_calls: if !tool_calls.is_empty() { Some(tool_calls) } else { None },
+                        tool_calls: if !tool_calls.is_empty() {
+                            Some(tool_calls)
+                        } else {
+                            None
+                        },
                         tool_call_id: None,
                     });
                 } else if has_thinking && msg.role == "assistant" {
@@ -131,14 +139,17 @@ pub fn claude_req_to_openai(claude_req: &[u8], model: &str) -> Result<Vec<u8>, S
     if let Some(tools) = &req.tools {
         if !tools.is_empty() {
             openai_req.tools = Some(
-                tools.iter().map(|t| OpenAITool {
-                    tool_type: "function".to_string(),
-                    function: OpenAIToolFunction {
-                        name: t.name.clone(),
-                        description: t.description.clone(),
-                        parameters: t.input_schema.clone(),
-                    },
-                }).collect()
+                tools
+                    .iter()
+                    .map(|t| OpenAITool {
+                        tool_type: "function".to_string(),
+                        function: OpenAIToolFunction {
+                            name: t.name.clone(),
+                            description: t.description.clone(),
+                            parameters: t.input_schema.clone(),
+                        },
+                    })
+                    .collect(),
             );
         }
     }

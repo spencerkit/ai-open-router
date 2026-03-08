@@ -1,7 +1,7 @@
 //! Claude Messages to OpenAI Responses conversion
 
-use crate::transformer::types::*;
 use super::common::*;
+use crate::transformer::types::*;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 
@@ -12,8 +12,8 @@ pub struct ResponsesToClaudeOptions {
 }
 
 pub fn claude_req_to_openai_responses(claude_req: &[u8], model: &str) -> Result<Vec<u8>, String> {
-    let req: ClaudeRequest = serde_json::from_slice(claude_req)
-        .map_err(|e| format!("parse: {}", e))?;
+    let req: ClaudeRequest =
+        serde_json::from_slice(claude_req).map_err(|e| format!("parse: {}", e))?;
 
     let mut openai_req = json!({
         "model": model,
@@ -44,13 +44,15 @@ pub fn claude_req_to_openai_responses(claude_req: &[u8], model: &str) -> Result<
                         match block_type {
                             "text" => {
                                 if let Some(text) = block.get("text") {
-                                    content_parts.push(json!({"type": message_text_type, "text": text}));
+                                    content_parts
+                                        .push(json!({"type": message_text_type, "text": text}));
                                 }
                             }
                             "tool_use" => {
                                 let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
                                 let input = block.get("input").cloned().unwrap_or(json!({}));
-                                let args = serde_json::to_string(&input).unwrap_or_else(|_| "{}".to_string());
+                                let args = serde_json::to_string(&input)
+                                    .unwrap_or_else(|_| "{}".to_string());
                                 content_parts.push(json!({
                                     "type": "output_text",
                                     "text": format!("[Tool Call: {}({})]", name, args)
@@ -61,7 +63,7 @@ pub fn claude_req_to_openai_responses(claude_req: &[u8], model: &str) -> Result<
                                 // `function_call_output` in `message.content`.
                                 // Keep tool-result signal as text for broad compatibility.
                                 let content = extract_tool_result_content(
-                                    block.get("content").unwrap_or(&Value::Null)
+                                    block.get("content").unwrap_or(&Value::Null),
                                 );
                                 content_parts.push(json!({
                                     "type": "input_text",
@@ -81,14 +83,17 @@ pub fn claude_req_to_openai_responses(claude_req: &[u8], model: &str) -> Result<
     openai_req["input"] = json!(input);
 
     if let Some(tools) = &req.tools {
-        let openai_tools: Vec<Value> = tools.iter().map(|t| {
-            json!({
-                "type": "function",
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.input_schema
+        let openai_tools: Vec<Value> = tools
+            .iter()
+            .map(|t| {
+                json!({
+                    "type": "function",
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.input_schema
+                })
             })
-        }).collect();
+            .collect();
         openai_req["tools"] = json!(openai_tools);
     }
 
@@ -96,8 +101,7 @@ pub fn claude_req_to_openai_responses(claude_req: &[u8], model: &str) -> Result<
 }
 
 pub fn openai_responses_req_to_claude(openai_req: &[u8], model: &str) -> Result<Vec<u8>, String> {
-    let req: Value = serde_json::from_slice(openai_req)
-        .map_err(|e| format!("parse: {}", e))?;
+    let req: Value = serde_json::from_slice(openai_req).map_err(|e| format!("parse: {}", e))?;
 
     let mut claude_req = json!({
         "model": model,
@@ -130,7 +134,7 @@ pub fn openai_responses_req_to_claude(openai_req: &[u8], model: &str) -> Result<
                     // Claude only supports "user" and "assistant" roles
                     let claude_role = match role {
                         "assistant" => "assistant",
-                        _ => "user" // Map developer, system, user all to user
+                        _ => "user", // Map developer, system, user all to user
                     };
                     let mut content = Vec::new();
 
@@ -155,7 +159,10 @@ pub fn openai_responses_req_to_claude(openai_req: &[u8], model: &str) -> Result<
                 Some("function_call") => {
                     let call_id = item.get("call_id").and_then(|c| c.as_str()).unwrap_or("");
                     let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                    let args_str = item.get("arguments").and_then(|a| a.as_str()).unwrap_or("{}");
+                    let args_str = item
+                        .get("arguments")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or("{}");
                     let input: Value = serde_json::from_str(args_str).unwrap_or(json!({}));
 
                     pending_tool_uses.push(json!({
@@ -200,17 +207,20 @@ pub fn openai_responses_req_to_claude(openai_req: &[u8], model: &str) -> Result<
     claude_req["messages"] = json!(messages);
 
     if let Some(tools) = req.get("tools").and_then(|t| t.as_array()) {
-        let claude_tools: Vec<Value> = tools.iter().filter_map(|t| {
-            if t.get("type").and_then(|ty| ty.as_str()) == Some("function") {
-                Some(json!({
-                    "name": t.get("name")?,
-                    "description": t.get("description")?,
-                    "input_schema": t.get("parameters")?
-                }))
-            } else {
-                None
-            }
-        }).collect();
+        let claude_tools: Vec<Value> = tools
+            .iter()
+            .filter_map(|t| {
+                if t.get("type").and_then(|ty| ty.as_str()) == Some("function") {
+                    Some(json!({
+                        "name": t.get("name")?,
+                        "description": t.get("description")?,
+                        "input_schema": t.get("parameters")?
+                    }))
+                } else {
+                    None
+                }
+            })
+            .collect();
         if !claude_tools.is_empty() {
             claude_req["tools"] = json!(claude_tools);
         }
@@ -220,8 +230,8 @@ pub fn openai_responses_req_to_claude(openai_req: &[u8], model: &str) -> Result<
 }
 
 pub fn claude_resp_to_openai_responses(claude_resp: &[u8]) -> Result<Vec<u8>, String> {
-    let resp: ClaudeResponse = serde_json::from_slice(claude_resp)
-        .map_err(|e| format!("parse: {}", e))?;
+    let resp: ClaudeResponse =
+        serde_json::from_slice(claude_resp).map_err(|e| format!("parse: {}", e))?;
 
     let mut output_content = Vec::new();
     let mut function_calls = Vec::new();
@@ -279,8 +289,7 @@ pub fn openai_responses_resp_to_claude_with_options(
     openai_resp: &[u8],
     options: &ResponsesToClaudeOptions,
 ) -> Result<Vec<u8>, String> {
-    let resp: Value = serde_json::from_slice(openai_resp)
-        .map_err(|e| format!("parse: {}", e))?;
+    let resp: Value = serde_json::from_slice(openai_resp).map_err(|e| format!("parse: {}", e))?;
 
     let mut content = Vec::new();
     let mut stop_reason = "end_turn";
@@ -322,7 +331,10 @@ pub fn openai_responses_resp_to_claude_with_options(
                 Some("function_call") => {
                     if let Some(call_id) = item.get("call_id") {
                         if let Some(name) = item.get("name") {
-                            let args_str = item.get("arguments").and_then(|a| a.as_str()).unwrap_or("{}");
+                            let args_str = item
+                                .get("arguments")
+                                .and_then(|a| a.as_str())
+                                .unwrap_or("{}");
                             let input: Value = serde_json::from_str(args_str).unwrap_or(json!({}));
                             content.push(json!({
                                 "type": "tool_use",

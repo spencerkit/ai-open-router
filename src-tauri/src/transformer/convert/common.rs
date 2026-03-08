@@ -12,7 +12,10 @@ pub fn extract_system_text(system: &Value) -> String {
             let parts: Vec<String> = arr
                 .iter()
                 .filter_map(|block| {
-                    block.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
+                    block
+                        .get("text")
+                        .and_then(|t| t.as_str())
+                        .map(|s| s.to_string())
                 })
                 .collect();
             parts.join("\n")
@@ -100,7 +103,11 @@ pub fn build_openai_chunk(
         }]
     });
 
-    format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default()).into_bytes()
+    format!(
+        "data: {}\n\n",
+        serde_json::to_string(&chunk).unwrap_or_default()
+    )
+    .into_bytes()
 }
 
 /// Parsed textual tool call payload extracted from placeholder format.
@@ -136,10 +143,7 @@ pub fn parse_strict_text_tool_call(
 ) -> Option<ParsedTextToolCall> {
     const MARKER: &str = "[Tool Call: ";
 
-    let mut tool_names: Vec<&str> = allowed_tool_names
-        .iter()
-        .map(String::as_str)
-        .collect();
+    let mut tool_names: Vec<&str> = allowed_tool_names.iter().map(String::as_str).collect();
     // Prefer longest names first to avoid prefix collisions.
     tool_names.sort_by_key(|name| std::cmp::Reverse(name.len()));
 
@@ -219,7 +223,10 @@ fn parse_command_array_text_tool_call(
     None
 }
 
-fn resolve_allowed_tool_name(allowed_tool_names: &HashSet<String>, preferred: &str) -> Option<String> {
+fn resolve_allowed_tool_name(
+    allowed_tool_names: &HashSet<String>,
+    preferred: &str,
+) -> Option<String> {
     if let Some(exact) = allowed_tool_names.get(preferred) {
         return Some(exact.clone());
     }
@@ -276,7 +283,10 @@ fn normalize_bash_command_array_arguments(value: &Value) -> Option<Value> {
         return None;
     }
 
-    let argv: Vec<&str> = command.iter().map(|v| v.as_str()).collect::<Option<Vec<_>>>()?;
+    let argv: Vec<&str> = command
+        .iter()
+        .map(|v| v.as_str())
+        .collect::<Option<Vec<_>>>()?;
     let shell = *argv.first()?;
     if !is_shell_program(shell) {
         return None;

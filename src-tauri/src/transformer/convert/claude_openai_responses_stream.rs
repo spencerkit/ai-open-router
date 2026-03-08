@@ -1,10 +1,13 @@
 //! Claude to OpenAI Responses streaming conversion
 
-use crate::transformer::types::StreamContext;
 use super::common::{build_claude_event, parse_sse, parse_text_tool_call_fallback};
+use crate::transformer::types::StreamContext;
 use serde_json::{json, Value};
 
-pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) -> Result<Vec<u8>, String> {
+pub fn claude_stream_to_openai_responses(
+    event: &[u8],
+    ctx: &mut StreamContext,
+) -> Result<Vec<u8>, String> {
     let (event_type, json_data) = parse_sse(event);
     if json_data.is_empty() {
         return Ok(Vec::new());
@@ -46,7 +49,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                     "status": "in_progress"
                 }
             });
-            result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt).unwrap()));
+            result.push_str(&format!(
+                "data: {}\n\n",
+                serde_json::to_string(&evt).unwrap()
+            ));
         }
         "content_block_start" => {
             if let Some(block) = data.get("content_block") {
@@ -67,7 +73,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                                 "content": []
                             }
                         });
-                        result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt1).unwrap()));
+                        result.push_str(&format!(
+                            "data: {}\n\n",
+                            serde_json::to_string(&evt1).unwrap()
+                        ));
 
                         let evt2 = json!({
                             "type": "response.content_part.added",
@@ -75,7 +84,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                             "content_index": 0,
                             "part": {"type": "output_text", "text": ""}
                         });
-                        result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt2).unwrap()));
+                        result.push_str(&format!(
+                            "data: {}\n\n",
+                            serde_json::to_string(&evt2).unwrap()
+                        ));
                     }
                     Some("tool_use") => {
                         ctx.tool_block_started = true;
@@ -99,7 +111,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                                 "status": "in_progress"
                             }
                         });
-                        result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt).unwrap()));
+                        result.push_str(&format!(
+                            "data: {}\n\n",
+                            serde_json::to_string(&evt).unwrap()
+                        ));
                     }
                     _ => {}
                 }
@@ -120,7 +135,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                             "status": "in_progress"
                         }
                     });
-                    result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt).unwrap()));
+                    result.push_str(&format!(
+                        "data: {}\n\n",
+                        serde_json::to_string(&evt).unwrap()
+                    ));
                 }
 
                 match delta.get("type").and_then(|t| t.as_str()) {
@@ -141,7 +159,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                                     "content": []
                                 }
                             });
-                            result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt1).unwrap()));
+                            result.push_str(&format!(
+                                "data: {}\n\n",
+                                serde_json::to_string(&evt1).unwrap()
+                            ));
 
                             let evt2 = json!({
                                 "type": "response.content_part.added",
@@ -149,7 +170,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                                 "content_index": 0,
                                 "part": {"type": "output_text", "text": ""}
                             });
-                            result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt2).unwrap()));
+                            result.push_str(&format!(
+                                "data: {}\n\n",
+                                serde_json::to_string(&evt2).unwrap()
+                            ));
                         }
 
                         if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
@@ -159,7 +183,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                                 "content_index": 0,
                                 "delta": text
                             });
-                            result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt).unwrap()));
+                            result.push_str(&format!(
+                                "data: {}\n\n",
+                                serde_json::to_string(&evt).unwrap()
+                            ));
                         }
                     }
                     Some("input_json_delta") => {
@@ -182,7 +209,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                                     "status": "in_progress"
                                 }
                             });
-                            result.push_str(&format!("data: {}\n\n", serde_json::to_string(&start_evt).unwrap()));
+                            result.push_str(&format!(
+                                "data: {}\n\n",
+                                serde_json::to_string(&start_evt).unwrap()
+                            ));
 
                             // Initialize tool fields if not set
                             if ctx.current_tool_id.is_empty() {
@@ -197,7 +227,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                                 "output_index": ctx.tool_index,
                                 "delta": partial
                             });
-                            result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt).unwrap()));
+                            result.push_str(&format!(
+                                "data: {}\n\n",
+                                serde_json::to_string(&evt).unwrap()
+                            ));
                         }
                     }
                     _ => {}
@@ -214,7 +247,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                     "output_index": idx,
                     "arguments": ctx.tool_arguments
                 });
-                result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt1).unwrap()));
+                result.push_str(&format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(&evt1).unwrap()
+                ));
 
                 let evt2 = json!({
                     "type": "response.output_item.done",
@@ -228,7 +264,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                         "status": "completed"
                     }
                 });
-                result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt2).unwrap()));
+                result.push_str(&format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(&evt2).unwrap()
+                ));
                 ctx.tool_block_started = false;
                 ctx.tool_arguments = String::new();
             }
@@ -239,7 +278,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                     "output_index": idx,
                     "content_index": 0
                 });
-                result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt1).unwrap()));
+                result.push_str(&format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(&evt1).unwrap()
+                ));
 
                 let evt2 = json!({
                     "type": "response.content_part.done",
@@ -247,7 +289,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                     "content_index": 0,
                     "part": {"type": "output_text"}
                 });
-                result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt2).unwrap()));
+                result.push_str(&format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(&evt2).unwrap()
+                ));
 
                 let evt3 = json!({
                     "type": "response.output_item.done",
@@ -259,7 +304,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                         "status": "completed"
                     }
                 });
-                result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt3).unwrap()));
+                result.push_str(&format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(&evt3).unwrap()
+                ));
                 ctx.content_block_started = false;
             }
         }
@@ -278,7 +326,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                     "output_index": ctx.tool_index,
                     "arguments": ctx.tool_arguments
                 });
-                result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt1).unwrap()));
+                result.push_str(&format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(&evt1).unwrap()
+                ));
 
                 let evt2 = json!({
                     "type": "response.output_item.done",
@@ -292,7 +343,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                         "status": "completed"
                     }
                 });
-                result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt2).unwrap()));
+                result.push_str(&format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(&evt2).unwrap()
+                ));
             }
 
             let evt = json!({
@@ -308,7 +362,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
                     }
                 }
             });
-            result.push_str(&format!("data: {}\n\n", serde_json::to_string(&evt).unwrap()));
+            result.push_str(&format!(
+                "data: {}\n\n",
+                serde_json::to_string(&evt).unwrap()
+            ));
             result.push_str("data: [DONE]\n\n");
         }
         _ => {}
@@ -317,7 +374,10 @@ pub fn claude_stream_to_openai_responses(event: &[u8], ctx: &mut StreamContext) 
     Ok(result.into_bytes())
 }
 
-pub fn openai_responses_stream_to_claude(event: &[u8], ctx: &mut StreamContext) -> Result<Vec<u8>, String> {
+pub fn openai_responses_stream_to_claude(
+    event: &[u8],
+    ctx: &mut StreamContext,
+) -> Result<Vec<u8>, String> {
     fn flush_buffered_text_output(ctx: &mut StreamContext, result: &mut Vec<u8>) {
         let Some(output_index) = ctx.buffered_output_index.take() else {
             return;
@@ -328,14 +388,15 @@ pub fn openai_responses_stream_to_claude(event: &[u8], ctx: &mut StreamContext) 
         }
 
         if ctx.text_tool_call_fallback_enabled {
-            if let Some(parsed) = parse_text_tool_call_fallback(&buffered, &ctx.allowed_tool_names) {
+            if let Some(parsed) = parse_text_tool_call_fallback(&buffered, &ctx.allowed_tool_names)
+            {
                 let call_id = format!(
                     "fallback_call_{}_{}",
                     output_index, ctx.fallback_tool_call_counter
                 );
                 ctx.fallback_tool_call_counter += 1;
-                let args = serde_json::to_string(&parsed.arguments)
-                    .unwrap_or_else(|_| "{}".to_string());
+                let args =
+                    serde_json::to_string(&parsed.arguments).unwrap_or_else(|_| "{}".to_string());
 
                 ctx.current_tool_id = call_id.clone();
                 ctx.current_tool_name = parsed.name.clone();
@@ -360,7 +421,10 @@ pub fn openai_responses_stream_to_claude(event: &[u8], ctx: &mut StreamContext) 
                         "delta": {"type": "input_json_delta", "partial_json": args}
                     }),
                 ));
-                result.extend(build_claude_event("content_block_stop", &json!({"index": output_index})));
+                result.extend(build_claude_event(
+                    "content_block_stop",
+                    &json!({"index": output_index}),
+                ));
                 return;
             }
         }
@@ -379,7 +443,10 @@ pub fn openai_responses_stream_to_claude(event: &[u8], ctx: &mut StreamContext) 
                 "delta": {"type": "text_delta", "text": buffered}
             }),
         ));
-        result.extend(build_claude_event("content_block_stop", &json!({"index": output_index})));
+        result.extend(build_claude_event(
+            "content_block_stop",
+            &json!({"index": output_index}),
+        ));
     }
 
     let (_, json_data) = parse_sse(event);
@@ -397,11 +464,17 @@ pub fn openai_responses_stream_to_claude(event: &[u8], ctx: &mut StreamContext) 
         }
         flush_buffered_text_output(ctx, &mut result);
         if ctx.content_block_started {
-            result.extend(build_claude_event("content_block_stop", &json!({"index": ctx.content_index})));
+            result.extend(build_claude_event(
+                "content_block_stop",
+                &json!({"index": ctx.content_index}),
+            ));
             ctx.content_block_started = false;
         }
         if ctx.tool_block_started {
-            result.extend(build_claude_event("content_block_stop", &json!({"index": ctx.tool_index})));
+            result.extend(build_claude_event(
+                "content_block_stop",
+                &json!({"index": ctx.tool_index}),
+            ));
             ctx.tool_block_started = false;
         }
         if !ctx.finish_reason_sent {
@@ -489,7 +562,10 @@ pub fn openai_responses_stream_to_claude(event: &[u8], ctx: &mut StreamContext) 
                     Some("function_call") => {
                         flush_buffered_text_output(ctx, &mut result);
                         if ctx.content_block_started {
-                            result.extend(build_claude_event("content_block_stop", &json!({"index": ctx.content_index})));
+                            result.extend(build_claude_event(
+                                "content_block_stop",
+                                &json!({"index": ctx.content_index}),
+                            ));
                             ctx.content_block_started = false;
                         }
 
@@ -616,12 +692,18 @@ pub fn openai_responses_stream_to_claude(event: &[u8], ctx: &mut StreamContext) 
                         if text_fallback_active && ctx.buffered_output_index == Some(output_index) {
                             flush_buffered_text_output(ctx, &mut result);
                         } else if ctx.content_block_started {
-                            result.extend(build_claude_event("content_block_stop", &json!({"index": ctx.content_index})));
+                            result.extend(build_claude_event(
+                                "content_block_stop",
+                                &json!({"index": ctx.content_index}),
+                            ));
                             ctx.content_block_started = false;
                         }
                     }
                     "function_call" if ctx.tool_block_started => {
-                        result.extend(build_claude_event("content_block_stop", &json!({"index": ctx.tool_index})));
+                        result.extend(build_claude_event(
+                            "content_block_stop",
+                            &json!({"index": ctx.tool_index}),
+                        ));
                         ctx.tool_block_started = false;
                     }
                     _ => {}
@@ -642,11 +724,17 @@ pub fn openai_responses_stream_to_claude(event: &[u8], ctx: &mut StreamContext) 
             }
             flush_buffered_text_output(ctx, &mut result);
             if ctx.content_block_started {
-                result.extend(build_claude_event("content_block_stop", &json!({"index": ctx.content_index})));
+                result.extend(build_claude_event(
+                    "content_block_stop",
+                    &json!({"index": ctx.content_index}),
+                ));
                 ctx.content_block_started = false;
             }
             if ctx.tool_block_started {
-                result.extend(build_claude_event("content_block_stop", &json!({"index": ctx.tool_index})));
+                result.extend(build_claude_event(
+                    "content_block_stop",
+                    &json!({"index": ctx.tool_index}),
+                ));
                 ctx.tool_block_started = false;
             }
             let stop_reason = if !ctx.current_tool_id.is_empty() {

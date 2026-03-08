@@ -67,7 +67,11 @@ pub fn write_group_entry(
     }
 
     let config = state.config_store.get();
-    if !config.groups.iter().any(|group| group.id == normalized_group_id) {
+    if !config
+        .groups
+        .iter()
+        .any(|group| group.id == normalized_group_id)
+    {
         return Err(AppError::not_found(format!(
             "group not found: {normalized_group_id}"
         )));
@@ -197,7 +201,10 @@ fn choose_ip_base_url_from_status(raw: Option<&str>, fallback_port: u16) -> Opti
 
 /// Chooses IP host from configured server host.
 fn choose_ip_host_from_config(raw_host: &str) -> Option<String> {
-    let host = raw_host.trim().trim_matches(&['[', ']'][..]).to_ascii_lowercase();
+    let host = raw_host
+        .trim()
+        .trim_matches(&['[', ']'][..])
+        .to_ascii_lowercase();
     if host.is_empty() || is_wildcard_host(&host) || is_loopback_or_localhost_host(&host) {
         return None;
     }
@@ -299,7 +306,10 @@ fn write_codex_config(config_dir: &Path, entry_url: &str) -> AppResult<PathBuf> 
         output.push('\n');
     }
     std::fs::write(&file_path, output).map_err(|e| {
-        AppError::external(format!("write codex config failed ({}): {e}", file_path.display()))
+        AppError::external(format!(
+            "write codex config failed ({}): {e}",
+            file_path.display()
+        ))
     })?;
     Ok(file_path)
 }
@@ -322,8 +332,9 @@ fn read_json_like_object(file_path: &Path) -> AppResult<Map<String, Value>> {
     if !file_path.exists() {
         return Ok(Map::new());
     }
-    let raw = std::fs::read_to_string(file_path)
-        .map_err(|e| AppError::external(format!("read file failed ({}): {e}", file_path.display())))?;
+    let raw = std::fs::read_to_string(file_path).map_err(|e| {
+        AppError::external(format!("read file failed ({}): {e}", file_path.display()))
+    })?;
     if raw.trim().is_empty() {
         return Ok(Map::new());
     }
@@ -350,8 +361,9 @@ fn read_toml_document(file_path: &Path) -> AppResult<DocumentMut> {
     if !file_path.exists() {
         return Ok(DocumentMut::new());
     }
-    let raw = std::fs::read_to_string(file_path)
-        .map_err(|e| AppError::external(format!("read file failed ({}): {e}", file_path.display())))?;
+    let raw = std::fs::read_to_string(file_path).map_err(|e| {
+        AppError::external(format!("read file failed ({}): {e}", file_path.display()))
+    })?;
     if raw.trim().is_empty() {
         return Ok(DocumentMut::new());
     }
@@ -388,11 +400,15 @@ fn ensure_object(value: &mut Value) -> &mut Map<String, Value> {
 fn write_json_object(file_path: &Path, root: &Map<String, Value>) -> AppResult<()> {
     if let Some(parent) = file_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
-            AppError::external(format!("create config dir failed ({}): {e}", parent.display()))
+            AppError::external(format!(
+                "create config dir failed ({}): {e}",
+                parent.display()
+            ))
         })?;
     }
     let text = serde_json::to_string_pretty(&Value::Object(root.clone()))
         .map_err(|e| AppError::internal(format!("serialize JSON failed: {e}")))?;
-    std::fs::write(file_path, text)
-        .map_err(|e| AppError::external(format!("write file failed ({}): {e}", file_path.display())))
+    std::fs::write(file_path, text).map_err(|e| {
+        AppError::external(format!("write file failed ({}): {e}", file_path.display()))
+    })
 }

@@ -24,7 +24,10 @@ pub async fn integration_pick_directory(
     initial_dir: Option<String>,
     kind: Option<IntegrationClientKind>,
 ) -> Result<Option<String>, String> {
-    let mut builder = app.dialog().file().set_title("Select Configuration Directory");
+    let mut builder = app
+        .dialog()
+        .file()
+        .set_title("Select Configuration Directory");
 
     if let Some(starting_dir) = resolve_starting_directory(initial_dir, kind) {
         builder = builder.set_directory(starting_dir);
@@ -112,7 +115,8 @@ pub async fn integration_remove_target(
     state: State<'_, SharedState>,
     target_id: String,
 ) -> Result<serde_json::Value, String> {
-    let removed = integration_service::remove_target(&state, &target_id).map_err(|e| e.to_string())?;
+    let removed =
+        integration_service::remove_target(&state, &target_id).map_err(|e| e.to_string())?;
     Ok(json!({
         "ok": true,
         "removed": removed,

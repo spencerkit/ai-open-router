@@ -115,7 +115,8 @@ impl ProxyRuntime {
             net::bind_proxy_listener(&config.server.host, config.server.port).await?;
 
         // Initialize transformer registry (simplified for ccNexus architecture)
-        let transformer_registry = Arc::new(crate::transformer::registry::TransformerRegistry::new());
+        let transformer_registry =
+            Arc::new(crate::transformer::registry::TransformerRegistry::new());
 
         let (tx, rx) = oneshot::channel();
         let service_state = ServiceState {
@@ -490,7 +491,11 @@ mod tests {
             providers: vec![rule.clone()],
         };
 
-        let model = resolve_target_model(&rule, &group.models, &json!({ "model": "GPT-5-CODEX-MINI" }));
+        let model = resolve_target_model(
+            &rule,
+            &group.models,
+            &json!({ "model": "GPT-5-CODEX-MINI" }),
+        );
         assert_eq!(model, "gpt-5-codex-mini");
     }
 

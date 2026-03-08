@@ -335,8 +335,8 @@ fn table_columns(conn: &Connection, table_name: &str) -> Result<HashSet<String>,
         .map_err(|e| format!("query table info failed for {table_name}: {e}"))?;
     let mut columns = HashSet::new();
     for column_row in column_rows {
-        let column_name = column_row
-            .map_err(|e| format!("read table info row failed for {table_name}: {e}"))?;
+        let column_name =
+            column_row.map_err(|e| format!("read table info row failed for {table_name}: {e}"))?;
         columns.insert(column_name.to_ascii_lowercase());
     }
     Ok(columns)
@@ -455,7 +455,6 @@ mod tests {
         let provider: crate::domain::entities::Rule =
             serde_json::from_str(&provider_json).expect("decode provider");
         assert_eq!(provider.id, "provider-1");
-
     }
 
     #[test]

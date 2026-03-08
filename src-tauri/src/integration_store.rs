@@ -100,7 +100,11 @@ impl IntegrationStore {
     }
 
     /// Updates target directory for this module's workflow.
-    pub fn update_target(&self, target_id: &str, config_dir: String) -> Result<IntegrationTarget, String> {
+    pub fn update_target(
+        &self,
+        target_id: &str,
+        config_dir: String,
+    ) -> Result<IntegrationTarget, String> {
         let normalized_dir = normalize_config_dir(&config_dir)?;
         let normalized_id = target_id.trim();
         if normalized_id.is_empty() {

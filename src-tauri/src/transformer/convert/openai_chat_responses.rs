@@ -4,8 +4,7 @@ use serde_json::{json, Value};
 
 /// Convert Chat Completions request to Responses request
 pub fn openai_chat_to_responses(chat_req: &[u8], model: &str) -> Result<Vec<u8>, String> {
-    let req: Value = serde_json::from_slice(chat_req)
-        .map_err(|e| format!("parse: {}", e))?;
+    let req: Value = serde_json::from_slice(chat_req).map_err(|e| format!("parse: {}", e))?;
 
     let mut input = Vec::new();
     let mut instructions = None;
@@ -19,7 +18,7 @@ pub fn openai_chat_to_responses(chat_req: &[u8], model: &str) -> Result<Vec<u8>,
                 if let Some(content) = msg.get("content") {
                     instructions = Some(match content {
                         Value::String(s) => s.clone(),
-                        _ => serde_json::to_string(content).unwrap_or_default()
+                        _ => serde_json::to_string(content).unwrap_or_default(),
                     });
                 }
                 continue; // Skip adding system message to input
@@ -30,11 +29,13 @@ pub fn openai_chat_to_responses(chat_req: &[u8], model: &str) -> Result<Vec<u8>,
                 if let Some(tool_calls) = msg.get("tool_calls").and_then(|t| t.as_array()) {
                     for tc in tool_calls {
                         let id = tc.get("id").and_then(|i| i.as_str()).unwrap_or("");
-                        let name = tc.get("function")
+                        let name = tc
+                            .get("function")
                             .and_then(|f| f.get("name"))
                             .and_then(|n| n.as_str())
                             .unwrap_or("");
-                        let args = tc.get("function")
+                        let args = tc
+                            .get("function")
                             .and_then(|f| f.get("arguments"))
                             .and_then(|a| a.as_str())
                             .unwrap_or("{}");
@@ -54,11 +55,15 @@ pub fn openai_chat_to_responses(chat_req: &[u8], model: &str) -> Result<Vec<u8>,
 
             // Handle tool messages
             if role == "tool" {
-                let call_id = msg.get("tool_call_id").and_then(|c| c.as_str()).unwrap_or("");
-                let output = msg.get("content")
+                let call_id = msg
+                    .get("tool_call_id")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("");
+                let output = msg
+                    .get("content")
                     .and_then(|c| match c {
                         Value::String(s) => Some(s.clone()),
-                        _ => Some(serde_json::to_string(c).unwrap_or_default())
+                        _ => Some(serde_json::to_string(c).unwrap_or_default()),
                     })
                     .unwrap_or_default();
 
@@ -84,7 +89,8 @@ pub fn openai_chat_to_responses(chat_req: &[u8], model: &str) -> Result<Vec<u8>,
                             if let Some(part_type) = part.get("type").and_then(|t| t.as_str()) {
                                 if part_type == "text" {
                                     if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
-                                        content_parts.push(json!({"type": "input_text", "text": text}));
+                                        content_parts
+                                            .push(json!({"type": "input_text", "text": text}));
                                     }
                                 }
                             }
@@ -111,22 +117,25 @@ pub fn openai_chat_to_responses(chat_req: &[u8], model: &str) -> Result<Vec<u8>,
 
     // Convert tools
     if let Some(tools) = req.get("tools").and_then(|t| t.as_array()) {
-        let responses_tools: Vec<Value> = tools.iter().filter_map(|t| {
-            if t.get("type").and_then(|ty| ty.as_str()) == Some("function") {
-                if let Some(function) = t.get("function") {
-                    Some(json!({
-                        "type": "function",
-                        "name": function.get("name")?,
-                        "description": function.get("description"),
-                        "parameters": function.get("parameters")?
-                    }))
+        let responses_tools: Vec<Value> = tools
+            .iter()
+            .filter_map(|t| {
+                if t.get("type").and_then(|ty| ty.as_str()) == Some("function") {
+                    if let Some(function) = t.get("function") {
+                        Some(json!({
+                            "type": "function",
+                            "name": function.get("name")?,
+                            "description": function.get("description"),
+                            "parameters": function.get("parameters")?
+                        }))
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
-            } else {
-                None
-            }
-        }).collect();
+            })
+            .collect();
 
         if !responses_tools.is_empty() {
             resp_req["tools"] = json!(responses_tools);
@@ -134,7 +143,10 @@ pub fn openai_chat_to_responses(chat_req: &[u8], model: &str) -> Result<Vec<u8>,
     }
 
     // Map max_completion_tokens to max_output_tokens
-    if let Some(max_tokens) = req.get("max_completion_tokens").or_else(|| req.get("max_tokens")) {
+    if let Some(max_tokens) = req
+        .get("max_completion_tokens")
+        .or_else(|| req.get("max_tokens"))
+    {
         resp_req["max_output_tokens"] = max_tokens.clone();
     }
 
@@ -143,8 +155,7 @@ pub fn openai_chat_to_responses(chat_req: &[u8], model: &str) -> Result<Vec<u8>,
 
 /// Convert Responses request to Chat Completions request
 pub fn openai_responses_req_to_chat(resp_req: &[u8], model: &str) -> Result<Vec<u8>, String> {
-    let req: Value = serde_json::from_slice(resp_req)
-        .map_err(|e| format!("parse: {}", e))?;
+    let req: Value = serde_json::from_slice(resp_req).map_err(|e| format!("parse: {}", e))?;
 
     let mut messages = Vec::new();
     let mut pending_tool_calls = Vec::new();
@@ -182,7 +193,10 @@ pub fn openai_responses_req_to_chat(resp_req: &[u8], model: &str) -> Result<Vec<
                             .and_then(|c| c.as_str())
                             .unwrap_or("");
                         let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                        let args = item.get("arguments").and_then(|a| a.as_str()).unwrap_or("{}");
+                        let args = item
+                            .get("arguments")
+                            .and_then(|a| a.as_str())
+                            .unwrap_or("{}");
                         pending_tool_calls.push(json!({
                             "id": call_id,
                             "type": "function",
@@ -217,34 +231,37 @@ pub fn openai_responses_req_to_chat(resp_req: &[u8], model: &str) -> Result<Vec<
 
     // Convert tools
     if let Some(tools) = req.get("tools").and_then(|t| t.as_array()) {
-        let chat_tools: Vec<Value> = tools.iter().filter_map(|t| {
-            let tool_type = t.get("type").and_then(|ty| ty.as_str())?;
-            let name = t.get("name").and_then(|n| n.as_str())?;
-            let description = t.get("description").cloned().unwrap_or(Value::Null);
-            let parameters = match tool_type {
-                "function" => t.get("parameters").cloned().unwrap_or_else(|| json!({})),
-                "custom" => json!({
-                    "type": "object",
-                    "properties": {
-                        "input": {
-                            "type": "string",
-                            "description": "The input for this tool"
-                        }
-                    },
-                    "required": ["input"]
-                }),
-                _ => return None,
-            };
+        let chat_tools: Vec<Value> = tools
+            .iter()
+            .filter_map(|t| {
+                let tool_type = t.get("type").and_then(|ty| ty.as_str())?;
+                let name = t.get("name").and_then(|n| n.as_str())?;
+                let description = t.get("description").cloned().unwrap_or(Value::Null);
+                let parameters = match tool_type {
+                    "function" => t.get("parameters").cloned().unwrap_or_else(|| json!({})),
+                    "custom" => json!({
+                        "type": "object",
+                        "properties": {
+                            "input": {
+                                "type": "string",
+                                "description": "The input for this tool"
+                            }
+                        },
+                        "required": ["input"]
+                    }),
+                    _ => return None,
+                };
 
-            Some(json!({
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "description": description,
-                    "parameters": parameters
-                }
-            }))
-        }).collect();
+                Some(json!({
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "description": description,
+                        "parameters": parameters
+                    }
+                }))
+            })
+            .collect();
 
         if !chat_tools.is_empty() {
             chat_req["tools"] = json!(chat_tools);
@@ -289,7 +306,9 @@ fn extract_openai2_text(content: Option<&Value>) -> String {
             .filter_map(|p| {
                 let part_type = p.get("type").and_then(|t| t.as_str());
                 if matches!(part_type, Some("input_text" | "output_text" | "text")) {
-                    p.get("text").and_then(|t| t.as_str()).map(|t| t.to_string())
+                    p.get("text")
+                        .and_then(|t| t.as_str())
+                        .map(|t| t.to_string())
                 } else {
                     None
                 }
@@ -311,8 +330,7 @@ fn json_value_to_string(value: Option<&Value>) -> String {
 /// Convert Responses response to Chat Completions response
 /// Convert Responses response to Chat Completions response
 pub fn openai_responses_to_chat(resp: &[u8]) -> Result<Vec<u8>, String> {
-    let resp: Value = serde_json::from_slice(resp)
-        .map_err(|e| format!("parse: {}", e))?;
+    let resp: Value = serde_json::from_slice(resp).map_err(|e| format!("parse: {}", e))?;
 
     let mut text = String::new();
     let mut tool_calls = Vec::new();
@@ -335,7 +353,10 @@ pub fn openai_responses_to_chat(resp: &[u8]) -> Result<Vec<u8>, String> {
                 Some("function_call") => {
                     let id = item.get("id").and_then(|i| i.as_str()).unwrap_or("");
                     let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                    let args = item.get("arguments").and_then(|a| a.as_str()).unwrap_or("{}");
+                    let args = item
+                        .get("arguments")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or("{}");
 
                     tool_calls.push(json!({
                         "id": id,
@@ -365,11 +386,13 @@ pub fn openai_responses_to_chat(resp: &[u8]) -> Result<Vec<u8>, String> {
         })
     };
 
-    let input_tokens = resp.get("usage")
+    let input_tokens = resp
+        .get("usage")
         .and_then(|u| u.get("input_tokens"))
         .and_then(|t| t.as_i64())
         .unwrap_or(0) as i32;
-    let output_tokens = resp.get("usage")
+    let output_tokens = resp
+        .get("usage")
         .and_then(|u| u.get("output_tokens"))
         .and_then(|t| t.as_i64())
         .unwrap_or(0) as i32;
@@ -396,15 +419,17 @@ pub fn openai_responses_to_chat(resp: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Convert Chat Completions response to Responses response
 pub fn openai_chat_resp_to_responses(chat_resp: &[u8]) -> Result<Vec<u8>, String> {
-    let resp: Value = serde_json::from_slice(chat_resp)
-        .map_err(|e| format!("parse: {}", e))?;
+    let resp: Value = serde_json::from_slice(chat_resp).map_err(|e| format!("parse: {}", e))?;
 
     let mut output = Vec::new();
 
     if let Some(choices) = resp.get("choices").and_then(|c| c.as_array()) {
         for choice in choices {
             if let Some(message) = choice.get("message") {
-                let role = message.get("role").and_then(|r| r.as_str()).unwrap_or("assistant");
+                let role = message
+                    .get("role")
+                    .and_then(|r| r.as_str())
+                    .unwrap_or("assistant");
 
                 // Handle text content first
                 if let Some(content) = message.get("content") {
@@ -428,11 +453,13 @@ pub fn openai_chat_resp_to_responses(chat_resp: &[u8]) -> Result<Vec<u8>, String
                 if let Some(tool_calls) = message.get("tool_calls").and_then(|t| t.as_array()) {
                     for tc in tool_calls {
                         let id = tc.get("id").and_then(|i| i.as_str()).unwrap_or("");
-                        let name = tc.get("function")
+                        let name = tc
+                            .get("function")
                             .and_then(|f| f.get("name"))
                             .and_then(|n| n.as_str())
                             .unwrap_or("");
-                        let args = tc.get("function")
+                        let args = tc
+                            .get("function")
                             .and_then(|f| f.get("arguments"))
                             .and_then(|a| a.as_str())
                             .unwrap_or("{}");
@@ -451,21 +478,25 @@ pub fn openai_chat_resp_to_responses(chat_resp: &[u8]) -> Result<Vec<u8>, String
         }
     }
 
-    let status = match resp.get("choices").and_then(|c| c.as_array()).and_then(|a| a.first()) {
-        Some(choice) => {
-            match choice.get("finish_reason").and_then(|f| f.as_str()) {
-                Some("stop") | Some("tool_calls") => "completed",
-                _ => "completed"
-            }
-        }
-        None => "completed"
+    let status = match resp
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|a| a.first())
+    {
+        Some(choice) => match choice.get("finish_reason").and_then(|f| f.as_str()) {
+            Some("stop") | Some("tool_calls") => "completed",
+            _ => "completed",
+        },
+        None => "completed",
     };
 
-    let input_tokens = resp.get("usage")
+    let input_tokens = resp
+        .get("usage")
         .and_then(|u| u.get("prompt_tokens"))
         .and_then(|t| t.as_i64())
         .unwrap_or(0) as i32;
-    let output_tokens = resp.get("usage")
+    let output_tokens = resp
+        .get("usage")
         .and_then(|u| u.get("completion_tokens"))
         .and_then(|t| t.as_i64())
         .unwrap_or(0) as i32;

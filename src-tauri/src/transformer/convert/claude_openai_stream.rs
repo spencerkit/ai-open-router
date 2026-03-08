@@ -1,7 +1,7 @@
 //! Claude to OpenAI streaming conversion
 
-use crate::transformer::types::StreamContext;
 use super::common::parse_sse;
+use crate::transformer::types::StreamContext;
 use serde_json::{json, Value};
 
 pub fn claude_stream_to_openai(event: &[u8], ctx: &mut StreamContext) -> Result<Vec<u8>, String> {
@@ -36,7 +36,10 @@ pub fn claude_stream_to_openai(event: &[u8], ctx: &mut StreamContext) -> Result<
                                 "finish_reason": null
                             }]
                         });
-                        result.push_str(&format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap()));
+                        result.push_str(&format!(
+                            "data: {}\n\n",
+                            serde_json::to_string(&chunk).unwrap()
+                        ));
                     }
                 }
             }
@@ -48,7 +51,7 @@ pub fn claude_stream_to_openai(event: &[u8], ctx: &mut StreamContext) -> Result<
                         "end_turn" => "stop",
                         "max_tokens" => "length",
                         "tool_use" => "tool_calls",
-                        _ => "stop"
+                        _ => "stop",
                     };
                     let chunk = json!({
                         "id": ctx.message_id,
@@ -60,7 +63,10 @@ pub fn claude_stream_to_openai(event: &[u8], ctx: &mut StreamContext) -> Result<
                             "finish_reason": finish_reason
                         }]
                     });
-                    result.push_str(&format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap()));
+                    result.push_str(&format!(
+                        "data: {}\n\n",
+                        serde_json::to_string(&chunk).unwrap()
+                    ));
                 }
             }
         }

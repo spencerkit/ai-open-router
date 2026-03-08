@@ -4,10 +4,12 @@ use crate::transformer::types::*;
 use serde_json::{json, Value};
 
 pub fn openai_resp_to_claude(openai_resp: &[u8]) -> Result<Vec<u8>, String> {
-    let resp: OpenAIResponse = serde_json::from_slice(openai_resp)
-        .map_err(|e| format!("parse openai response: {}", e))?;
+    let resp: OpenAIResponse =
+        serde_json::from_slice(openai_resp).map_err(|e| format!("parse openai response: {}", e))?;
 
-    let choice = resp.choices.first()
+    let choice = resp
+        .choices
+        .first()
         .ok_or_else(|| "no choices in response".to_string())?;
 
     let mut content = Vec::new();
@@ -20,8 +22,7 @@ pub fn openai_resp_to_claude(openai_resp: &[u8]) -> Result<Vec<u8>, String> {
 
     if let Some(ref tool_calls) = choice.message.tool_calls {
         for tc in tool_calls {
-            let input: Value = serde_json::from_str(&tc.function.arguments)
-                .unwrap_or(json!({}));
+            let input: Value = serde_json::from_str(&tc.function.arguments).unwrap_or(json!({}));
             content.push(json!({
                 "type": "tool_use",
                 "id": tc.id,
@@ -35,7 +36,7 @@ pub fn openai_resp_to_claude(openai_resp: &[u8]) -> Result<Vec<u8>, String> {
         "tool_calls" => "tool_use",
         "stop" => "end_turn",
         "length" => "max_tokens",
-        _ => "end_turn"
+        _ => "end_turn",
     };
 
     let claude_resp = json!({

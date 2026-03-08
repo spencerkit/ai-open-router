@@ -86,9 +86,7 @@ pub async fn test_model(
                 .find(|event| extract_error_message(event).is_some())
         });
         return Ok(failure_result(describe_error_response(
-            status,
-            error_body,
-            &raw_body,
+            status, error_body, &raw_body,
         )));
     }
 
@@ -98,7 +96,7 @@ pub async fn test_model(
         &sse_events,
         &raw_body,
     )
-        .map(|text| clip_text(&text, MODEL_TEST_MESSAGE_MAX_CHARS));
+    .map(|text| clip_text(&text, MODEL_TEST_MESSAGE_MAX_CHARS));
     let resolved_model = parsed_body
         .as_ref()
         .and_then(extract_response_model)
@@ -407,13 +405,7 @@ fn normalize_model_text(raw: &str) -> Option<String> {
     }
 
     let lower = text.to_lowercase();
-    for prefix in [
-        "model is ",
-        "i am ",
-        "i'm ",
-        "this is ",
-        "assistant model ",
-    ] {
+    for prefix in ["model is ", "i am ", "i'm ", "this is ", "assistant model "] {
         if lower.starts_with(prefix) {
             text = text[prefix.len()..].trim().to_string();
             break;
@@ -428,7 +420,11 @@ fn normalize_model_text(raw: &str) -> Option<String> {
 }
 
 /// Builds a concise upstream failure message.
-fn describe_error_response(status: StatusCode, parsed_body: Option<&Value>, raw_body: &str) -> String {
+fn describe_error_response(
+    status: StatusCode,
+    parsed_body: Option<&Value>,
+    raw_body: &str,
+) -> String {
     let status_text = match status.canonical_reason() {
         Some(reason) => format!("HTTP {} {}", status.as_u16(), reason),
         None => format!("HTTP {}", status.as_u16()),
@@ -453,8 +449,16 @@ fn extract_error_message(body: &Value) -> Option<String> {
     body.pointer("/error/message")
         .and_then(Value::as_str)
         .and_then(clean_text)
-        .or_else(|| body.get("message").and_then(Value::as_str).and_then(clean_text))
-        .or_else(|| body.get("error").and_then(Value::as_str).and_then(clean_text))
+        .or_else(|| {
+            body.get("message")
+                .and_then(Value::as_str)
+                .and_then(clean_text)
+        })
+        .or_else(|| {
+            body.get("error")
+                .and_then(Value::as_str)
+                .and_then(clean_text)
+        })
         .map(|message| clip_text(&message, MODEL_TEST_MESSAGE_MAX_CHARS))
 }
 
@@ -597,10 +601,7 @@ mod tests {
             ]
         });
 
-        assert_eq!(
-            extract_openai_chat_text(&body),
-            Some("gpt-4.1".to_string())
-        );
+        assert_eq!(extract_openai_chat_text(&body), Some("gpt-4.1".to_string()));
     }
 
     #[test]
