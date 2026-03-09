@@ -107,6 +107,13 @@ export const zhCN = {
     toastTargetUpdated: "{{client}} 配置目录已更新",
     toastWriteSuccess: "写入成功：已更新 {{count}} 个配置",
     toastWritePartial: "部分写入失败：成功 {{succeeded}}，失败 {{failed}}。{{message}}",
+    snapshotTitle: "已接入",
+    snapshotSummary: "已写入配置 {{matched}} / {{total}}",
+    snapshotRefresh: "刷新检测",
+    snapshotEmpty: "当前暂未接入任何agent",
+    snapshotMatched: "已写入",
+    snapshotUnmatched: "未写入",
+    snapshotSectionCount: "{{matched}} / {{total}}",
     claude: {
       title: "Claude",
       hint: "默认目录 ~/.claude；写入 settings.json 的 env.ANTHROPIC_BASE_URL。",

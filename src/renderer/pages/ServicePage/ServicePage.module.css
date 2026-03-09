@@ -251,9 +251,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: var(--sp-4);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
   gap: var(--sp-2);
 }
 
@@ -267,20 +265,38 @@
 }
 
 .groupInfo {
+  width: 100%;
   min-width: 0;
   display: grid;
   gap: var(--sp-2);
 }
 
-.entryUrlRow {
+.groupTitleRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.groupInfoGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-3);
+  min-width: 0;
+  width: 100%;
+}
+
+.infoPanelTitle {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: var(--weight-semibold);
 }
 
 .entryUrl {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
   gap: var(--sp-2);
   min-width: 0;
   font-family: var(--font-mono);
@@ -293,7 +309,8 @@
 
 .entryUrlList {
   display: grid;
-  gap: 2px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
   flex: 1;
   min-width: 0;
 }
@@ -303,6 +320,10 @@
   align-items: center;
   gap: var(--sp-2);
   min-width: 0;
+  border: 1px solid color-mix(in oklab, var(--accent) 24%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  background: color-mix(in oklab, var(--bg-raised) 75%, var(--accent-subtle));
 }
 
 .entryUrl code {
@@ -317,10 +338,107 @@
   flex-shrink: 0;
 }
 
+.integrationSnapshot {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--surface) 78%, var(--bg-base));
+}
+
+.integrationSnapshotHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.integrationSnapshotTitle {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: var(--weight-semibold);
+}
+
+.integrationSnapshotSections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.integrationSnapshotSection {
+  display: grid;
+  gap: 4px;
+}
+
+.integrationSnapshotList {
+  display: grid;
+  gap: 4px;
+}
+
+.integrationSnapshotItem {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.integrationSnapshotAgent {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: var(--weight-semibold);
+}
+
+.integrationSnapshotPath {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.integrationSnapshotStatus {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.integrationSnapshotStatusMatched {
+  background: color-mix(in oklab, var(--success) 16%, transparent);
+  color: var(--success);
+}
+
+.integrationSnapshotStatusUnmatched {
+  background: color-mix(in oklab, var(--warning) 14%, transparent);
+  color: color-mix(in oklab, var(--warning) 80%, var(--text-primary));
+}
+
+.integrationSnapshotEmpty {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
 .groupActions {
   display: flex;
   gap: var(--sp-2);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 /* ── Rule List ── */
@@ -1207,9 +1325,13 @@
     min-width: 0;
   }
 
-  .groupHeader {
-    flex-direction: column;
-    align-items: stretch;
+  .groupInfoGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .entryUrlList,
+  .integrationSnapshotSections {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .integrationTargetItem {

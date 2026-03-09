@@ -107,6 +107,13 @@ export const enUS = {
     toastTargetUpdated: "{{client}} directory updated",
     toastWriteSuccess: "Write succeeded: {{count}} config(s) updated",
     toastWritePartial: "Partial failure: {{succeeded}} succeeded, {{failed}} failed. {{message}}",
+    snapshotTitle: "Connected",
+    snapshotSummary: "Bound configs {{matched}} / {{total}}",
+    snapshotRefresh: "Refresh",
+    snapshotEmpty: "No connected agents yet.",
+    snapshotMatched: "Bound",
+    snapshotUnmatched: "Unbound",
+    snapshotSectionCount: "{{matched}} / {{total}}",
     claude: {
       title: "Claude",
       hint: "Default: ~/.claude; writes env.ANTHROPIC_BASE_URL in settings.json.",
