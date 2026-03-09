@@ -19,7 +19,11 @@
       color-mix(in oklab, var(--accent) 16%, transparent),
       transparent 32%
     ),
-    linear-gradient(180deg, color-mix(in oklab, var(--bg-raised) 84%, var(--bg-base)), var(--bg-raised));
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--bg-raised) 84%, var(--bg-base)),
+      var(--bg-raised)
+    );
   box-shadow: var(--shadow-md);
 }
 

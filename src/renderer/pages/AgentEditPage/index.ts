@@ -1,2 +1,1 @@
-export { AgentEditPage } from "./AgentEditPage"
-export { default } from "./AgentEditPage"
+export { AgentEditPage, default } from "./AgentEditPage"

@@ -604,14 +604,16 @@ mod tests {
         let s = String::from_utf8(out.clone()).expect("utf8");
         assert!(s.contains("event: message_start"));
         assert!(s.contains("\"type\":\"message_start\""));
-        assert!(s.contains("\"_openai_event\":{\"response\":{\"id\":\"resp_1\",\"instructions\":\"keep raw created\",\"status\":\"in_progress\"},\"type\":\"response.created\"}"));
+        assert!(s.contains("\"id\":\"resp_1\""));
         assert!(s.contains("event: content_block_start"));
         assert!(s.contains("\"type\":\"content_block_start\""));
+        assert!(s.contains("\"type\":\"text\""));
+        assert!(s.contains("\"type\":\"content_block_delta\""));
         assert!(s.contains("\"type\":\"text_delta\""));
         assert!(s.contains("\"text\":\"hello\""));
+        assert!(s.contains("event: content_block_stop"));
         assert!(s.contains("event: message_delta"));
         assert!(s.contains("\"stop_reason\":\"end_turn\""));
-        assert!(s.contains("\"_openai_event\":{\"response\":{\"status\":\"completed\",\"usage\":{\"output_tokens\":5}},\"type\":\"response.completed\"}"));
         assert!(s.contains("event: message_stop"));
 
         let done_out =
@@ -654,8 +656,10 @@ mod tests {
         let s = String::from_utf8(out).expect("utf8");
         assert!(s.contains("\"type\":\"thinking\""));
         assert!(s.contains("\"thinking\":\"Reason\""));
+        assert!(s.contains("\"type\":\"thinking_delta\""));
         assert!(s.contains("\"text\":\"Hello\""));
-        assert!(s.contains("\"_openai_event\":{\"delta\":\"<think>Reason</think>Hello\",\"type\":\"response.output_text.delta\"}"));
+        assert!(s.contains("\"type\":\"text_delta\""));
+        assert!(s.contains("event: content_block_stop"));
     }
 
     #[test]
@@ -727,11 +731,12 @@ mod tests {
         assert!(s.contains("\"type\":\"tool_use\""));
         assert!(s.contains("\"id\":\"call_1\""));
         assert!(s.contains("\"name\":\"Bash\""));
-        assert!(s.contains("\"_openai_event\":{\"item\":{\"arguments\":\"\",\"call_id\":\"call_1\",\"id\":\"fc_1\",\"name\":\"Bash\",\"status\":\"in_progress\",\"type\":\"function_call\"},\"output_index\":3,\"type\":\"response.output_item.added\"}"));
+        assert!(s.contains("\"index\":0"));
         assert!(s.contains("\"type\":\"input_json_delta\""));
         assert!(s.contains("\\\"command\\\":\\\"pwd\\\""));
-        assert!(s.contains("\"_openai_event\":{\"delta\":\"{\\\"command\\\":\\\"pwd\\\"}\",\"output_index\":3,\"type\":\"response.function_call_arguments.delta\"}"));
+        assert!(s.contains("event: content_block_stop"));
         assert!(s.contains("\"stop_reason\":\"tool_use\""));
+        assert!(s.contains("event: message_delta"));
         assert!(s.contains("event: message_stop"));
     }
 

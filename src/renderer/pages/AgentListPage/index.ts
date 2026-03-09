@@ -1,2 +1,1 @@
-export { AgentListPage } from "./AgentListPage"
-export { default } from "./AgentListPage"
+export { AgentListPage, default } from "./AgentListPage"
