@@ -186,7 +186,7 @@ function StructuredValue({
 
   useEffect(() => {
     setExpandedPaths(new Set(["$"]))
-  }, [])
+  }, [resetKey])
 
   if (!parsed) {
     return <pre>{toText(value, emptyText)}</pre>
@@ -415,6 +415,18 @@ export const LogDetailPage: React.FC = () => {
 
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
+                <h3>{t("logs.forwardRequestBody")}</h3>
+                {renderCopyButton(t("logs.forwardRequestBody"), log.forwardRequestBody)}
+              </div>
+              <StructuredValue
+                value={log.forwardRequestBody}
+                emptyText={t("logs.emptyValue")}
+                resetKey={`${decodedTraceId}:forward-request`}
+              />
+            </div>
+
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
                 <h3>{t("logs.responseBody")}</h3>
                 {renderCopyButton(t("logs.responseBody"), log.responseBody)}
               </div>
@@ -422,6 +434,21 @@ export const LogDetailPage: React.FC = () => {
                 value={log.responseBody}
                 emptyText={t("logs.emptyValue")}
                 resetKey={`${decodedTraceId}:response`}
+              />
+            </div>
+
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <h3>{t("logs.transformedResponseBody")}</h3>
+                {renderCopyButton(
+                  t("logs.transformedResponseBody"),
+                  log.transformedResponseBody
+                )}
+              </div>
+              <StructuredValue
+                value={log.transformedResponseBody}
+                emptyText={t("logs.emptyValue")}
+                resetKey={`${decodedTraceId}:transformed-response`}
               />
             </div>
 
