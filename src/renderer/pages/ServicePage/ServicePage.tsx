@@ -8,7 +8,7 @@ import { useProxyStore } from "@/store"
 import type { Group, IntegrationClientKind, IntegrationTarget, ProxyConfig } from "@/types"
 import { ipc } from "@/utils/ipc"
 import { resolveReachableServerBaseUrls } from "@/utils/serverAddress"
-import { RuleList } from "./RuleList"
+import { ProviderList } from "./ProviderList"
 import styles from "./ServicePage.module.css"
 
 /** Matches search text against a list of candidate strings. */
@@ -783,7 +783,7 @@ export const ServicePage: React.FC = () => {
               </div>
             </div>
 
-            <RuleList
+            <ProviderList
               providers={activeGroup.providers}
               activeProviderId={activeGroup.activeProviderId}
               onActivate={handleActivateProvider}
@@ -795,7 +795,6 @@ export const ServicePage: React.FC = () => {
               addButtonTitle={t("servicePage.associateRule")}
               deleteActionLabel={t("servicePage.unlinkRule")}
               emptyMessage={t("servicePage.noRulesHint")}
-              displayMode="association"
             />
           </>
         )}

@@ -619,6 +619,9 @@
   min-height: 158px;
   gap: 10px;
   padding: 12px 14px;
+  contain: layout paint style;
+  content-visibility: auto;
+  contain-intrinsic-size: 186px;
   border-radius: var(--radius-lg);
   border: none;
   background: linear-gradient(

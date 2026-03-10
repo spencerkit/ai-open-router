@@ -1,5 +1,5 @@
 import type React from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { shallow } from "zustand/shallow"
 import { Button, Input, Modal } from "@/components"
@@ -7,13 +7,14 @@ import { useLogs, useTranslation } from "@/hooks"
 import { useProxyStore } from "@/store"
 import type { ProxyConfig, RuleCardStatsItem, RuleQuotaSnapshot } from "@/types"
 import { ipc } from "@/utils/ipc"
-import { RuleList } from "../ServicePage/RuleList"
+import { ProviderList } from "./ProviderList"
 import styles from "./ProvidersPage.module.css"
 
 const providerQuotaKey = (groupId: string, providerId: string) => `${groupId}:${providerId}`
 const QUOTA_REFRESH_MINUTES_DEFAULT = 5
 const QUOTA_REFRESH_MINUTES_MIN = 1
 const QUOTA_REFRESH_MINUTES_MAX = 1440
+const QUOTA_REFRESH_BATCH_SIZE = 4
 const COPY_SUFFIX = "copy"
 
 function normalizeProviderName(value: string): string {
@@ -149,6 +150,7 @@ export const ProvidersPage: React.FC = () => {
   const [searchValue, setSearchValue] = useState("")
   const [pendingDeleteProviderId, setPendingDeleteProviderId] = useState<string | null>(null)
   const [testingProviderIds, setTestingProviderIds] = useState<Record<string, boolean>>({})
+  const quotaRefreshCursorRef = useRef(0)
 
   const providers = config?.providers ?? []
   const associatedGroupIdsByProviderId = useMemo<Record<string, string[]>>(() => {
@@ -192,7 +194,7 @@ export const ProvidersPage: React.FC = () => {
 
   const pendingDeleteProvider =
     providers.find(provider => provider.id === pendingDeleteProviderId) ?? null
-  const quotaByRuleId = useMemo(() => {
+  const quotaByProviderId = useMemo(() => {
     const result: Record<string, RuleQuotaSnapshot | undefined> = {}
     for (const provider of filteredProviders) {
       const groupIds = associatedGroupIdsByProviderId[provider.id] ?? []
@@ -205,7 +207,7 @@ export const ProvidersPage: React.FC = () => {
     }
     return result
   }, [filteredProviders, associatedGroupIdsByProviderId, providerQuotas])
-  const quotaLoadingByRuleId = useMemo(() => {
+  const quotaLoadingByProviderId = useMemo(() => {
     const result: Record<string, boolean> = {}
     for (const provider of filteredProviders) {
       const groupIds = associatedGroupIdsByProviderId[provider.id] ?? []
@@ -215,7 +217,7 @@ export const ProvidersPage: React.FC = () => {
     }
     return result
   }, [filteredProviders, associatedGroupIdsByProviderId, quotaLoadingProviderKeys])
-  const cardStatsByRuleId = useMemo(() => {
+  const cardStatsByProviderId = useMemo(() => {
     const result: Record<string, RuleCardStatsItem> = {}
     for (const provider of filteredProviders) {
       const groupIds = associatedGroupIdsByProviderId[provider.id] ?? []
@@ -248,9 +250,20 @@ export const ProvidersPage: React.FC = () => {
   useEffect(() => {
     if (!associatedGroupIds.length) return
 
+    quotaRefreshCursorRef.current = 0
+    const batchSize = Math.min(QUOTA_REFRESH_BATCH_SIZE, associatedGroupIds.length)
+
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return
+
+      const start = quotaRefreshCursorRef.current % associatedGroupIds.length
+      const currentBatch = Array.from({ length: batchSize }, (_, offset) => {
+        return associatedGroupIds[(start + offset) % associatedGroupIds.length]
+      })
+      quotaRefreshCursorRef.current = (start + batchSize) % associatedGroupIds.length
+
       void Promise.all(
-        associatedGroupIds.map(groupId => fetchGroupQuotas(groupId).catch(() => undefined))
+        currentBatch.map(groupId => fetchGroupQuotas(groupId).catch(() => undefined))
       )
     }, quotaRefreshIntervalMs)
 
@@ -447,13 +460,11 @@ export const ProvidersPage: React.FC = () => {
         />
       </div>
 
-      <RuleList
+      <ProviderList
         providers={filteredProviders}
-        activeProviderId={null}
-        onActivate={() => {}}
-        quotaByRuleId={quotaByRuleId}
-        quotaLoadingByRuleId={quotaLoadingByRuleId}
-        cardStatsByRuleId={cardStatsByRuleId}
+        quotaByProviderId={quotaByProviderId}
+        quotaLoadingByProviderId={quotaLoadingByProviderId}
+        cardStatsByProviderId={cardStatsByProviderId}
         onRefreshQuota={handleRefreshProviderQuota}
         onTestModel={handleTestProviderModel}
         testingProviderIds={testingProviderIds}
@@ -461,11 +472,9 @@ export const ProvidersPage: React.FC = () => {
         onDelete={providerId => setPendingDeleteProviderId(providerId)}
         onAdd={() => navigate("/providers/new")}
         onEdit={providerId => navigate(`/providers/${providerId}/edit`)}
-        showActivate={false}
         addButtonTitle={t("providersPage.addProvider")}
         deleteActionLabel={t("providersPage.deleteProvider")}
         emptyMessage={t("providersPage.empty")}
-        displayMode="catalog"
       />
 
       <Modal
