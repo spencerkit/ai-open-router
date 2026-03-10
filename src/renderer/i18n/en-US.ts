@@ -47,7 +47,8 @@ export const enUS = {
     createFirstGroup: "Create First Group",
     noGroupSelected: "Please select a group.",
     noGroupMatch: "No groups match your search.",
-    noRulesHint: 'This group has no associated providers yet. Click "Associate Provider" to link one.',
+    noRulesHint:
+      'This group has no associated providers yet. Click "Associate Provider" to link one.',
     groupPath: "Group ID",
     groupInfo: "Group Info",
     entryUrl: "Entry URL",
@@ -105,7 +106,8 @@ export const enUS = {
     empty: "No providers yet. Click Add Provider to create one.",
     deleteProvider: "Delete Provider",
     duplicateProvider: "Duplicate Provider",
-    providerTestRequiresAssociation: "Associate this provider to at least one group before testing.",
+    providerTestRequiresAssociation:
+      "Associate this provider to at least one group before testing.",
     deleteModalTitle: "Delete Provider",
     deleteModalMessage:
       "Deleting {{name}} will unlink it from {{count}} group(s). This action cannot be undone.",

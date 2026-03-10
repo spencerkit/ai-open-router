@@ -256,8 +256,8 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const isGlobalMode = !groupId
   const group = groupId ? config?.groups.find(g => g.id === groupId) : null
   const provider = isGlobalMode
-    ? (config?.providers ?? []).find(item => item.id === providerId) ?? null
-    : group?.providers.find(item => item.id === providerId) ?? null
+    ? ((config?.providers ?? []).find(item => item.id === providerId) ?? null)
+    : (group?.providers.find(item => item.id === providerId) ?? null)
   const quotaDraftFingerprint = JSON.stringify({
     token,
     name,
@@ -601,7 +601,8 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
         return currentGroup
       }
 
-      const currentProviderIds = currentGroup.providerIds ?? currentGroup.providers.map(rule => rule.id)
+      const currentProviderIds =
+        currentGroup.providerIds ?? currentGroup.providers.map(rule => rule.id)
       const providerIds = currentProviderIds.includes(providerDraft.id)
         ? currentProviderIds
         : [...currentProviderIds, providerDraft.id]

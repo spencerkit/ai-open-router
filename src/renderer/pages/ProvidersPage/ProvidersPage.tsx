@@ -21,10 +21,7 @@ function normalizeProviderName(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function generateCopiedProviderName(
-  originalName: string,
-  existingNameKeys: Set<string>
-): string {
+function generateCopiedProviderName(originalName: string, existingNameKeys: Set<string>): string {
   const baseName = originalName.trim() || "Provider"
   let candidate = `${baseName} ${COPY_SUFFIX}`
   let index = 2
@@ -278,13 +275,13 @@ export const ProvidersPage: React.FC = () => {
     )
 
     const nextGroups = config.groups.map(group => {
-      const providerIds = (group.providerIds ?? group.providers.map(provider => provider.id)).filter(
-        providerId => providerId !== pendingDeleteProviderId
-      )
+      const providerIds = (
+        group.providerIds ?? group.providers.map(provider => provider.id)
+      ).filter(providerId => providerId !== pendingDeleteProviderId)
       const activeProviderId =
         group.activeProviderId && providerIds.includes(group.activeProviderId)
           ? group.activeProviderId
-          : providerIds[0] ?? null
+          : (providerIds[0] ?? null)
       return {
         ...group,
         providerIds,

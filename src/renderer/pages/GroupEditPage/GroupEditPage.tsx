@@ -87,11 +87,7 @@ export const GroupEditPage: React.FC = () => {
         <div className="app-sub-header-main">
           <h1 className="app-sub-header-title">{t("groupEditPage.title")}</h1>
           <nav className="app-breadcrumb" aria-label={t("header.backToService")}>
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="app-breadcrumb-button"
-            >
+            <button type="button" onClick={() => navigate("/")} className="app-breadcrumb-button">
               {t("servicePage.groupPath")}
             </button>
             <span className="app-breadcrumb-separator">/</span>

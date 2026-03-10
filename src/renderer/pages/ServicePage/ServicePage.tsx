@@ -31,13 +31,7 @@ function normalizeComparableUrl(raw?: string | null): string {
 export const ServicePage: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const {
-    config,
-    saveConfig,
-    status,
-    activeGroupId,
-    setActiveGroupId,
-  } = useProxyStore(
+  const { config, saveConfig, status, activeGroupId, setActiveGroupId } = useProxyStore(
     state => ({
       config: state.config,
       saveConfig: state.saveConfig,
@@ -94,7 +88,9 @@ export const ServicePage: React.FC = () => {
   }, [activeGroupProviderIds])
   const associateCandidates = useMemo(() => {
     const normalized = associateProviderSearch.trim().toLowerCase()
-    const candidates = globalProviders.filter(provider => !activeGroupProviderIdSet.has(provider.id))
+    const candidates = globalProviders.filter(
+      provider => !activeGroupProviderIdSet.has(provider.id)
+    )
     if (!normalized) return candidates
     return candidates.filter(provider =>
       [provider.name, provider.id, provider.apiAddress].some(value =>
@@ -1019,7 +1015,9 @@ export const ServicePage: React.FC = () => {
           ) : (
             <>
               <div className={styles.formGroup}>
-                <label htmlFor="associate-provider-search">{t("providersPage.searchPlaceholder")}</label>
+                <label htmlFor="associate-provider-search">
+                  {t("providersPage.searchPlaceholder")}
+                </label>
                 <Input
                   id="associate-provider-search"
                   value={associateProviderSearch}
@@ -1082,9 +1080,7 @@ export const ServicePage: React.FC = () => {
         title={t("servicePage.unlinkRule")}
       >
         <div className={styles.modalContent}>
-          <p>
-            {`${t("servicePage.unlinkRule")} ${pendingDeleteProvider?.name ?? ""} ?`}
-          </p>
+          <p>{`${t("servicePage.unlinkRule")} ${pendingDeleteProvider?.name ?? ""} ?`}</p>
           <div className={styles.modalActions}>
             <Button
               variant="default"

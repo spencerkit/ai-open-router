@@ -92,12 +92,11 @@
   padding: var(--sp-4) var(--sp-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in oklab, var(--bg-raised) 94%, var(--bg-base)),
-      var(--bg-raised)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--bg-raised) 94%, var(--bg-base)),
+    var(--bg-raised)
+  );
   box-shadow: var(--shadow-sm);
 }
 

@@ -94,9 +94,13 @@ export const ProviderList: React.FC<{
                   <div className={styles.ruleItem}>
                     <div className={styles.ruleTitleLine}>
                       <span className={styles.ruleModel}>{provider.name}</span>
-                      <span className={styles.ruleDirection}>{t(`ruleProtocol.${provider.protocol}`)}</span>
+                      <span className={styles.ruleDirection}>
+                        {t(`ruleProtocol.${provider.protocol}`)}
+                      </span>
                       {provider.id === activeProviderId && (
-                        <span className={styles.ruleCurrentBadgeInline}>{t("servicePage.current")}</span>
+                        <span className={styles.ruleCurrentBadgeInline}>
+                          {t("servicePage.current")}
+                        </span>
                       )}
                     </div>
                     <div className={styles.ruleAssociationMeta}>
@@ -115,7 +119,9 @@ export const ProviderList: React.FC<{
                         className={styles.ruleAssociationMetaItem}
                         title={provider.apiAddress?.trim() || "-"}
                       >
-                        <span className={styles.ruleAssociationMetaLabel}>{t("servicePage.apiAddress")}</span>
+                        <span className={styles.ruleAssociationMetaLabel}>
+                          {t("servicePage.apiAddress")}
+                        </span>
                         <span className={styles.ruleAssociationMetaValue}>
                           {provider.apiAddress?.trim() || "-"}
                         </span>
@@ -124,7 +130,9 @@ export const ProviderList: React.FC<{
                   </div>
 
                   <div className={styles.ruleHeaderRight}>
-                    <div className={`${styles.ruleActionButtons} ${styles.ruleActionButtonsCompact}`}>
+                    <div
+                      className={`${styles.ruleActionButtons} ${styles.ruleActionButtonsCompact}`}
+                    >
                       {showActivate && provider.id !== activeProviderId && (
                         <button
                           type="button"

@@ -276,11 +276,7 @@ export const LogDetailPage: React.FC = () => {
       <div className={styles.logDetailPage}>
         <div className="app-sub-header">
           <div className="app-sub-header-top">
-            <button
-              type="button"
-              className="app-sub-header-back"
-              onClick={() => navigate("/logs")}
-            >
+            <button type="button" className="app-sub-header-back" onClick={() => navigate("/logs")}>
               <ArrowLeft size={16} strokeWidth={2} />
               <span>{t("logs.backToList")}</span>
             </button>
@@ -304,11 +300,7 @@ export const LogDetailPage: React.FC = () => {
       <div className="app-sub-header">
         <div className="app-sub-header-top">
           <div className={styles.headerTop}>
-            <button
-              type="button"
-              className="app-sub-header-back"
-              onClick={() => navigate("/logs")}
-            >
+            <button type="button" className="app-sub-header-back" onClick={() => navigate("/logs")}>
               <ArrowLeft size={16} strokeWidth={2} />
               <span>{t("logs.backToList")}</span>
             </button>

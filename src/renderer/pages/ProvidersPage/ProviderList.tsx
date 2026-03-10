@@ -40,10 +40,7 @@ function resolveCurrencyPrefix(currency?: string): string {
   return `${normalized} `
 }
 
-function areRuleCardStatsEqual(
-  prev?: RuleCardStatsItem,
-  next?: RuleCardStatsItem
-): boolean {
+function areRuleCardStatsEqual(prev?: RuleCardStatsItem, next?: RuleCardStatsItem): boolean {
   if (prev === next) return true
   if (!prev || !next) return !prev && !next
   return (
@@ -81,18 +78,32 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
           <div className={sharedStyles.ruleItem}>
             <div className={sharedStyles.ruleTitleLine}>
               <span className={sharedStyles.ruleModel}>{provider.name}</span>
-              <span className={sharedStyles.ruleDirection}>{t(`ruleProtocol.${provider.protocol}`)}</span>
+              <span className={sharedStyles.ruleDirection}>
+                {t(`ruleProtocol.${provider.protocol}`)}
+              </span>
             </div>
             <div className={sharedStyles.ruleCatalogMeta}>
-              <span className={sharedStyles.ruleCatalogMetaItem} title={provider.defaultModel?.trim() || "-"}>
-                <span className={sharedStyles.ruleCatalogMetaLabel}>{t("servicePage.defaultModel")}</span>
+              <span
+                className={sharedStyles.ruleCatalogMetaItem}
+                title={provider.defaultModel?.trim() || "-"}
+              >
+                <span className={sharedStyles.ruleCatalogMetaLabel}>
+                  {t("servicePage.defaultModel")}
+                </span>
                 <span className={sharedStyles.ruleCatalogMetaValue}>
                   {provider.defaultModel?.trim() || "-"}
                 </span>
               </span>
-              <span className={sharedStyles.ruleCatalogMetaItem} title={provider.apiAddress?.trim() || "-"}>
-                <span className={sharedStyles.ruleCatalogMetaLabel}>{t("servicePage.apiAddress")}</span>
-                <span className={sharedStyles.ruleCatalogMetaValue}>{provider.apiAddress?.trim() || "-"}</span>
+              <span
+                className={sharedStyles.ruleCatalogMetaItem}
+                title={provider.apiAddress?.trim() || "-"}
+              >
+                <span className={sharedStyles.ruleCatalogMetaLabel}>
+                  {t("servicePage.apiAddress")}
+                </span>
+                <span className={sharedStyles.ruleCatalogMetaValue}>
+                  {provider.apiAddress?.trim() || "-"}
+                </span>
               </span>
             </div>
           </div>
@@ -132,11 +143,17 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
                   type="button"
                   className={sharedStyles.testIconButton}
                   onClick={() => onTestModel(provider.id)}
-                  data-tooltip={testing ? t("servicePage.testingModel") : t("servicePage.testModel")}
+                  data-tooltip={
+                    testing ? t("servicePage.testingModel") : t("servicePage.testModel")
+                  }
                   aria-label={`${t("servicePage.testModel")}: ${provider.name}`}
                   disabled={testing}
                 >
-                  {testing ? <Loader2 size={14} className={sharedStyles.spinner} /> : <FlaskConical size={14} />}
+                  {testing ? (
+                    <Loader2 size={14} className={sharedStyles.spinner} />
+                  ) : (
+                    <FlaskConical size={14} />
+                  )}
                 </button>
               )}
             </div>
@@ -153,7 +170,11 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
                 aria-label={`${t("ruleQuota.refresh")}: ${provider.name}`}
                 disabled={quotaLoading}
               >
-                {quotaLoading ? <Loader2 size={14} className={sharedStyles.spinner} /> : <RefreshCw size={14} />}
+                {quotaLoading ? (
+                  <Loader2 size={14} className={sharedStyles.spinner} />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
               </button>
             )}
             <div className={sharedStyles.ruleQuotaWrap}>
@@ -161,31 +182,42 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
                 {badge.text}
               </span>
               {badge.resetAt && (
-                <span className={sharedStyles.quotaResetAt}>{t("ruleQuota.resetAt", { value: badge.resetAt })}</span>
+                <span className={sharedStyles.quotaResetAt}>
+                  {t("ruleQuota.resetAt", { value: badge.resetAt })}
+                </span>
               )}
             </div>
           </div>
           <div className={`${sharedStyles.ruleTrendWrap} ${sharedStyles.ruleTrendWrapCatalog}`}>
-            <div className={`${sharedStyles.ruleTrendInlineMeta} ${sharedStyles.ruleTrendInlineMetaCatalog}`}>
+            <div
+              className={`${sharedStyles.ruleTrendInlineMeta} ${sharedStyles.ruleTrendInlineMetaCatalog}`}
+            >
               <span>
                 {t("servicePage.miniCostConsumed", {
-                  value: formatCostConsumed(cardStats?.totalCost ?? 0, provider.cost?.currency || "USD"),
+                  value: formatCostConsumed(
+                    cardStats?.totalCost ?? 0,
+                    provider.cost?.currency || "USD"
+                  ),
                 })}
               </span>
               <span>
                 {t("servicePage.miniRequests")}: {formatCompactRequest(cardStats?.requests ?? 0)}
               </span>
               <span>
-                {t("servicePage.miniInputTokens")}: {formatTokenMillions(cardStats?.inputTokens ?? 0)}
+                {t("servicePage.miniInputTokens")}:{" "}
+                {formatTokenMillions(cardStats?.inputTokens ?? 0)}
               </span>
               <span>
-                {t("servicePage.miniOutputTokens")}: {formatTokenMillions(cardStats?.outputTokens ?? 0)}
+                {t("servicePage.miniOutputTokens")}:{" "}
+                {formatTokenMillions(cardStats?.outputTokens ?? 0)}
               </span>
               <span>
-                {t("servicePage.miniCacheInputTokens")}: {formatTokenMillions(cardStats?.cacheReadTokens ?? 0)}
+                {t("servicePage.miniCacheInputTokens")}:{" "}
+                {formatTokenMillions(cardStats?.cacheReadTokens ?? 0)}
               </span>
               <span>
-                {t("servicePage.miniCacheOutputTokens")}: {formatTokenMillions(cardStats?.cacheWriteTokens ?? 0)}
+                {t("servicePage.miniCacheOutputTokens")}:{" "}
+                {formatTokenMillions(cardStats?.cacheWriteTokens ?? 0)}
               </span>
             </div>
           </div>
@@ -273,10 +305,7 @@ export const ProviderList: React.FC<{
     }
     return Number.isInteger(value)
       ? String(value)
-      : value
-          .toFixed(2)
-          .replace(/\.00$/, "")
-          .replace(/\.$/, "")
+      : value.toFixed(2).replace(/\.00$/, "").replace(/\.$/, "")
   }
 
   const formatResetAt = (raw?: string | null) => {

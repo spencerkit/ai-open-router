@@ -244,11 +244,7 @@ export const AgentEditPage: React.FC = () => {
     <div className={styles.page}>
       <section className="app-sub-header">
         <div className="app-sub-header-top">
-          <button
-            type="button"
-            className="app-sub-header-back"
-            onClick={() => navigate("/agents")}
-          >
+          <button type="button" className="app-sub-header-back" onClick={() => navigate("/agents")}>
             <ArrowLeft size={16} strokeWidth={2} />
             <span>{t("agentManagement.back")}</span>
           </button>
