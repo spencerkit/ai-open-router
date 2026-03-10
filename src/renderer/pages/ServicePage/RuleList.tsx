@@ -34,7 +34,13 @@ export const RuleList: React.FC<{
   onTestModel?: (providerId: string) => void | Promise<void>
   testingProviderIds?: Record<string, boolean | undefined>
   onDelete: (providerId: string) => void
-  groupId: string
+  groupId?: string
+  onEdit?: (providerId: string) => void
+  onAdd?: () => void
+  showActivate?: boolean
+  addButtonLabel?: string
+  addButtonTitle?: string
+  deleteActionLabel?: string
   emptyMessage?: string
 }> = ({
   providers,
@@ -49,16 +55,32 @@ export const RuleList: React.FC<{
   testingProviderIds,
   onDelete,
   groupId,
+  onEdit,
+  onAdd,
+  showActivate = true,
+  addButtonLabel,
+  addButtonTitle,
+  deleteActionLabel,
   emptyMessage,
 }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
 
   const handleProviderEdit = (providerId: string) => {
+    if (onEdit) {
+      onEdit(providerId)
+      return
+    }
+    if (!groupId) return
     navigate(`/groups/${groupId}/providers/${providerId}/edit`)
   }
 
   const handleAddRuleClick = () => {
+    if (onAdd) {
+      onAdd()
+      return
+    }
+    if (!groupId) return
     navigate(`/groups/${groupId}/providers/new`)
   }
 
@@ -398,7 +420,7 @@ export const RuleList: React.FC<{
           size="small"
           icon={Plus}
           onClick={handleAddRuleClick}
-          title={t("servicePage.addRule")}
+          title={addButtonTitle || addButtonLabel || t("servicePage.addRule")}
         />
       </div>
       <div className={styles.ruleListContent}>
@@ -431,7 +453,7 @@ export const RuleList: React.FC<{
                   </div>
                   <div className={styles.ruleHeaderRight}>
                     <div className={styles.ruleActionButtons}>
-                      {provider.id !== activeProviderId && (
+                      {showActivate && provider.id !== activeProviderId && (
                         <button
                           type="button"
                           className={styles.activateIconButton}
@@ -456,29 +478,31 @@ export const RuleList: React.FC<{
                         type="button"
                         className={styles.deleteButton}
                         onClick={() => onDelete(provider.id)}
-                        data-tooltip={t("servicePage.deleteRule")}
-                        aria-label={`${t("servicePage.deleteRule")}: ${provider.name}`}
+                        data-tooltip={deleteActionLabel || t("servicePage.deleteRule")}
+                        aria-label={`${deleteActionLabel || t("servicePage.deleteRule")}: ${provider.name}`}
                       >
                         <Trash2 size={14} />
                       </button>
-                      <button
-                        type="button"
-                        className={styles.testIconButton}
-                        onClick={() => onTestModel?.(provider.id)}
-                        data-tooltip={
-                          testingProviderIds?.[provider.id]
-                            ? t("servicePage.testingModel")
-                            : t("servicePage.testModel")
-                        }
-                        aria-label={`${t("servicePage.testModel")}: ${provider.name}`}
-                        disabled={Boolean(testingProviderIds?.[provider.id])}
-                      >
-                        {testingProviderIds?.[provider.id] ? (
-                          <Loader2 size={14} className={styles.spinner} />
-                        ) : (
-                          <FlaskConical size={14} />
-                        )}
-                      </button>
+                      {onTestModel && (
+                        <button
+                          type="button"
+                          className={styles.testIconButton}
+                          onClick={() => onTestModel(provider.id)}
+                          data-tooltip={
+                            testingProviderIds?.[provider.id]
+                              ? t("servicePage.testingModel")
+                              : t("servicePage.testModel")
+                          }
+                          aria-label={`${t("servicePage.testModel")}: ${provider.name}`}
+                          disabled={Boolean(testingProviderIds?.[provider.id])}
+                        >
+                          {testingProviderIds?.[provider.id] ? (
+                            <Loader2 size={14} className={styles.spinner} />
+                          ) : (
+                            <FlaskConical size={14} />
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

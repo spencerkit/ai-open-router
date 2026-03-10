@@ -193,7 +193,7 @@ export interface RuleFormPageProps {
  * Shared page for creating and editing providers
  */
 export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
-  const { groupId, providerId } = useParams<{ groupId: string; providerId?: string }>()
+  const { groupId, providerId } = useParams<{ groupId?: string; providerId?: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { config, saveConfig } = useProxyStore(
@@ -253,8 +253,11 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     quotaThreshold?: string
   }>({})
 
-  const group = config?.groups.find(g => g.id === groupId)
-  const provider = group?.providers.find(item => item.id === providerId) ?? null
+  const isGlobalMode = !groupId
+  const group = groupId ? config?.groups.find(g => g.id === groupId) : null
+  const provider = isGlobalMode
+    ? (config?.providers ?? []).find(item => item.id === providerId) ?? null
+    : group?.providers.find(item => item.id === providerId) ?? null
   const quotaDraftFingerprint = JSON.stringify({
     token,
     name,
@@ -278,7 +281,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
 
   useEffect(() => {
     if (!config) return
-    if (!group) {
+    if (!isGlobalMode && !group) {
       showToast(t("toast.groupNotFound"), "error")
       navigate("/")
       return
@@ -292,7 +295,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     if (!provider) {
       setLoading(false)
       showToast(t("toast.ruleNotFound"), "error")
-      navigate("/")
+      navigate(isGlobalMode ? "/providers" : "/")
       return
     }
 
@@ -326,7 +329,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setCostCurrency(provider.cost?.currency || "USD")
 
     setLoading(false)
-  }, [config, group, isEditMode, navigate, provider, showToast, t])
+  }, [config, group, isEditMode, isGlobalMode, navigate, provider, showToast, t])
 
   useEffect(() => {
     if (quotaEnabled) return
@@ -346,6 +349,8 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     input?.focus()
   }
 
+  const normalizeProviderName = (value: string) => value.trim().toLowerCase()
+
   const validateForm = () => {
     const nextErrors: {
       name?: string
@@ -360,6 +365,14 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
 
     if (!name.trim()) {
       nextErrors.name = t("validation.required", { field: t("servicePage.ruleName") })
+    } else if (!isEditMode) {
+      const nameKey = normalizeProviderName(name)
+      const providerNameExists = (config?.providers ?? []).some(
+        provider => normalizeProviderName(provider.name) === nameKey
+      )
+      if (providerNameExists) {
+        nextErrors.name = t("validation.alreadyExists", { field: t("servicePage.ruleName") })
+      }
     }
     if (!token.trim()) {
       nextErrors.token = t("validation.required", { field: t("servicePage.token") })
@@ -435,7 +448,14 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   }
 
   const handleTestQuota = async () => {
-    if (!groupId) return
+    const quotaTestGroupId = groupId || config?.groups[0]?.id
+    if (!quotaTestGroupId) {
+      setQuotaTestResult({
+        ok: false,
+        message: t("toast.groupNotFound"),
+      })
+      return
+    }
 
     if (!quotaEndpoint.trim()) {
       setQuotaTestResult({
@@ -492,7 +512,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setQuotaTestLoading(true)
     try {
       const result = await ipc.testRuleQuotaDraft(
-        groupId,
+        quotaTestGroupId,
         name.trim() || "Draft Provider",
         token,
         apiAddress,
@@ -514,7 +534,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!config || !groupId) return
+    if (!config) return
     if (isEditMode && !providerId) return
     if (!validateForm()) return
 
@@ -560,41 +580,55 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       },
     }
 
+    const currentProviders = config.providers ?? []
+    const nextProviders = [...currentProviders]
+    if (isEditMode) {
+      const targetId = providerId || providerDraft.id
+      const index = nextProviders.findIndex(provider => provider.id === targetId)
+      if (index >= 0) {
+        nextProviders[index] = providerDraft
+      } else {
+        nextProviders.push(providerDraft)
+      }
+    } else {
+      nextProviders.push(providerDraft)
+    }
+
+    const nextGroups = config.groups.map(currentGroup => {
+      if (currentGroup.id !== groupId) return currentGroup
+
+      if (isEditMode) {
+        return currentGroup
+      }
+
+      const currentProviderIds = currentGroup.providerIds ?? currentGroup.providers.map(rule => rule.id)
+      const providerIds = currentProviderIds.includes(providerDraft.id)
+        ? currentProviderIds
+        : [...currentProviderIds, providerDraft.id]
+      return {
+        ...currentGroup,
+        providerIds,
+        activeProviderId: currentGroup.activeProviderId ?? providerDraft.id,
+      }
+    })
+
     const newConfig: ProxyConfig = {
       ...config,
-      groups: config.groups.map(currentGroup => {
-        if (currentGroup.id !== groupId) {
-          return currentGroup
-        }
-
-        if (isEditMode) {
-          return {
-            ...currentGroup,
-            providers: currentGroup.providers.map(rule =>
-              rule.id === providerId ? providerDraft : rule
-            ),
-          }
-        }
-
-        return {
-          ...currentGroup,
-          providers: [...currentGroup.providers, providerDraft],
-          activeProviderId: currentGroup.activeProviderId ?? providerDraft.id,
-        }
-      }),
+      providers: nextProviders,
+      groups: nextGroups,
     }
 
     try {
       await saveConfig(newConfig)
       showToast(t(isEditMode ? "toast.ruleUpdated" : "toast.ruleCreated"), "success")
-      navigate("/")
+      navigate(isGlobalMode ? "/providers" : "/")
     } catch (error) {
       showToast(t("errors.saveFailed", { message: String(error) }), "error")
     }
   }
 
   const handleCancel = () => {
-    navigate("/")
+    navigate(isGlobalMode ? "/providers" : "/")
   }
 
   const isValid =
@@ -605,7 +639,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     (!quotaEnabled || (quotaEndpoint.trim() && quotaRemainingExpr.trim()))
   const breadcrumbLabel = isEditMode && provider ? provider.name : t("ruleCreatePage.newRule")
 
-  if (!group || (isEditMode && !provider)) {
+  if ((!isGlobalMode && !group) || (isEditMode && !provider)) {
     return null
   }
 
@@ -622,11 +656,19 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       <div className={styles.header}>
         <h1>{t(isEditMode ? "ruleEditPage.title" : "ruleCreatePage.title")}</h1>
         <nav className={styles.breadcrumb} aria-label={t("header.backToService")}>
-          <button type="button" onClick={() => navigate("/")} className={styles.breadcrumbButton}>
-            {t("servicePage.groupPath")}
+          <button
+            type="button"
+            onClick={() => navigate(isGlobalMode ? "/providers" : "/")}
+            className={styles.breadcrumbButton}
+          >
+            {isGlobalMode ? t("header.providers") : t("servicePage.groupPath")}
           </button>
-          <span className={styles.breadcrumbSeparator}>/</span>
-          <span className={styles.breadcrumbItem}>{group.name}</span>
+          {!isGlobalMode && group ? (
+            <>
+              <span className={styles.breadcrumbSeparator}>/</span>
+              <span className={styles.breadcrumbItem}>{group.name}</span>
+            </>
+          ) : null}
           <span className={styles.breadcrumbSeparator}>/</span>
           <span className={styles.breadcrumbItem}>{breadcrumbLabel}</span>
         </nav>

@@ -223,6 +223,8 @@ pub struct Group {
     pub name: String,
     #[serde(default)]
     pub models: Vec<String>,
+    #[serde(default)]
+    pub provider_ids: Vec<String>,
     #[serde(rename = "activeProviderId", alias = "activeRuleId")]
     pub active_provider_id: Option<String>,
     #[serde(default, rename = "providers", alias = "rules")]
@@ -240,6 +242,8 @@ pub struct ProxyConfig {
     pub ui: UiConfig,
     #[serde(default = "crate::config::schema::default_remote_git_config")]
     pub remote_git: RemoteGitConfig,
+    #[serde(default)]
+    pub providers: Vec<Rule>,
     #[serde(default)]
     pub groups: Vec<Group>,
 }

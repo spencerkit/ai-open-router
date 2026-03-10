@@ -79,8 +79,6 @@ export const GroupEditPage: React.FC = () => {
     }
 
     const nextModels = normalizeModels(models)
-    const modelSet = new Set(nextModels)
-
     const nextConfig: ProxyConfig = {
       ...config,
       groups: config.groups.map(item => {
@@ -89,17 +87,6 @@ export const GroupEditPage: React.FC = () => {
           ...item,
           name: name.trim(),
           models: nextModels,
-          providers: item.providers.map(provider => {
-            const nextMappings: Record<string, string> = {}
-            for (const [key, mapped] of Object.entries(provider.modelMappings || {})) {
-              if (!modelSet.has(key)) continue
-              nextMappings[key] = mapped
-            }
-            return {
-              ...provider,
-              modelMappings: nextMappings,
-            }
-          }),
         }
       }),
     }

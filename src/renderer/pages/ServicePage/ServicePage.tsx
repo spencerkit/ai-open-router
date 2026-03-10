@@ -68,7 +68,12 @@ export const ServicePage: React.FC = () => {
   const [showAddGroupModal, setShowAddGroupModal] = useState(false)
   const [showDeleteGroupModal, setShowDeleteGroupModal] = useState(false)
   const [showDeleteProviderModal, setShowDeleteProviderModal] = useState(false)
+  const [showAssociateProviderModal, setShowAssociateProviderModal] = useState(false)
   const [pendingDeleteProviderId, setPendingDeleteProviderId] = useState<string | null>(null)
+  const [associateProviderSearch, setAssociateProviderSearch] = useState("")
+  const [associateProviderChecks, setAssociateProviderChecks] = useState<Record<string, boolean>>(
+    {}
+  )
   const [activatingProviderId, setActivatingProviderId] = useState<string | null>(null)
   const [testingProviderIds, setTestingProviderIds] = useState<Record<string, boolean>>({})
   const [showIntegrationWriteModal, setShowIntegrationWriteModal] = useState(false)
@@ -92,12 +97,35 @@ export const ServicePage: React.FC = () => {
   const providerCardStatsRefreshIntervalMs = 10_000
 
   const groups = config?.groups ?? []
+  const globalProviders = config?.providers ?? []
   const filteredGroups = useMemo(() => {
     return groups.filter(group =>
       matchesKeyword(groupSearchValue, [group.name, group.id, `/${group.id}`])
     )
   }, [groupSearchValue, groups])
   const activeGroup = groups.find(group => group.id === activeGroupId) ?? null
+  const activeGroupProviderIds = useMemo(() => {
+    if (!activeGroup) return []
+    return activeGroup.providerIds ?? activeGroup.providers.map(provider => provider.id)
+  }, [activeGroup])
+  const activeGroupProviderIdSet = useMemo(() => {
+    return new Set(activeGroupProviderIds)
+  }, [activeGroupProviderIds])
+  const associateCandidates = useMemo(() => {
+    const normalized = associateProviderSearch.trim().toLowerCase()
+    const candidates = globalProviders.filter(provider => !activeGroupProviderIdSet.has(provider.id))
+    if (!normalized) return candidates
+    return candidates.filter(provider =>
+      [provider.name, provider.id, provider.apiAddress].some(value =>
+        value?.toLowerCase().includes(normalized)
+      )
+    )
+  }, [activeGroupProviderIdSet, associateProviderSearch, globalProviders])
+  const selectedAssociateProviderIds = useMemo(() => {
+    return Object.entries(associateProviderChecks)
+      .filter(([, checked]) => checked)
+      .map(([providerId]) => providerId)
+  }, [associateProviderChecks])
   const pendingDeleteProvider =
     activeGroup?.providers.find(item => item.id === pendingDeleteProviderId) ?? null
   const integrationSections = useMemo(
@@ -182,6 +210,7 @@ export const ServicePage: React.FC = () => {
   const handleSelectGroup = (groupId: string) => {
     setActiveGroupId(groupId)
     setShowDeleteProviderModal(false)
+    setShowAssociateProviderModal(false)
     setPendingDeleteProviderId(null)
   }
 
@@ -213,6 +242,7 @@ export const ServicePage: React.FC = () => {
       id: normalizedId,
       name: newGroupName.trim(),
       models: [],
+      providerIds: [],
       activeProviderId: null,
       providers: [],
     }
@@ -253,6 +283,56 @@ export const ServicePage: React.FC = () => {
     setShowDeleteProviderModal(true)
   }
 
+  const openAssociateProviderModal = () => {
+    setAssociateProviderSearch("")
+    setAssociateProviderChecks({})
+    setShowAssociateProviderModal(true)
+  }
+
+  const closeAssociateProviderModal = () => {
+    setShowAssociateProviderModal(false)
+    setAssociateProviderSearch("")
+    setAssociateProviderChecks({})
+  }
+
+  const handleToggleAssociateProvider = (providerId: string, checked: boolean) => {
+    setAssociateProviderChecks(prev => ({
+      ...prev,
+      [providerId]: checked,
+    }))
+  }
+
+  const handleAssociateProviders = async () => {
+    if (!config || !activeGroupId || selectedAssociateProviderIds.length === 0) return
+
+    const nextGroups = config.groups.map(group => {
+      if (group.id !== activeGroupId) return group
+      const currentProviderIds = group.providerIds ?? group.providers.map(provider => provider.id)
+      const mergedProviderIds = [...currentProviderIds]
+      for (const providerId of selectedAssociateProviderIds) {
+        if (!mergedProviderIds.includes(providerId)) {
+          mergedProviderIds.push(providerId)
+        }
+      }
+      return {
+        ...group,
+        providerIds: mergedProviderIds,
+        activeProviderId: group.activeProviderId ?? mergedProviderIds[0] ?? null,
+      }
+    })
+
+    try {
+      await saveConfig({
+        ...config,
+        groups: nextGroups,
+      })
+      closeAssociateProviderModal()
+      showToast(t("servicePage.associateRule"), "success")
+    } catch (error) {
+      showToast(t("errors.saveFailed", { message: String(error) }), "error")
+    }
+  }
+
   const handleActivateProvider = async (providerId: string) => {
     if (!activeGroupId || !config) return
     if (activeGroup?.activeProviderId === providerId) return
@@ -286,16 +366,19 @@ export const ServicePage: React.FC = () => {
 
     const newGroups = config.groups.map(group => {
       if (group.id === activeGroupId) {
-        const newProviders = group.providers.filter(item => item.id !== pendingDeleteProviderId)
+        const currentProviderIds = group.providerIds ?? group.providers.map(provider => provider.id)
+        const nextProviderIds = currentProviderIds.filter(
+          providerId => providerId !== pendingDeleteProviderId
+        )
         const newActiveId =
           group.activeProviderId === pendingDeleteProviderId
-            ? newProviders.length > 0
-              ? newProviders[0].id
+            ? nextProviderIds.length > 0
+              ? nextProviderIds[0]
               : null
             : group.activeProviderId
         return {
           ...group,
-          providers: newProviders,
+          providerIds: nextProviderIds,
           activeProviderId: newActiveId,
         }
       }
@@ -307,7 +390,7 @@ export const ServicePage: React.FC = () => {
       await saveConfig(newConfig)
       setShowDeleteProviderModal(false)
       setPendingDeleteProviderId(null)
-      showToast(t("toast.ruleDeleted"), "success")
+      showToast(t("servicePage.unlinkRule"), "success")
     } catch (error) {
       showToast(t("errors.saveFailed", { message: String(error) }), "error")
     }
@@ -701,7 +784,9 @@ export const ServicePage: React.FC = () => {
                     >
                       <span className={styles.groupName}>{group.name}</span>
                       <span className={styles.groupPath}>/{group.id}</span>
-                      <span className={styles.groupRuleCount}>{group.providers.length}</span>
+                      <span className={styles.groupRuleCount}>
+                        {(group.providerIds ?? group.providers.map(provider => provider.id)).length}
+                      </span>
                     </button>
                   </li>
                 ))}
@@ -857,7 +942,11 @@ export const ServicePage: React.FC = () => {
               onTestModel={handleTestProviderModel}
               testingProviderIds={testingProviderIds}
               onDelete={handleRequestDeleteProvider}
+              onEdit={providerId => navigate(`/providers/${providerId}/edit`)}
+              onAdd={openAssociateProviderModal}
               groupId={activeGroup.id}
+              addButtonTitle={t("servicePage.associateRule")}
+              deleteActionLabel={t("servicePage.unlinkRule")}
               emptyMessage={t("servicePage.noRulesHint")}
             />
           </>
@@ -1068,18 +1157,86 @@ export const ServicePage: React.FC = () => {
       </Modal>
 
       <Modal
+        open={showAssociateProviderModal}
+        onClose={closeAssociateProviderModal}
+        title={t("servicePage.associateRule")}
+      >
+        <div className={styles.modalContent}>
+          {globalProviders.length === 0 ? (
+            <div className={styles.emptyHint}>
+              <p>{t("providersPage.empty")}</p>
+              <Button variant="primary" onClick={() => navigate("/providers")}>
+                {t("header.providers")}
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className={styles.formGroup}>
+                <label htmlFor="associate-provider-search">{t("providersPage.searchPlaceholder")}</label>
+                <Input
+                  id="associate-provider-search"
+                  value={associateProviderSearch}
+                  onChange={event => setAssociateProviderSearch(event.target.value)}
+                  placeholder={t("providersPage.searchPlaceholder")}
+                />
+              </div>
+
+              {associateCandidates.length === 0 ? (
+                <p>{t("servicePage.noRulesHint")}</p>
+              ) : (
+                <ul className={styles.integrationTargetList}>
+                  {associateCandidates.map(provider => (
+                    <li key={provider.id} className={styles.integrationTargetItem}>
+                      <label className={styles.integrationTargetLabel}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(associateProviderChecks[provider.id])}
+                          onChange={event =>
+                            handleToggleAssociateProvider(provider.id, event.target.checked)
+                          }
+                        />
+                        <span className={styles.integrationTargetPathWrap}>
+                          <span className={styles.integrationTargetPath}>{provider.name}</span>
+                          <span className={styles.integrationTargetWriteDetail}>
+                            {provider.protocol} · {provider.apiAddress}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className={styles.modalActions}>
+                <Button variant="default" onClick={closeAssociateProviderModal}>
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    void handleAssociateProviders()
+                  }}
+                  disabled={selectedAssociateProviderIds.length === 0}
+                >
+                  {t("servicePage.associateRule")}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
         open={showDeleteProviderModal}
         onClose={() => {
           setShowDeleteProviderModal(false)
           setPendingDeleteProviderId(null)
         }}
-        title={t("deleteRuleModal.title")}
+        title={t("servicePage.unlinkRule")}
       >
         <div className={styles.modalContent}>
           <p>
-            {t("deleteRuleModal.confirmText", {
-              model: pendingDeleteProvider?.name ?? "",
-            })}
+            {`${t("servicePage.unlinkRule")} ${pendingDeleteProvider?.name ?? ""} ?`}
           </p>
           <div className={styles.modalActions}>
             <Button
@@ -1092,7 +1249,7 @@ export const ServicePage: React.FC = () => {
               {t("common.cancel")}
             </Button>
             <Button variant="danger" onClick={handleDeleteProvider}>
-              {t("deleteRuleModal.confirmDelete")}
+              {t("servicePage.unlinkRule")}
             </Button>
           </div>
         </div>
