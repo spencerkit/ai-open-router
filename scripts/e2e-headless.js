@@ -96,6 +96,18 @@ async function run() {
   const binaryPath = resolveBinaryPath()
   const port = await getAvailablePort()
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "aor-e2e-"))
+  const homeDir = path.join(dataDir, "home")
+  fs.mkdirSync(homeDir, { recursive: true })
+  const claudeDir = path.join(homeDir, ".claude")
+  const codexDir = path.join(homeDir, ".codex")
+  const opencodeDir = path.join(homeDir, ".opencode")
+  fs.mkdirSync(claudeDir, { recursive: true })
+  fs.mkdirSync(codexDir, { recursive: true })
+  fs.mkdirSync(opencodeDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(codexDir, "config.toml"),
+    'model_provider = "aor_shared"\n\n[model_providers.aor_shared]\nbase_url = "http://example"\n'
+  )
   const configPath = path.join(dataDir, "config.json")
   fs.writeFileSync(
     configPath,
@@ -112,6 +124,8 @@ async function run() {
   const child = spawn(binaryPath, [], {
     env: {
       ...process.env,
+      HOME: homeDir,
+      USERPROFILE: homeDir,
       AOR_APP_DATA_DIR: dataDir,
     },
     stdio: "inherit",
@@ -164,6 +178,7 @@ async function run() {
       serviceNav: 'xpath=//button[.//span[normalize-space()="Service"]]',
       logsNav: 'xpath=//button[.//span[normalize-space()="Logs"]]',
       settingsNav: 'xpath=//button[.//span[normalize-space()="Settings"]]',
+      agentsNav: 'xpath=//button[.//span[normalize-space()="Agents"]]',
       addProviderButton: 'xpath=//button[normalize-space()="Add Provider"]',
       createProviderButton: 'xpath=//button[normalize-space()="Create Provider"]',
       associateProviderButton: 'xpath=//button[@title="Associate Provider"]',
@@ -172,6 +187,9 @@ async function run() {
       stopButton: 'xpath=//button[normalize-space()="Stop"]',
       settingsTitleEn: 'xpath=//h2[normalize-space()="Service Settings"]',
       settingsTitleZh: 'xpath=//h2[normalize-space()="服务设置"]',
+      agentsTitle: 'xpath=//h1[normalize-space()="Agent Management"]',
+      integrationWriteButton: 'xpath=//button[@aria-label="Write current group address to client"]',
+      agentAddConfigButton: 'xpath=//button[normalize-space()="Add Configuration Directory"]',
       exportButton: 'xpath=//button[normalize-space()="Export JSON"]',
       exportFolderChoice: 'xpath=//button[.//span[normalize-space()="Export to Folder"]]',
       exportClipboardChoice: 'xpath=//button[.//span[normalize-space()="Copy to Clipboard"]]',
@@ -298,6 +316,32 @@ async function run() {
         .catch(() => false)
     ) {
       throw new Error("start/stop button should be hidden in headless mode")
+    }
+
+    lastStep = "integration-write-open"
+    const writeButton = page.locator(selectors.integrationWriteButton).first()
+    if (!(await writeButton.isVisible().catch(() => false))) {
+      throw new Error("integration write button should be visible in headless mode")
+    }
+    await writeButton.click()
+    await page.locator('xpath=//button[normalize-space()="Write Now"]').waitFor({ timeout: 15000 })
+    await safeClick(page, 'xpath=//label[.//span[contains(., ".claude")]]')
+    await safeClick(page, 'xpath=//label[.//span[contains(., ".codex")]]')
+    await safeClick(page, 'xpath=//label[.//span[contains(., ".opencode")]]')
+    await safeClick(page, 'xpath=//button[normalize-space()="Write Now"]')
+    await waitForHidden(page, 'xpath=//button[normalize-space()="Write Now"]')
+
+    lastStep = "agents-nav"
+    await safeClick(page, selectors.agentsNav)
+    await page.locator(selectors.agentsTitle).waitFor({ timeout: 15000 })
+    const addConfigButton = page.locator(selectors.agentAddConfigButton).first()
+    if (await addConfigButton.isVisible().catch(() => false)) {
+      const disabled = await addConfigButton.isDisabled().catch(() => false)
+      if (!disabled) {
+        throw new Error("agent config modification should be disabled in headless mode")
+      }
+    } else {
+      throw new Error("agent add-config button not found in headless mode")
     }
 
     lastStep = "logs-nav"

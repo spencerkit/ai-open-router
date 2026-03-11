@@ -21,6 +21,7 @@ import {
 } from "@/store"
 import type { Group, IntegrationClientKind, IntegrationTarget, ProxyConfig } from "@/types"
 import { useActions, useRelaxValue } from "@/utils/relax"
+import { isHeadlessHttpRuntime } from "@/utils/runtime"
 import { resolveReachableServerBaseUrls } from "@/utils/serverAddress"
 import { ProviderList } from "./ProviderList"
 import styles from "./ServicePage.module.css"
@@ -100,6 +101,7 @@ export const ServicePage: React.FC = () => {
   const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<Record<string, boolean>>({})
   const [newGroupName, setNewGroupName] = useState("")
   const [newGroupId, setNewGroupId] = useState("")
+  const isHeadlessRuntime = isHeadlessHttpRuntime()
 
   const groups = config?.groups ?? []
   const globalProviders = config?.providers ?? []
@@ -461,6 +463,10 @@ export const ServicePage: React.FC = () => {
   }, [activeGroup, integrationTargets, refreshIntegrationTargetStatus])
 
   const handleAddIntegrationTarget = async (kind: IntegrationClientKind) => {
+    if (isHeadlessRuntime) {
+      showToast(t("integration.headlessDisabled"), "error")
+      return
+    }
     setIntegrationAddingKind(kind)
     try {
       const pickedDir = await pickIntegrationDirectory({ kind })
@@ -481,6 +487,10 @@ export const ServicePage: React.FC = () => {
   }
 
   const handleUpdateIntegrationTarget = async (target: IntegrationTarget) => {
+    if (isHeadlessRuntime) {
+      showToast(t("integration.headlessDisabled"), "error")
+      return
+    }
     setIntegrationUpdatingTargetId(target.id)
     try {
       const pickedDir = await pickIntegrationDirectory({ initialDir: target.configDir })
@@ -866,6 +876,7 @@ export const ServicePage: React.FC = () => {
                         icon={Plus}
                         loading={integrationAddingKind === section.kind}
                         disabled={
+                          isHeadlessRuntime ||
                           integrationWriting ||
                           integrationUpdatingTargetId !== null ||
                           (integrationAddingKind !== null && integrationAddingKind !== section.kind)
@@ -911,7 +922,11 @@ export const ServicePage: React.FC = () => {
                               variant="default"
                               size="small"
                               loading={integrationUpdatingTargetId === target.id}
-                              disabled={integrationWriting || integrationUpdatingTargetId !== null}
+                              disabled={
+                                isHeadlessRuntime ||
+                                integrationWriting ||
+                                integrationUpdatingTargetId !== null
+                              }
                               onClick={() => {
                                 void handleUpdateIntegrationTarget(target)
                               }}

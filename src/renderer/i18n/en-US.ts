@@ -128,6 +128,8 @@ export const enUS = {
     selectedCount: "{{count}} selected",
     confirmWrite: "Write Now",
     writeToDetail: "Target: {{filePath}} (field: {{fieldPath}})",
+    headlessDisabled:
+      "Headless mode uses default paths only; adding or changing directories is disabled.",
     toastTargetAdded: "{{client}} config added",
     toastTargetUpdated: "{{client}} directory updated",
     toastWriteSuccess: "Write succeeded: {{count}} config(s) updated",
@@ -158,6 +160,8 @@ export const enUS = {
     title: "Agent Management",
     subtitle:
       "Manage Claude, Codex, and OpenCode config directories and baseline connection settings.",
+    headlessDisabled:
+      "Headless mode uses default paths only; adding or removing directories is disabled.",
     selectType: "Select Agent Type",
     selectAgent: "Select Agent",
     configured: "configured",

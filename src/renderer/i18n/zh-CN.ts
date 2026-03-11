@@ -125,6 +125,7 @@ export const zhCN = {
     selectedCount: "已选择 {{count}} 个配置",
     confirmWrite: "写入配置",
     writeToDetail: "写入位置：{{filePath}}（字段：{{fieldPath}}）",
+    headlessDisabled: "Headless 模式仅使用默认路径，无法新增或修改目录。",
     toastTargetAdded: "{{client}} 配置已添加",
     toastTargetUpdated: "{{client}} 配置目录已更新",
     toastWriteSuccess: "写入成功：已更新 {{count}} 个配置",
@@ -154,6 +155,7 @@ export const zhCN = {
   agentManagement: {
     title: "Agent 管理",
     subtitle: "统一管理 Claude、Codex 和 OpenCode 的配置目录与基础连接参数。",
+    headlessDisabled: "Headless 模式仅使用默认路径，无法新增或删除目录。",
     selectType: "选择 Agent 类型",
     selectAgent: "选择 Agent",
     configured: "已配置",

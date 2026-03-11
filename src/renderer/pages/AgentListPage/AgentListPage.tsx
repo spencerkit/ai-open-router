@@ -14,6 +14,7 @@ import {
 } from "@/store"
 import type { IntegrationClientKind, IntegrationTarget } from "@/types"
 import { useActions, useRelaxValue } from "@/utils/relax"
+import { isHeadlessHttpRuntime } from "@/utils/runtime"
 import styles from "./AgentListPage.module.css"
 
 const AGENT_LIST_ACTIONS = [
@@ -79,6 +80,7 @@ export const AgentListPage: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { showToast } = useLogs()
+  const isHeadlessRuntime = isHeadlessHttpRuntime()
 
   const targets = useRelaxValue(integrationTargetsState)
   const loading = useRelaxValue(integrationTargetsLoadingState)
@@ -116,6 +118,10 @@ export const AgentListPage: React.FC = () => {
   )
 
   const handlePickDirectory = async (kind: IntegrationClientKind) => {
+    if (isHeadlessRuntime) {
+      showToast(t("agentManagement.headlessDisabled"), "error")
+      return
+    }
     try {
       const result = await pickIntegrationDirectory({ kind })
       if (result) {
@@ -129,6 +135,10 @@ export const AgentListPage: React.FC = () => {
 
   const handleAddDirectory = async () => {
     if (!newDir.trim() || !addingKind) return
+    if (isHeadlessRuntime) {
+      showToast(t("agentManagement.headlessDisabled"), "error")
+      return
+    }
 
     setAddLoading(true)
     try {
@@ -145,6 +155,10 @@ export const AgentListPage: React.FC = () => {
 
   const handleDelete = async () => {
     if (!pendingDeleteTarget) return
+    if (isHeadlessRuntime) {
+      showToast(t("agentManagement.headlessDisabled"), "error")
+      return
+    }
 
     setDeleteLoading(true)
     try {
@@ -205,6 +219,7 @@ export const AgentListPage: React.FC = () => {
                       size="small"
                       icon={FolderPlus}
                       onClick={() => handlePickDirectory(kind)}
+                      disabled={isHeadlessRuntime}
                     >
                       {t("agentManagement.addConfigDir")}
                     </Button>
@@ -234,7 +249,7 @@ export const AgentListPage: React.FC = () => {
                         size="small"
                         variant="primary"
                         loading={addLoading}
-                        disabled={!newDir.trim()}
+                        disabled={isHeadlessRuntime || !newDir.trim()}
                         onClick={handleAddDirectory}
                       >
                         {t("agentManagement.add")}
@@ -306,6 +321,7 @@ export const AgentListPage: React.FC = () => {
                               variant="danger"
                               icon={Trash2}
                               onClick={() => setPendingDeleteTarget(target)}
+                              disabled={isHeadlessRuntime}
                             >
                               {t("agentManagement.delete")}
                             </Button>
@@ -338,7 +354,12 @@ export const AgentListPage: React.FC = () => {
             >
               {t("agentManagement.cancel")}
             </Button>
-            <Button variant="danger" loading={deleteLoading} onClick={handleDelete}>
+            <Button
+              variant="danger"
+              loading={deleteLoading}
+              onClick={handleDelete}
+              disabled={isHeadlessRuntime}
+            >
               {t("agentManagement.delete")}
             </Button>
           </>

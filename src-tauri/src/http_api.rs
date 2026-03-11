@@ -101,6 +101,13 @@ fn require_app_handle(state: &ServiceState) -> Result<tauri::AppHandle, ApiError
         .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "unsupported", "app handle unavailable"))
 }
 
+fn ensure_not_headless(state: &ServiceState, message: &'static str) -> Result<(), ApiError> {
+    if state.app_handle.is_none() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "unsupported", message));
+    }
+    Ok(())
+}
+
 fn resolve_app_data_dir(
     state: &SharedState,
     app: Option<&tauri::AppHandle>,
@@ -749,6 +756,9 @@ async fn provider_test_model(
 async fn integration_list_targets(
     State(state): State<ServiceState>,
 ) -> ApiResult<Vec<IntegrationTarget>> {
+    if state.app_handle.is_none() {
+        return Ok(Json(integration_service::list_default_targets()));
+    }
     let shared = require_shared_state(&state)?;
     Ok(Json(integration_service::list_targets(&shared)))
 }
@@ -764,6 +774,10 @@ async fn integration_pick_directory(
     State(state): State<ServiceState>,
     Json(payload): Json<IntegrationPickRequest>,
 ) -> ApiResult<Option<String>> {
+    ensure_not_headless(
+        &state,
+        "Headless mode does not support client integration updates from management UI",
+    )?;
     let app = require_app_handle(&state)?;
     let initial = payload.initial_dir;
     let kind = payload.kind;
@@ -784,6 +798,10 @@ async fn integration_add_target(
     State(state): State<ServiceState>,
     Json(payload): Json<IntegrationAddRequest>,
 ) -> ApiResult<IntegrationTarget> {
+    ensure_not_headless(
+        &state,
+        "Headless mode does not support client integration updates from management UI",
+    )?;
     let shared = require_shared_state(&state)?;
     let result = integration_service::add_target(&shared, payload.kind, payload.config_dir)
         .map_err(ApiError::from)?;
@@ -802,6 +820,10 @@ async fn integration_update_target(
     State(state): State<ServiceState>,
     Json(payload): Json<IntegrationUpdateRequest>,
 ) -> ApiResult<IntegrationTarget> {
+    ensure_not_headless(
+        &state,
+        "Headless mode does not support client integration updates from management UI",
+    )?;
     let shared = require_shared_state(&state)?;
     let result =
         integration_service::update_target(&shared, &payload.target_id, payload.config_dir)
@@ -819,6 +841,10 @@ async fn integration_remove_target(
     State(state): State<ServiceState>,
     Query(query): Query<IntegrationRemoveQuery>,
 ) -> ApiResult<serde_json::Value> {
+    ensure_not_headless(
+        &state,
+        "Headless mode does not support client integration updates from management UI",
+    )?;
     let shared = require_shared_state(&state)?;
     let removed = integration_service::remove_target(&shared, &query.target_id)
         .map_err(ApiError::from)?;
@@ -838,9 +864,15 @@ async fn integration_write_group_entry(
     Json(payload): Json<IntegrationWriteEntryRequest>,
 ) -> ApiResult<IntegrationWriteResult> {
     let shared = require_shared_state(&state)?;
-    let result = integration_service::write_group_entry(
+    let targets = if state.app_handle.is_none() {
+        integration_service::list_default_targets()
+    } else {
+        integration_service::list_targets(&shared)
+    };
+    let result = integration_service::write_group_entry_with_targets(
         &shared,
         &payload.group_id,
+        targets,
         payload.target_ids,
     )
     .map_err(ApiError::from)?;
@@ -858,8 +890,14 @@ async fn integration_read_agent_config(
     Query(query): Query<IntegrationReadQuery>,
 ) -> ApiResult<AgentConfigFile> {
     let shared = require_shared_state(&state)?;
-    let result = integration_service::read_agent_config(&shared, &query.target_id)
-        .map_err(ApiError::from)?;
+    let targets = if state.app_handle.is_none() {
+        integration_service::list_default_targets()
+    } else {
+        integration_service::list_targets(&shared)
+    };
+    let result =
+        integration_service::read_agent_config_with_targets(targets, &query.target_id)
+            .map_err(ApiError::from)?;
     Ok(Json(result))
 }
 
@@ -875,9 +913,22 @@ async fn integration_write_agent_config(
     Json(payload): Json<IntegrationWriteConfigRequest>,
 ) -> ApiResult<WriteAgentConfigResult> {
     let shared = require_shared_state(&state)?;
-    let result =
-        integration_service::write_agent_config(&shared, &payload.target_id, payload.config)
-            .map_err(ApiError::from)?;
+    let targets = if state.app_handle.is_none() {
+        integration_service::list_default_targets()
+    } else {
+        integration_service::list_targets(&shared)
+    };
+    let result = integration_service::write_agent_config_with_targets(
+        if state.app_handle.is_none() {
+            None
+        } else {
+            Some(&shared)
+        },
+        targets,
+        &payload.target_id,
+        payload.config,
+    )
+    .map_err(ApiError::from)?;
     Ok(Json(result))
 }
 
@@ -895,8 +946,18 @@ async fn integration_write_agent_config_source(
     Json(payload): Json<IntegrationWriteSourceRequest>,
 ) -> ApiResult<WriteAgentConfigResult> {
     let shared = require_shared_state(&state)?;
-    let result = integration_service::write_agent_config_source(
-        &shared,
+    let targets = if state.app_handle.is_none() {
+        integration_service::list_default_targets()
+    } else {
+        integration_service::list_targets(&shared)
+    };
+    let result = integration_service::write_agent_config_source_with_targets(
+        if state.app_handle.is_none() {
+            None
+        } else {
+            Some(&shared)
+        },
+        targets,
         &payload.target_id,
         &payload.content,
         payload.source_id.as_deref(),
