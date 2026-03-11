@@ -4,9 +4,24 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button, Input, Modal } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
+import {
+  addIntegrationTargetAction,
+  integrationTargetsLoadingState,
+  integrationTargetsState,
+  loadIntegrationTargetsAction,
+  pickIntegrationDirectoryAction,
+  removeIntegrationTargetAction,
+} from "@/store"
 import type { IntegrationClientKind, IntegrationTarget } from "@/types"
-import { ipc } from "@/utils/ipc"
+import { useActions, useRelaxValue } from "@/utils/relax"
 import styles from "./AgentListPage.module.css"
+
+const AGENT_LIST_ACTIONS = [
+  loadIntegrationTargetsAction,
+  pickIntegrationDirectoryAction,
+  addIntegrationTargetAction,
+  removeIntegrationTargetAction,
+] as const
 
 const AGENT_TYPES: IntegrationClientKind[] = ["claude", "codex", "opencode"]
 
@@ -65,24 +80,27 @@ export const AgentListPage: React.FC = () => {
   const { t } = useTranslation()
   const { showToast } = useLogs()
 
-  const [targets, setTargets] = useState<IntegrationTarget[]>([])
-  const [loading, setLoading] = useState(true)
+  const targets = useRelaxValue(integrationTargetsState)
+  const loading = useRelaxValue(integrationTargetsLoadingState)
   const [newDir, setNewDir] = useState("")
   const [addingKind, setAddingKind] = useState<IntegrationClientKind | null>(null)
   const [addLoading, setAddLoading] = useState(false)
   const [pendingDeleteTarget, setPendingDeleteTarget] = useState<IntegrationTarget | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [
+    loadTargetsAction,
+    pickIntegrationDirectory,
+    addIntegrationTarget,
+    removeIntegrationTarget,
+  ] = useActions(AGENT_LIST_ACTIONS)
 
   const loadTargets = useCallback(async () => {
     try {
-      const result = await ipc.integrationListTargets()
-      setTargets(result || [])
+      await loadTargetsAction()
     } catch (err) {
       showToast(String(err), "error")
-    } finally {
-      setLoading(false)
     }
-  }, [showToast])
+  }, [loadTargetsAction, showToast])
 
   useEffect(() => {
     void loadTargets()
@@ -99,7 +117,7 @@ export const AgentListPage: React.FC = () => {
 
   const handlePickDirectory = async (kind: IntegrationClientKind) => {
     try {
-      const result = await ipc.integrationPickDirectory(undefined, kind)
+      const result = await pickIntegrationDirectory({ kind })
       if (result) {
         setNewDir(result)
         setAddingKind(kind)
@@ -114,8 +132,7 @@ export const AgentListPage: React.FC = () => {
 
     setAddLoading(true)
     try {
-      await ipc.integrationAddTarget(addingKind, newDir.trim())
-      await loadTargets()
+      await addIntegrationTarget({ kind: addingKind, configDir: newDir.trim() })
       setNewDir("")
       setAddingKind(null)
       showToast(t("agentManagement.addSuccess"), "success")
@@ -131,8 +148,7 @@ export const AgentListPage: React.FC = () => {
 
     setDeleteLoading(true)
     try {
-      await ipc.integrationRemoveTarget(pendingDeleteTarget.id)
-      await loadTargets()
+      await removeIntegrationTarget({ targetId: pendingDeleteTarget.id })
       showToast(t("agentManagement.deleteSuccess"), "success")
       setPendingDeleteTarget(null)
     } catch (err) {

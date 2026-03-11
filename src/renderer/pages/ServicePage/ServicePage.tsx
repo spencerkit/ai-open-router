@@ -1,15 +1,41 @@
 import { Copy, Pencil, Plus, Trash2, Upload } from "lucide-react"
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { shallow } from "zustand/shallow"
 import { Button, Input, Modal } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
-import { useProxyStore } from "@/store"
+import {
+  activeGroupIdState,
+  addIntegrationTargetAction,
+  clearIntegrationTargetsAction,
+  configState,
+  integrationTargetsLoadingState,
+  integrationTargetsState,
+  loadIntegrationTargetsAction,
+  pickIntegrationDirectoryAction,
+  readAgentConfigAction,
+  saveConfigAction,
+  setActiveGroupIdAction,
+  statusState,
+  updateIntegrationTargetAction,
+  writeGroupEntryAction,
+} from "@/store"
 import type { Group, IntegrationClientKind, IntegrationTarget, ProxyConfig } from "@/types"
-import { ipc } from "@/utils/ipc"
+import { useActions, useRelaxValue } from "@/utils/relax"
 import { resolveReachableServerBaseUrls } from "@/utils/serverAddress"
 import { ProviderList } from "./ProviderList"
 import styles from "./ServicePage.module.css"
+
+const SERVICE_ACTIONS = [
+  saveConfigAction,
+  setActiveGroupIdAction,
+  loadIntegrationTargetsAction,
+  clearIntegrationTargetsAction,
+  pickIntegrationDirectoryAction,
+  addIntegrationTargetAction,
+  updateIntegrationTargetAction,
+  writeGroupEntryAction,
+  readAgentConfigAction,
+] as const
 
 /** Matches search text against a list of candidate strings. */
 function matchesKeyword(keyword: string, values: Array<string | null | undefined>): boolean {
@@ -31,16 +57,22 @@ function normalizeComparableUrl(raw?: string | null): string {
 export const ServicePage: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { config, saveConfig, status, activeGroupId, setActiveGroupId } = useProxyStore(
-    state => ({
-      config: state.config,
-      saveConfig: state.saveConfig,
-      status: state.status,
-      activeGroupId: state.activeGroupId,
-      setActiveGroupId: state.setActiveGroupId,
-    }),
-    shallow
-  )
+  const config = useRelaxValue(configState)
+  const status = useRelaxValue(statusState)
+  const activeGroupId = useRelaxValue(activeGroupIdState)
+  const integrationTargets = useRelaxValue(integrationTargetsState)
+  const integrationLoading = useRelaxValue(integrationTargetsLoadingState)
+  const [
+    saveConfig,
+    setActiveGroupId,
+    loadIntegrationTargetsAction,
+    clearIntegrationTargetsAction,
+    pickIntegrationDirectory,
+    addIntegrationTarget,
+    updateIntegrationTarget,
+    writeGroupEntry,
+    readAgentConfigAction,
+  ] = useActions(SERVICE_ACTIONS)
   const { showToast } = useLogs()
   const [groupSearchValue, setGroupSearchValue] = useState("")
   const [showAddGroupModal, setShowAddGroupModal] = useState(false)
@@ -54,8 +86,6 @@ export const ServicePage: React.FC = () => {
   )
   const [activatingProviderId, setActivatingProviderId] = useState<string | null>(null)
   const [showIntegrationWriteModal, setShowIntegrationWriteModal] = useState(false)
-  const [integrationTargets, setIntegrationTargets] = useState<IntegrationTarget[]>([])
-  const [integrationLoading, setIntegrationLoading] = useState(false)
   const [integrationStatusRefreshing, setIntegrationStatusRefreshing] = useState(false)
   const [integrationTargetUrlById, setIntegrationTargetUrlById] = useState<Record<string, string>>(
     {}
@@ -142,19 +172,19 @@ export const ServicePage: React.FC = () => {
   useEffect(() => {
     if (groups.length === 0) {
       if (activeGroupId !== null) {
-        setActiveGroupId(null)
+        setActiveGroupId({ groupId: null })
       }
       return
     }
 
     const activeGroupExists = groups.some(group => group.id === activeGroupId)
     if (!activeGroupExists) {
-      setActiveGroupId(groups[0].id)
+      setActiveGroupId({ groupId: groups[0].id })
     }
   }, [groups, activeGroupId, setActiveGroupId])
 
   const handleSelectGroup = (groupId: string) => {
-    setActiveGroupId(groupId)
+    setActiveGroupId({ groupId })
     setShowDeleteProviderModal(false)
     setShowAssociateProviderModal(false)
     setPendingDeleteProviderId(null)
@@ -201,7 +231,7 @@ export const ServicePage: React.FC = () => {
     try {
       await saveConfig(newConfig)
       closeAddGroupModal()
-      setActiveGroupId(newGroup.id)
+      setActiveGroupId({ groupId: newGroup.id })
       showToast(t("toast.groupCreated"), "success")
     } catch (error) {
       showToast(t("errors.saveFailed", { message: String(error) }), "error")
@@ -216,7 +246,7 @@ export const ServicePage: React.FC = () => {
 
     try {
       await saveConfig(newConfig)
-      setActiveGroupId(newGroups.length > 0 ? newGroups[0].id : null)
+      setActiveGroupId({ groupId: newGroups.length > 0 ? newGroups[0].id : null })
       setShowDeleteGroupModal(false)
       showToast(t("toast.groupDeleted"), "success")
     } catch (error) {
@@ -364,47 +394,46 @@ export const ServicePage: React.FC = () => {
     }
   }
 
-  const loadIntegrationTargets = React.useCallback(async () => {
-    setIntegrationLoading(true)
+  const loadIntegrationTargetsSafe = React.useCallback(async () => {
     try {
-      const targets = await ipc.integrationListTargets()
-      setIntegrationTargets(targets)
+      await loadIntegrationTargetsAction()
     } catch (error) {
       showToast(t("errors.operationFailed", { message: String(error) }), "error")
-    } finally {
-      setIntegrationLoading(false)
     }
-  }, [showToast, t])
+  }, [loadIntegrationTargetsAction, showToast, t])
 
-  const refreshIntegrationTargetStatus = React.useCallback(async (targets: IntegrationTarget[]) => {
-    if (!targets.length) {
-      setIntegrationTargetUrlById({})
-      return
-    }
+  const refreshIntegrationTargetStatus = React.useCallback(
+    async (targets: IntegrationTarget[]) => {
+      if (!targets.length) {
+        setIntegrationTargetUrlById({})
+        return
+      }
 
-    setIntegrationStatusRefreshing(true)
-    try {
-      const results = await Promise.all(
-        targets.map(async target => {
-          try {
-            const file = await ipc.integrationReadAgentConfig(target.id)
-            return [target.id, file.parsedConfig?.url?.trim() || ""] as const
-          } catch {
-            return [target.id, ""] as const
-          }
-        })
-      )
-      setIntegrationTargetUrlById(Object.fromEntries(results))
-    } finally {
-      setIntegrationStatusRefreshing(false)
-    }
-  }, [])
+      setIntegrationStatusRefreshing(true)
+      try {
+        const results = await Promise.all(
+          targets.map(async target => {
+            try {
+              const file = await readAgentConfigAction({ targetId: target.id })
+              return [target.id, file.parsedConfig?.url?.trim() || ""] as const
+            } catch {
+              return [target.id, ""] as const
+            }
+          })
+        )
+        setIntegrationTargetUrlById(Object.fromEntries(results))
+      } finally {
+        setIntegrationStatusRefreshing(false)
+      }
+    },
+    [readAgentConfigAction]
+  )
 
   const openIntegrationWriteModal = async () => {
     if (!activeGroup) return
     setShowIntegrationWriteModal(true)
     setSelectedIntegrationIds({})
-    await loadIntegrationTargets()
+    await loadIntegrationTargetsSafe()
   }
 
   const closeIntegrationWriteModal = () => {
@@ -415,12 +444,12 @@ export const ServicePage: React.FC = () => {
 
   useEffect(() => {
     if (!activeGroup) {
-      setIntegrationTargets([])
+      clearIntegrationTargetsAction()
       setIntegrationTargetUrlById({})
       return
     }
-    void loadIntegrationTargets()
-  }, [activeGroup, loadIntegrationTargets])
+    void loadIntegrationTargetsSafe()
+  }, [activeGroup, clearIntegrationTargetsAction, loadIntegrationTargetsSafe])
 
   useEffect(() => {
     if (!activeGroup) return
@@ -434,10 +463,9 @@ export const ServicePage: React.FC = () => {
   const handleAddIntegrationTarget = async (kind: IntegrationClientKind) => {
     setIntegrationAddingKind(kind)
     try {
-      const pickedDir = await ipc.integrationPickDirectory(undefined, kind)
+      const pickedDir = await pickIntegrationDirectory({ kind })
       if (!pickedDir) return
-      const created = await ipc.integrationAddTarget(kind, pickedDir)
-      setIntegrationTargets(prev => [...prev, created])
+      const created = await addIntegrationTarget({ kind, configDir: pickedDir })
       setSelectedIntegrationIds(prev => ({ ...prev, [created.id]: true }))
       showToast(
         t("integration.toastTargetAdded", {
@@ -455,15 +483,9 @@ export const ServicePage: React.FC = () => {
   const handleUpdateIntegrationTarget = async (target: IntegrationTarget) => {
     setIntegrationUpdatingTargetId(target.id)
     try {
-      const pickedDir = await ipc.integrationPickDirectory(target.configDir)
+      const pickedDir = await pickIntegrationDirectory({ initialDir: target.configDir })
       if (!pickedDir) return
-      const updated = await ipc.integrationUpdateTarget(target.id, pickedDir)
-      setIntegrationTargets(prev =>
-        prev.map(item => {
-          if (item.id !== updated.id) return item
-          return updated
-        })
-      )
+      const updated = await updateIntegrationTarget({ targetId: target.id, configDir: pickedDir })
       setSelectedIntegrationIds(prev => ({ ...prev, [updated.id]: true }))
       showToast(
         t("integration.toastTargetUpdated", {
@@ -491,10 +513,10 @@ export const ServicePage: React.FC = () => {
 
     setIntegrationWriting(true)
     try {
-      const result = await ipc.integrationWriteGroupEntry(
-        activeGroup.id,
-        selectedIntegrationTargetIds
-      )
+      const result = await writeGroupEntry({
+        groupId: activeGroup.id,
+        targetIds: selectedIntegrationTargetIds,
+      })
       if (result.failed === 0) {
         showToast(
           t("integration.toastWriteSuccess", {
@@ -502,7 +524,7 @@ export const ServicePage: React.FC = () => {
           }),
           "success"
         )
-        await loadIntegrationTargets()
+        await loadIntegrationTargetsSafe()
         setShowIntegrationWriteModal(false)
         setSelectedIntegrationIds({})
         return

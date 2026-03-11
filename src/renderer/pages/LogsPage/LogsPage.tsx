@@ -4,13 +4,28 @@ import { Check, ChevronLeft, ChevronRight, RotateCcw, Trash2, X } from "lucide-r
 import type React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { shallow } from "zustand/shallow"
 import { Button, Modal } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
-import { useProxyStore } from "@/store"
+import {
+  clearLogsAction,
+  clearLogsStatsAction,
+  configState,
+  logsState,
+  logsStatsState,
+  refreshLogsAction,
+  refreshLogsStatsAction,
+} from "@/store"
 import type { LogEntry } from "@/types"
+import { useActions, useRelaxValue } from "@/utils/relax"
 import { formatTokenMillions } from "@/utils/tokenFormat"
 import styles from "./LogsPage.module.css"
+
+const LOGS_ACTIONS = [
+  refreshLogsAction,
+  refreshLogsStatsAction,
+  clearLogsAction,
+  clearLogsStatsAction,
+] as const
 
 const HOURS_FILTERS = [1, 6, 24, 168, 720, 2160] as const
 const MACARON = {
@@ -135,19 +150,10 @@ function formatDelta(delta: number): string {
 export const LogsPage: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { logs, logsStats, refreshLogs, refreshLogsStats, clearLogs, clearLogsStats, config } =
-    useProxyStore(
-      state => ({
-        logs: state.logs,
-        logsStats: state.logsStats,
-        refreshLogs: state.refreshLogs,
-        refreshLogsStats: state.refreshLogsStats,
-        clearLogs: state.clearLogs,
-        clearLogsStats: state.clearLogsStats,
-        config: state.config,
-      }),
-      shallow
-    )
+  const logs = useRelaxValue(logsState)
+  const logsStats = useRelaxValue(logsStatsState)
+  const config = useRelaxValue(configState)
+  const [refreshLogs, refreshLogsStats, clearLogs, clearLogsStats] = useActions(LOGS_ACTIONS)
   const { showToast } = useLogs()
   const [activeTab, setActiveTab] = useState<LogsTab>("stats")
   const [statusFilter, setStatusFilter] = useState<"all" | LogEntry["status"]>("all")
@@ -250,7 +256,12 @@ export const LogsPage: React.FC = () => {
 
   useEffect(() => {
     if (!hasInitializedProviderSelectionRef.current) return
-    void refreshLogsStats(hoursFilter, selectedProviderKeys, undefined, "rule", enableComparison)
+    void refreshLogsStats({
+      hours: hoursFilter,
+      ruleKeys: selectedProviderKeys,
+      dimension: "rule",
+      enableComparison,
+    })
   }, [hoursFilter, refreshLogsStats, selectedProviderKeys, enableComparison])
 
   useEffect(() => {
@@ -283,7 +294,12 @@ export const LogsPage: React.FC = () => {
     if (!hasInitializedProviderSelectionRef.current) return
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return
-      void refreshLogsStats(hoursFilter, selectedProviderKeys, undefined, "rule", enableComparison)
+      void refreshLogsStats({
+        hours: hoursFilter,
+        ruleKeys: selectedProviderKeys,
+        dimension: "rule",
+        enableComparison,
+      })
     }, 3000)
     return () => window.clearInterval(timer)
   }, [hoursFilter, refreshLogsStats, selectedProviderKeys, enableComparison])
@@ -367,8 +383,13 @@ export const LogsPage: React.FC = () => {
     }
     try {
       setResettingStats(true)
-      await clearLogsStats(beforeEpochMs)
-      await refreshLogsStats(hoursFilter, selectedProviderKeys, undefined, "rule", enableComparison)
+      await clearLogsStats({ beforeEpochMs })
+      await refreshLogsStats({
+        hours: hoursFilter,
+        ruleKeys: selectedProviderKeys,
+        dimension: "rule",
+        enableComparison,
+      })
       showToast(t("logs.resetStatsSuccess"), "success")
       setShowResetStatsConfirm(false)
     } catch (error) {

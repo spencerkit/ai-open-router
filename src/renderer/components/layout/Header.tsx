@@ -12,13 +12,15 @@ import type React from "react"
 import { useCallback, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router-dom"
-import { shallow } from "zustand/shallow"
-import { useProxyStore } from "@/store"
+import { configState, saveConfigAction, savingConfigState } from "@/store"
 import type { LocaleCode, ThemeMode } from "@/types"
 import { resolveEffectiveLocale } from "@/utils/locale"
+import { useActions, useRelaxValue } from "@/utils/relax"
 import brandLogo from "../../../../assets/logo-lockup.svg"
 import { Button } from "../common"
 import styles from "./Header.module.css"
+
+const HEADER_ACTIONS = [saveConfigAction] as const
 
 export type HeaderView = "service" | "settings" | "logs" | "agents" | "providers"
 
@@ -98,14 +100,9 @@ export const Header: React.FC<HeaderProps> = ({
   const navigate = useNavigate()
   const location = useLocation()
   const { t, i18n } = useTranslation()
-  const { config, saveConfig, savingConfig } = useProxyStore(
-    state => ({
-      config: state.config,
-      saveConfig: state.saveConfig,
-      savingConfig: state.savingConfig,
-    }),
-    shallow
-  )
+  const config = useRelaxValue(configState)
+  const savingConfig = useRelaxValue(savingConfigState)
+  const [saveConfig] = useActions(HEADER_ACTIONS)
 
   const supportedLocales: LocaleCode[] = ["en-US", "zh-CN"]
   const documentTheme = document.documentElement.getAttribute("data-theme")

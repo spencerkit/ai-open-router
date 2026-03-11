@@ -1,7 +1,6 @@
 import type React from "react"
 import { useCallback, useEffect, useRef } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
-import { shallow } from "zustand/shallow"
 import { Layout } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import {
@@ -16,11 +15,23 @@ import {
   ServicePage,
   SettingsPage,
 } from "@/pages"
-import { useProxyStore } from "@/store"
+import {
+  bootstrapErrorState,
+  bootstrappingState,
+  configState,
+  initAction,
+  serverActionState,
+  startServerAction,
+  statusState,
+  stopServerAction,
+} from "@/store"
+import { useActions, useRelaxValue } from "@/utils/relax"
 import {
   formatServerAddressForDisplay,
   resolveReachableServerBaseUrls,
 } from "@/utils/serverAddress"
+
+const APP_ACTIONS = [initAction, startServerAction, stopServerAction] as const
 
 /**
  * Main App Component
@@ -29,28 +40,12 @@ import {
 const App: React.FC = () => {
   console.log("[App] Rendering...")
 
-  const {
-    init,
-    bootstrapping,
-    bootstrapError,
-    status,
-    startServer,
-    stopServer,
-    config,
-    serverAction,
-  } = useProxyStore(
-    state => ({
-      init: state.init,
-      bootstrapping: state.bootstrapping,
-      bootstrapError: state.bootstrapError,
-      status: state.status,
-      startServer: state.startServer,
-      stopServer: state.stopServer,
-      config: state.config,
-      serverAction: state.serverAction,
-    }),
-    shallow
-  )
+  const bootstrapping = useRelaxValue(bootstrappingState)
+  const bootstrapError = useRelaxValue(bootstrapErrorState)
+  const status = useRelaxValue(statusState)
+  const config = useRelaxValue(configState)
+  const serverAction = useRelaxValue(serverActionState)
+  const [init, startServer, stopServer] = useActions(APP_ACTIONS)
   const { t } = useTranslation()
   const { showToast } = useLogs()
   const initStartedRef = useRef(false)

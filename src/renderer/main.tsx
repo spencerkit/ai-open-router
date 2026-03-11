@@ -1,3 +1,4 @@
+import { RelaxProvider } from "@relax-state/react"
 import React from "react"
 import ReactDOM from "react-dom/client"
 import { I18nextProvider } from "react-i18next"
@@ -112,12 +113,14 @@ async function init() {
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
       <I18nextProvider i18n={i18n}>
-        <ToastProvider>
-          <Router>
-            <App />
-            <ToastContainer />
-          </Router>
-        </ToastProvider>
+        <RelaxProvider>
+          <ToastProvider>
+            <Router>
+              <App />
+              <ToastContainer />
+            </Router>
+          </ToastProvider>
+        </RelaxProvider>
       </I18nextProvider>
     </React.StrictMode>
   )

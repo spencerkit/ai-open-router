@@ -1,12 +1,23 @@
 import type React from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { shallow } from "zustand/shallow"
 import { Button, Input, Modal, Switch } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
-import { useProxyStore } from "@/store"
+import {
+  configState,
+  exportGroupsToClipboardAction,
+  exportGroupsToFolderAction,
+  getAppInfoAction,
+  importGroupsBackupAction,
+  importGroupsFromJsonAction,
+  readClipboardTextAction,
+  remoteRulesPullAction,
+  remoteRulesUploadAction,
+  saveConfigAction,
+  savingConfigState,
+} from "@/store"
 import type { AppInfo, LocaleCode, ProxyConfig, ThemeMode } from "@/types"
-import { ipc } from "@/utils/ipc"
 import { resolveEffectiveLocale } from "@/utils/locale"
+import { useActions, useRelaxValue } from "@/utils/relax"
 import styles from "./SettingsPage.module.css"
 
 type ImportSource = "file" | "clipboard"
@@ -24,16 +35,28 @@ const QUOTA_REFRESH_MINUTES_MIN = 1
 const QUOTA_REFRESH_MINUTES_MAX = 1440
 const QUOTA_REFRESH_MINUTES_DEFAULT = 5
 
+const SETTINGS_ACTIONS = [
+  saveConfigAction,
+  exportGroupsToFolderAction,
+  exportGroupsToClipboardAction,
+  importGroupsBackupAction,
+  importGroupsFromJsonAction,
+  remoteRulesPullAction,
+  remoteRulesUploadAction,
+  readClipboardTextAction,
+  getAppInfoAction,
+] as const
+
 /**
  * SettingsPage Component
  * Service settings configuration page
  */
 export const SettingsPage: React.FC = () => {
   const { t } = useTranslation()
-  const {
-    config,
+  const config = useRelaxValue(configState)
+  const savingConfig = useRelaxValue(savingConfigState)
+  const [
     saveConfig,
-    savingConfig,
     exportGroupsToFolder,
     exportGroupsToClipboard,
     importGroupsBackup,
@@ -41,21 +64,8 @@ export const SettingsPage: React.FC = () => {
     remoteRulesPull,
     remoteRulesUpload,
     readClipboardText,
-  } = useProxyStore(
-    state => ({
-      config: state.config,
-      saveConfig: state.saveConfig,
-      savingConfig: state.savingConfig,
-      exportGroupsToFolder: state.exportGroupsToFolder,
-      exportGroupsToClipboard: state.exportGroupsToClipboard,
-      importGroupsBackup: state.importGroupsBackup,
-      importGroupsFromJson: state.importGroupsFromJson,
-      remoteRulesPull: state.remoteRulesPull,
-      remoteRulesUpload: state.remoteRulesUpload,
-      readClipboardText: state.readClipboardText,
-    }),
-    shallow
-  )
+    getAppInfo,
+  ] = useActions(SETTINGS_ACTIONS)
   const { showToast } = useLogs()
 
   const [portText, setPortText] = useState("8080")
@@ -267,7 +277,7 @@ export const SettingsPage: React.FC = () => {
       try {
         setRemoteSyncAction(action)
         if (action === "upload") {
-          const result = await remoteRulesUpload(force)
+          const result = await remoteRulesUpload({ force })
           if (result.needsConfirmation && !force) {
             setPendingRemoteConflict({
               action,
@@ -285,7 +295,7 @@ export const SettingsPage: React.FC = () => {
           return
         }
 
-        const result = await remoteRulesPull(force)
+        const result = await remoteRulesPull({ force })
         if (result.needsConfirmation && !force) {
           setPendingRemoteConflict({
             action,
@@ -421,7 +431,7 @@ export const SettingsPage: React.FC = () => {
       const result =
         importSource === "file"
           ? await importGroupsBackup()
-          : await importGroupsFromJson(importJsonText)
+          : await importGroupsFromJson({ jsonText: importJsonText })
 
       if (!result.canceled) {
         showToast(
@@ -441,7 +451,7 @@ export const SettingsPage: React.FC = () => {
 
     try {
       setAboutLoading(true)
-      const info = await ipc.getAppInfo()
+      const info = await getAppInfo()
       setAppInfo(info)
     } catch (error) {
       showToast(t("errors.operationFailed", { message: String(error) }), "error")

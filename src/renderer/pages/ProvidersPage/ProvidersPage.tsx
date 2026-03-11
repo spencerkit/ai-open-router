@@ -1,14 +1,31 @@
 import type React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { shallow } from "zustand/shallow"
 import { Button, Input, Modal } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
-import { useProxyStore } from "@/store"
+import {
+  configState,
+  fetchGroupProviderCardStatsAction,
+  fetchGroupQuotasAction,
+  fetchProviderQuotaAction,
+  providerCardStatsByProviderKeyState,
+  providerQuotasState,
+  quotaLoadingProviderKeysState,
+  saveConfigAction,
+  testProviderModelAction,
+} from "@/store"
 import type { ProxyConfig, RuleCardStatsItem, RuleQuotaSnapshot } from "@/types"
-import { ipc } from "@/utils/ipc"
+import { useActions, useRelaxValue } from "@/utils/relax"
 import { ProviderList } from "./ProviderList"
 import styles from "./ProvidersPage.module.css"
+
+const PROVIDERS_ACTIONS = [
+  saveConfigAction,
+  fetchGroupQuotasAction,
+  fetchGroupProviderCardStatsAction,
+  fetchProviderQuotaAction,
+  testProviderModelAction,
+] as const
 
 const providerQuotaKey = (groupId: string, providerId: string) => `${groupId}:${providerId}`
 const QUOTA_REFRESH_MINUTES_DEFAULT = 5
@@ -121,28 +138,17 @@ export const ProvidersPage: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { showToast } = useLogs()
-  const {
-    config,
+  const config = useRelaxValue(configState)
+  const providerQuotas = useRelaxValue(providerQuotasState)
+  const quotaLoadingProviderKeys = useRelaxValue(quotaLoadingProviderKeysState)
+  const providerCardStatsByProviderKey = useRelaxValue(providerCardStatsByProviderKeyState)
+  const [
     saveConfig,
-    providerQuotas,
-    quotaLoadingProviderKeys,
-    providerCardStatsByProviderKey,
     fetchGroupQuotas,
     fetchGroupProviderCardStats,
     fetchProviderQuota,
-  } = useProxyStore(
-    state => ({
-      config: state.config,
-      saveConfig: state.saveConfig,
-      providerQuotas: state.providerQuotas,
-      quotaLoadingProviderKeys: state.quotaLoadingProviderKeys,
-      providerCardStatsByProviderKey: state.providerCardStatsByProviderKey,
-      fetchGroupQuotas: state.fetchGroupQuotas,
-      fetchGroupProviderCardStats: state.fetchGroupProviderCardStats,
-      fetchProviderQuota: state.fetchProviderQuota,
-    }),
-    shallow
-  )
+    testProviderModel,
+  ] = useActions(PROVIDERS_ACTIONS)
 
   const [searchValue, setSearchValue] = useState("")
   const [pendingDeleteProviderId, setPendingDeleteProviderId] = useState<string | null>(null)
@@ -237,9 +243,9 @@ export const ProvidersPage: React.FC = () => {
   useEffect(() => {
     if (!associatedGroupIds.length) return
     void Promise.all([
-      ...associatedGroupIds.map(groupId => fetchGroupQuotas(groupId).catch(() => undefined)),
+      ...associatedGroupIds.map(groupId => fetchGroupQuotas({ groupId }).catch(() => undefined)),
       ...associatedGroupIds.map(groupId =>
-        fetchGroupProviderCardStats(groupId).catch(() => undefined)
+        fetchGroupProviderCardStats({ groupId }).catch(() => undefined)
       ),
     ])
   }, [associatedGroupIds, fetchGroupProviderCardStats, fetchGroupQuotas])
@@ -260,7 +266,7 @@ export const ProvidersPage: React.FC = () => {
       quotaRefreshCursorRef.current = (start + batchSize) % associatedGroupIds.length
 
       void Promise.all(
-        currentBatch.map(groupId => fetchGroupQuotas(groupId).catch(() => undefined))
+        currentBatch.map(groupId => fetchGroupQuotas({ groupId }).catch(() => undefined))
       )
     }, quotaRefreshIntervalMs)
 
@@ -377,7 +383,7 @@ export const ProvidersPage: React.FC = () => {
 
     setTestingProviderIds(prev => ({ ...prev, [providerId]: true }))
     try {
-      const result = await ipc.testProviderModel(targetGroup.id, providerId)
+      const result = await testProviderModel({ groupId: targetGroup.id, providerId })
       if (!result.ok) {
         showToast(
           t("toast.providerModelTestFailed", {
@@ -428,7 +434,7 @@ export const ProvidersPage: React.FC = () => {
     }
 
     try {
-      await fetchProviderQuota(groupId, providerId)
+      await fetchProviderQuota({ groupId, providerId })
     } catch (error) {
       showToast(t("errors.operationFailed", { message: String(error) }), "error")
     }
