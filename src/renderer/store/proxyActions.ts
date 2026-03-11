@@ -86,6 +86,10 @@ function normalizeConfig(config: ProxyConfig): ProxyConfig {
   )
   return {
     ...config,
+    ui: {
+      ...config.ui,
+      autoUpdateEnabled: config.ui.autoUpdateEnabled ?? true,
+    },
     providers: normalizedProviders,
     compat: {
       ...config.compat,

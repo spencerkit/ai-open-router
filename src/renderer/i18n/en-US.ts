@@ -271,6 +271,7 @@ export const enUS = {
     interfaceSection: "Interface",
     backupSection: "Backup",
     remoteSection: "Cloud Config",
+    updateSection: "Updates",
     aboutSection: "About",
     servicePort: "Service Port",
     portHint: "Allowed range: 1 - 65535.",
@@ -322,6 +323,22 @@ export const enUS = {
     remoteRulesUpdate: "Update Providers",
     remoteHint:
       "Upload pushes current groups/providers to remote git. Update pulls remote providers and overwrites local groups.",
+    autoUpdateEnabled: "Auto Update",
+    autoUpdateEnabledHint:
+      "When enabled, the app will check GitHub Releases and automatically install updates.",
+    updateCurrentVersion: "Current version",
+    updateLastChecked: "Last checked",
+    updateReleaseNotes: "Release notes",
+    updateCheckButton: "Check for updates",
+    updateInstallButton: "Install update",
+    updateInstallingButton: "Installing…",
+    updateStatusIdle: "Not checked yet.",
+    updateStatusChecking: "Checking for updates…",
+    updateStatusInstalling: "Installing update…",
+    updateStatusInstallingWithProgress: "Installing update… {{percent}}%",
+    updateStatusUpToDate: "You're up to date.",
+    updateStatusAvailable: "Update available: v{{version}}",
+    updateStatusError: "Update failed: {{message}}",
     exportModalTitle: "Choose Export Method",
     exportModalHint:
       "Copy full JSON to clipboard, or export it to a selected folder with an auto-generated file name.",
@@ -573,6 +590,11 @@ export const enUS = {
     configSaved: "Configuration saved",
     ruleNotFound: "Provider not found",
     groupNotFound: "Group not found",
+    updateAvailable: "Update available: v{{version}}",
+    updateUpToDate: "You're already on the latest version.",
+    updateInstallStarted: "Downloading update…",
+    updateInstalled: "Update installed{{version}}. Restart to apply.",
+    updateFailed: "Update failed: {{message}}",
   },
 
   // Rule Edit Page

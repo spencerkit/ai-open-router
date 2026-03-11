@@ -2,7 +2,7 @@ import type React from "react"
 import { useCallback, useEffect, useRef } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 import { Layout } from "@/components"
-import { useLogs, useTranslation } from "@/hooks"
+import { useLogs, useTranslation, useUpdater } from "@/hooks"
 import {
   AgentEditPage,
   AgentListPage,
@@ -49,6 +49,8 @@ const App: React.FC = () => {
   const { t } = useTranslation()
   const { showToast } = useLogs()
   const initStartedRef = useRef(false)
+
+  useUpdater()
 
   // Fallback translation function
   const translate = useCallback(

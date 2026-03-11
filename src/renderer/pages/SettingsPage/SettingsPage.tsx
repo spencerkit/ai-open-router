@@ -18,6 +18,7 @@ import {
 import type { AppInfo, LocaleCode, ProxyConfig, ThemeMode } from "@/types"
 import { resolveEffectiveLocale } from "@/utils/locale"
 import { useActions, useRelaxValue } from "@/utils/relax"
+import { checkForUpdate, installUpdate, readUpdateCache } from "@/utils/updater"
 import styles from "./SettingsPage.module.css"
 
 type ImportSource = "file" | "clipboard"
@@ -80,6 +81,7 @@ export const SettingsPage: React.FC = () => {
   )
   const [theme, setTheme] = useState<ThemeMode>("light")
   const [locale, setLocale] = useState<LocaleCode>("en-US")
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true)
   const [remoteSyncEnabled, setRemoteSyncEnabled] = useState(false)
   const [remoteRepoUrl, setRemoteRepoUrl] = useState("")
   const [remoteToken, setRemoteToken] = useState("")
@@ -98,6 +100,16 @@ export const SettingsPage: React.FC = () => {
   const [pendingRemoteConflict, setPendingRemoteConflict] = useState<PendingRemoteConflict>(null)
   const [aboutLoading, setAboutLoading] = useState(false)
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
+  const [updateAvailable, setUpdateAvailable] = useState<{
+    version: string
+    date?: string
+    body?: string
+  } | null>(null)
+  const [updateChecking, setUpdateChecking] = useState(false)
+  const [updateInstalling, setUpdateInstalling] = useState(false)
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+  const [lastUpdateCheckedAt, setLastUpdateCheckedAt] = useState<string | null>(null)
   const serverSnapshotRef = useRef("")
   const remoteSnapshotRef = useRef("")
   const quotaRefreshSnapshotRef = useRef("")
@@ -151,7 +163,23 @@ export const SettingsPage: React.FC = () => {
         systemLanguage: navigator.language,
       })
     )
+    setAutoUpdateEnabled(config.ui.autoUpdateEnabled ?? true)
   }, [config])
+
+  useEffect(() => {
+    const cache = readUpdateCache()
+    if (cache.lastCheckedAt) setLastUpdateCheckedAt(cache.lastCheckedAt)
+    if (cache.available) {
+      setUpdateAvailable(cache.available)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (appInfo) return
+    void getAppInfo()
+      .then(info => setAppInfo(info))
+      .catch(() => undefined)
+  }, [appInfo, getAppInfo])
 
   const validatePort = useCallback(
     (value: string) => {
@@ -460,7 +488,88 @@ export const SettingsPage: React.FC = () => {
     }
   }
 
+  const handleCheckUpdate = async () => {
+    try {
+      setUpdateChecking(true)
+      setUpdateError(null)
+      const result = await checkForUpdate()
+      setLastUpdateCheckedAt(result.checkedAt)
+      setUpdateAvailable(result.available ? (result.info ?? null) : null)
+      if (result.available && result.info?.version) {
+        showToast(t("toast.updateAvailable", { version: result.info.version }), "info")
+      } else {
+        showToast(t("toast.updateUpToDate"), "success")
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setUpdateError(message)
+      showToast(t("toast.updateFailed", { message }), "error")
+    } finally {
+      setUpdateChecking(false)
+    }
+  }
+
+  const handleInstallUpdate = async () => {
+    try {
+      setUpdateInstalling(true)
+      setUpdateProgress(null)
+      setUpdateError(null)
+      showToast(t("toast.updateInstallStarted"), "info")
+      const result = await installUpdate(progress => {
+        if (typeof progress.percent === "number") {
+          setUpdateProgress(progress.percent)
+        }
+      })
+      if (result.installed) {
+        setUpdateAvailable(null)
+        setUpdateProgress(100)
+        showToast(
+          t("toast.updateInstalled", {
+            version: result.version ? ` v${result.version}` : "",
+          }),
+          "success"
+        )
+      } else {
+        showToast(t("toast.updateUpToDate"), "success")
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setUpdateError(message)
+      showToast(t("toast.updateFailed", { message }), "error")
+    } finally {
+      setUpdateInstalling(false)
+    }
+  }
+
   const canConfirmImport = importSource === "file" || importJsonText.trim().length > 0
+
+  const updateStatusText = useMemo(() => {
+    if (updateChecking) return t("settings.updateStatusChecking")
+    if (updateInstalling) {
+      if (typeof updateProgress === "number") {
+        return t("settings.updateStatusInstallingWithProgress", { percent: updateProgress })
+      }
+      return t("settings.updateStatusInstalling")
+    }
+    if (updateError) {
+      return t("settings.updateStatusError", { message: updateError })
+    }
+    if (updateAvailable?.version) {
+      return t("settings.updateStatusAvailable", { version: updateAvailable.version })
+    }
+    if (lastUpdateCheckedAt) {
+      return t("settings.updateStatusUpToDate")
+    }
+    return t("settings.updateStatusIdle")
+  }, [
+    lastUpdateCheckedAt,
+    t,
+    updateAvailable?.version,
+    updateChecking,
+    updateError,
+    updateInstalling,
+    updateProgress,
+  ])
 
   return (
     <div className={styles.settingsPage}>
@@ -881,6 +990,77 @@ export const SettingsPage: React.FC = () => {
                 <p className={styles.fieldHint}>{t("settings.remoteHint")}</p>
               </>
             )}
+          </div>
+
+          <div className={styles.section}>
+            <h3 className={styles.sectionTitle}>{t("settings.updateSection")}</h3>
+
+            <div className={styles.formGroupSwitch}>
+              <div className={styles.switchLabel}>
+                <label htmlFor="autoUpdateEnabled">{t("settings.autoUpdateEnabled")}</label>
+                <p>{t("settings.autoUpdateEnabledHint")}</p>
+              </div>
+              <Switch
+                id="autoUpdateEnabled"
+                checked={autoUpdateEnabled}
+                disabled={savingConfig}
+                onChange={next => {
+                  setAutoUpdateEnabled(next)
+                  void applyImmediateConfig(current => ({
+                    ...current,
+                    ui: {
+                      ...current.ui,
+                      autoUpdateEnabled: next,
+                    },
+                  }))
+                }}
+              />
+            </div>
+
+            <div className={styles.updateCard}>
+              <div className={styles.updateMeta}>
+                <div>
+                  <span className={styles.updateLabel}>{t("settings.updateCurrentVersion")}</span>
+                  <span>{appInfo?.version ?? "-"}</span>
+                </div>
+                <div>
+                  <span className={styles.updateLabel}>{t("settings.updateLastChecked")}</span>
+                  <span>{formatSyncTime(lastUpdateCheckedAt ?? undefined)}</span>
+                </div>
+              </div>
+              <div className={styles.updateStatus}>{updateStatusText}</div>
+              {updateAvailable?.body && (
+                <details className={styles.updateNotes}>
+                  <summary>{t("settings.updateReleaseNotes")}</summary>
+                  <div className={styles.updateNotesBody}>{updateAvailable.body}</div>
+                </details>
+              )}
+            </div>
+
+            <div className={styles.actions}>
+              <Button
+                variant="default"
+                onClick={handleCheckUpdate}
+                disabled={updateChecking || updateInstalling}
+                loading={updateChecking}
+                type="button"
+              >
+                {t("settings.updateCheckButton")}
+              </Button>
+              {updateAvailable && (
+                <Button
+                  variant="primary"
+                  onClick={handleInstallUpdate}
+                  disabled={updateInstalling || updateChecking}
+                  loading={updateInstalling}
+                  type="button"
+                >
+                  {updateInstalling
+                    ? t("settings.updateInstallingButton")
+                    : t("settings.updateInstallButton")}
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className={styles.section}>

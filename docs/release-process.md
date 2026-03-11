@@ -104,6 +104,7 @@ git commit -m "chore(release): vX.Y.Z"
 - 上传产物 artifact
 - 从 `CHANGELOG.md` 提取当前版本说明
 - 自动创建 GitHub Release 并附带产物
+ - 生成并上传更新清单 `latest.json` 与签名文件（用于自动更新）
 
 发布前检查清单：
 
@@ -112,6 +113,9 @@ git commit -m "chore(release): vX.Y.Z"
 - `npm run version:check` 通过
 - `CHANGELOG.md` 含目标版本段落（`## vX.Y.Z - YYYY-MM-DD`）
 - `release:plan` 与预期 bump 一致
+- GitHub Actions secrets 已配置：
+  - `TAURI_SIGNING_PRIVATE_KEY`
+  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`（如私钥加密）
 
 ## 6. 回滚与修复发布
 
