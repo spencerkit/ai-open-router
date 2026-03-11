@@ -24,16 +24,9 @@ A desktop local AI gateway for **protocol switching, token/quota stats, cloud ba
 
 ## 3-Minute Quick Start
 
-### 1) Run the app (from source)
+### 1) Launch the app
 
-```bash
-npm install
-npm start
-```
-
-Default bind: `0.0.0.0:8899`
-- `http://localhost:8899`
-- `http://<your-lan-ip>:8899`
+Open the desktop app from your system launcher.
 
 ### 2) Create a group
 
@@ -41,34 +34,23 @@ Default bind: `0.0.0.0:8899`
 2. Set accepted model keys for the group.
 3. The group route prefix becomes `/oc/<groupId>`.
 
-### 3) Add a provider and switch protocol
+### 3) Add providers
 
-1. Add a provider under that group.
+1. Add one or more providers.
 2. Set `protocol`, `token`, upstream API base URL, and default model.
-3. Activate that provider for the group (`activeProviderId`).
 
-### 4) Send one request
+### 4) Associate providers to the group
 
-```bash
-curl http://localhost:8899/oc/claude/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-3-5-sonnet",
-    "messages": [{"role":"user","content":"hi"}]
-  }'
-```
+1. In the group, associate the providers you want to use.
+2. Enable one provider as the active provider for that group.
 
-If local auth is enabled, include:
+### 5) Write config to your agent
 
-```http
-Authorization: Bearer <server.localBearerToken>
-```
+Use the integration panel to write the group config into the agent you use (Claude, Codex, or OpenCode).
 
-### 5) Verify success
+### 6) Switch provider later
 
-- A new successful request appears in Logs.
-- Log detail shows payload and token usage.
-- Stats summary updates (requests/errors/success rate/token metrics).
+Add a new provider, associate it to the group, then enable it as the active provider.
 
 ## Feature Details
 

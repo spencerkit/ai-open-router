@@ -26,18 +26,9 @@ English documentation: [../../README.md](../../README.md)
 
 ## 3 分钟上手（新用户必看）
 
-### 1）运行应用
+### 1）启动应用
 
-如果你是开发者从源码启动：
-
-```bash
-npm install
-npm start
-```
-
-默认监听 `0.0.0.0:8899`，可通过以下地址访问：
-- `http://localhost:8899`
-- `http://<本机局域网IP>:8899`
+从系统启动器打开桌面应用。
 
 ### 2）创建第一个路由分组
 
@@ -45,35 +36,23 @@ npm start
 2. 在分组中设置模型列表（可先填 `claude-3-5-sonnet`）。
 3. 记住入口前缀：`/oc/<groupId>`。
 
-### 3）添加 Provider 并完成协议切换
+### 3）添加 Provider
 
-1. 在该分组下新增 Provider，选择协议（`openai` 或 `anthropic`）。
-2. 填写上游 API 地址、Token、默认模型。
-3. 将该 Provider 设为“生效 Provider”。
+1. 新增一个或多个 Provider。
+2. 填写协议（`openai` 或 `anthropic`）、上游 API 地址、Token、默认模型。
 
-### 4）发起一次请求验证
+### 4）在分组中关联 Provider
 
-```bash
-curl http://localhost:8899/oc/claude/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-3-5-sonnet",
-    "messages": [{"role":"user","content":"hi"}]
-  }'
-```
+1. 在分组内关联你要使用的 Provider。
+2. 启用其中一个为当前生效 Provider。
 
-如果开启本地鉴权，请额外加：
+### 5）写入到 Agent
 
-```http
-Authorization: Bearer <server.localBearerToken>
-```
+通过集成面板把分组配置写入你正在使用的 Agent（Claude / Codex / OpenCode）。
 
-### 5）确认“已经配置成功”
+### 6）切换 Provider
 
-完成以下 3 项即为成功：
-- 日志页出现一条新请求，状态为成功。
-- 日志详情可看到请求/响应与 Token 用量。
-- 统计区的请求数与 Token 指标有更新。
+新增 Provider 后关联到分组，并在分组内切换为生效 Provider。
 
 ## 功能详解
 
