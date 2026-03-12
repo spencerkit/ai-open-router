@@ -57,6 +57,14 @@ jobs:
           npm run tauri:collect
           bash ./scripts/package-headless-artifacts.sh "${{ github.workspace }}/dist/target/release/ai-open-router"
 
+      - name: Stage updater manifest
+        shell: bash
+        run: |
+          mkdir -p dist/updater
+          if [[ -f dist/latest.json ]]; then
+            cp -f dist/latest.json "dist/updater/latest-${{ matrix.os_name }}.json"
+          fi
+
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -71,8 +79,7 @@ jobs:
             dist/ai-open-router-*.tar.gz
             dist/ai-open-router-*.zip
             dist/ai-open-router-*
-            dist/latest.json
-            dist/latest.json.sig
+            dist/updater/latest-*.json
           if-no-files-found: error
 
   publish:
@@ -104,6 +111,29 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
+      - name: Merge updater manifests
+        run: node ./scripts/merge-updater-manifests.js --input release-artifacts --output release-artifacts/latest.json
+
+      - name: Prepare release payload
+        shell: bash
+        run: |
+          mkdir -p release-publish
+          while IFS= read -r -d '' file; do
+            name="$(basename "${file}")"
+            case "${name}" in
+              latest.json.sig)
+                ;;
+              *.dmg|*-setup.exe|*.msi|*.app.tar.gz|*.AppImage|*.sig|ai-open-router-*.tar.gz|ai-open-router-*.zip|ai-open-router-*.exe|latest.json)
+                cp -f "${file}" release-publish/
+                ;;
+              ai-open-router-darwin-*|ai-open-router-linux-*)
+                if [[ "${name}" != *.tar.gz && "${name}" != *.zip ]]; then
+                  cp -f "${file}" release-publish/
+                fi
+                ;;
+            esac
+          done < <(find release-artifacts -type f -print0)
+
       - name: Extract changelog section
         run: |
           VERSION="${{ steps.release.outputs.version }}"
@@ -114,15 +144,7 @@ jobs:
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           body_path: /tmp/release-notes.md
-          files: |
-            release-artifacts/*.dmg
-            release-artifacts/*-setup.exe
-            release-artifacts/*.msi
-            release-artifacts/*.app.tar.gz
-            release-artifacts/*.AppImage
-            release-artifacts/*.sig
-            release-artifacts/latest.json
-            release-artifacts/latest.json.sig
+          files: release-publish/*
 
   publish_npm:
     name: Publish npm CLI
