@@ -1196,9 +1196,11 @@ pub fn write_agent_config_with_targets(
     };
 
     if let Some(state) = state {
-        let _ = state
-            .integration_store
-            .update_target_config(target_id, target.config_dir, Some(config));
+        let _ = state.integration_store.update_target_config(
+            target_id,
+            target.config_dir,
+            Some(config),
+        );
     }
 
     Ok(WriteAgentConfigResult {
@@ -1270,10 +1272,11 @@ pub fn write_agent_config_source_with_targets(
         _ => parse_agent_config(&target.kind, &parsed_root).ok(),
     };
     if let Some(state) = state {
-        let _ =
-            state
-                .integration_store
-                .update_target_config(target_id, target.config_dir, parsed_config);
+        let _ = state.integration_store.update_target_config(
+            target_id,
+            target.config_dir,
+            parsed_config,
+        );
     }
 
     Ok(WriteAgentConfigResult {

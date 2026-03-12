@@ -13,8 +13,8 @@ use crate::services::config_service;
 use crate::services::{AppError, AppResult};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use tauri::{AppHandle, Manager};
 use std::path::Path;
+use tauri::{AppHandle, Manager};
 
 /// Performs get local config updated at.
 fn get_local_config_updated_at(state: &SharedState) -> Option<String> {

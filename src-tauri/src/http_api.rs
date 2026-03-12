@@ -3,6 +3,7 @@
 //! Provides JSON endpoints parallel to IPC commands.
 
 use crate::app_state::{sync_runtime_config, SharedState};
+use crate::backup::{backup_default_file_name, create_groups_backup_payload};
 use crate::models::{
     AgentConfig, AgentConfigFile, AppInfo, ClipboardTextResult, GroupBackupExportResult,
     GroupBackupImportResult, GroupsExportJsonResult, IntegrationClientKind, IntegrationTarget,
@@ -11,7 +12,6 @@ use crate::models::{
     RuleQuotaSnapshot, RuleQuotaTestResult, SaveConfigResult, StatsSummaryResult,
     WriteAgentConfigResult,
 };
-use crate::backup::{backup_default_file_name, create_groups_backup_payload};
 use crate::proxy::ServiceState;
 use crate::services::{
     config_service, group_backup_service, integration_service, provider_service, quota_service,
@@ -23,15 +23,15 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
 use axum::Json;
 use axum::Router;
-use serde::Deserialize;
-use serde::de::Deserializer;
-use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
-use tauri_plugin_clipboard_manager::ClipboardExt;
 use mime_guess::MimeGuess;
 #[cfg(not(debug_assertions))]
 use rust_embed::RustEmbed;
+use serde::de::Deserializer;
+use serde::Deserialize;
+use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use tauri::Manager;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[derive(Debug)]
 struct ApiError {
@@ -95,15 +95,22 @@ fn require_shared_state(state: &ServiceState) -> Result<SharedState, ApiError> {
 }
 
 fn require_app_handle(state: &ServiceState) -> Result<tauri::AppHandle, ApiError> {
-    state
-        .app_handle
-        .clone()
-        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "unsupported", "app handle unavailable"))
+    state.app_handle.clone().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "unsupported",
+            "app handle unavailable",
+        )
+    })
 }
 
 fn ensure_not_headless(state: &ServiceState, message: &'static str) -> Result<(), ApiError> {
     if state.app_handle.is_none() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "unsupported", message));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "unsupported",
+            message,
+        ));
     }
     Ok(())
 }
@@ -273,7 +280,10 @@ pub(crate) fn router() -> Router<ServiceState> {
             "/api/config/groups/export-clipboard",
             post(config_export_groups_clipboard),
         )
-        .route("/api/config/groups/export-json", get(config_export_groups_json))
+        .route(
+            "/api/config/groups/export-json",
+            get(config_export_groups_json),
+        )
         .route("/api/config/groups/import", post(config_import_groups))
         .route(
             "/api/config/groups/import-json",
@@ -297,13 +307,28 @@ pub(crate) fn router() -> Router<ServiceState> {
         .route("/api/quota/test-draft", post(quota_test_draft))
         .route("/api/provider/test-model", post(provider_test_model))
         .route("/api/integration/targets", get(integration_list_targets))
-        .route("/api/integration/pick-directory", post(integration_pick_directory))
+        .route(
+            "/api/integration/pick-directory",
+            post(integration_pick_directory),
+        )
         .route("/api/integration/targets", post(integration_add_target))
         .route("/api/integration/targets", put(integration_update_target))
-        .route("/api/integration/targets", delete(integration_remove_target))
-        .route("/api/integration/write-group-entry", post(integration_write_group_entry))
-        .route("/api/integration/agent-config", get(integration_read_agent_config))
-        .route("/api/integration/agent-config", put(integration_write_agent_config))
+        .route(
+            "/api/integration/targets",
+            delete(integration_remove_target),
+        )
+        .route(
+            "/api/integration/write-group-entry",
+            post(integration_write_group_entry),
+        )
+        .route(
+            "/api/integration/agent-config",
+            get(integration_read_agent_config),
+        )
+        .route(
+            "/api/integration/agent-config",
+            put(integration_write_agent_config),
+        )
         .route(
             "/api/integration/agent-config/source",
             put(integration_write_agent_config_source),
@@ -440,8 +465,9 @@ async fn config_save(
         .config_store
         .save(payload.next_config)
         .map_err(ApiError::internal)?;
-    let (restarted, status) =
-        sync_runtime_config(&shared, prev, saved.clone()).await.map_err(ApiError::internal)?;
+    let (restarted, status) = sync_runtime_config(&shared, prev, saved.clone())
+        .await
+        .map_err(ApiError::internal)?;
     Ok(Json(SaveConfigResult {
         ok: true,
         config: saved,
@@ -450,7 +476,9 @@ async fn config_save(
     }))
 }
 
-async fn config_export_groups(State(state): State<ServiceState>) -> ApiResult<GroupBackupExportResult> {
+async fn config_export_groups(
+    State(state): State<ServiceState>,
+) -> ApiResult<GroupBackupExportResult> {
     let shared = require_shared_state(&state)?;
     let app = require_app_handle(&state)?;
     let result = group_backup_service::export_groups_to_file(&shared, &app)
@@ -498,7 +526,9 @@ async fn config_export_groups_json(
     }))
 }
 
-async fn config_import_groups(State(state): State<ServiceState>) -> ApiResult<GroupBackupImportResult> {
+async fn config_import_groups(
+    State(state): State<ServiceState>,
+) -> ApiResult<GroupBackupImportResult> {
     let shared = require_shared_state(&state)?;
     let app = require_app_handle(&state)?;
     let result = group_backup_service::import_groups_from_file(&shared, &app)
@@ -518,10 +548,9 @@ async fn config_import_groups_json(
     Json(payload): Json<ImportGroupsJsonRequest>,
 ) -> ApiResult<GroupBackupImportResult> {
     let shared = require_shared_state(&state)?;
-    let result =
-        group_backup_service::import_groups_from_json_text(&shared, payload.json_text)
-            .await
-            .map_err(ApiError::from)?;
+    let result = group_backup_service::import_groups_from_json_text(&shared, payload.json_text)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(result))
 }
 
@@ -536,10 +565,9 @@ async fn config_remote_rules_upload(
 ) -> ApiResult<RemoteRulesUploadResult> {
     let shared = require_shared_state(&state)?;
     let app_dir = resolve_app_data_dir(&shared, state.app_handle.as_ref())?;
-    let result =
-        remote_rules_service::upload_with_dir(&shared, &app_dir, payload.force)
-            .await
-            .map_err(ApiError::from)?;
+    let result = remote_rules_service::upload_with_dir(&shared, &app_dir, payload.force)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(result))
 }
 
@@ -549,10 +577,9 @@ async fn config_remote_rules_pull(
 ) -> ApiResult<RemoteRulesPullResult> {
     let shared = require_shared_state(&state)?;
     let app_dir = resolve_app_data_dir(&shared, state.app_handle.as_ref())?;
-    let result =
-        remote_rules_service::pull_with_dir(&shared, &app_dir, payload.force)
-            .await
-            .map_err(ApiError::from)?;
+    let result = remote_rules_service::pull_with_dir(&shared, &app_dir, payload.force)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(result))
 }
 
@@ -561,7 +588,10 @@ struct LogsQuery {
     max: Option<usize>,
 }
 
-async fn logs_list(State(state): State<ServiceState>, Query(query): Query<LogsQuery>) -> ApiResult<Vec<LogEntry>> {
+async fn logs_list(
+    State(state): State<ServiceState>,
+    Query(query): Query<LogsQuery>,
+) -> ApiResult<Vec<LogEntry>> {
     let shared = require_shared_state(&state)?;
     Ok(Json(shared.runtime.list_logs(query.max.unwrap_or(100))))
 }
@@ -639,7 +669,9 @@ async fn logs_stats_rule_cards(
     Query(query): Query<LogsStatsRuleCardsQuery>,
 ) -> ApiResult<Vec<RuleCardStatsItem>> {
     let shared = require_shared_state(&state)?;
-    Ok(Json(shared.runtime.stats_rule_cards(query.group_id, query.hours)))
+    Ok(Json(
+        shared.runtime.stats_rule_cards(query.group_id, query.hours),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -846,8 +878,8 @@ async fn integration_remove_target(
         "Headless mode does not support client integration updates from management UI",
     )?;
     let shared = require_shared_state(&state)?;
-    let removed = integration_service::remove_target(&shared, &query.target_id)
-        .map_err(ApiError::from)?;
+    let removed =
+        integration_service::remove_target(&shared, &query.target_id).map_err(ApiError::from)?;
     Ok(Json(json!({ "ok": true, "removed": removed })))
 }
 
@@ -895,9 +927,8 @@ async fn integration_read_agent_config(
     } else {
         integration_service::list_targets(&shared)
     };
-    let result =
-        integration_service::read_agent_config_with_targets(targets, &query.target_id)
-            .map_err(ApiError::from)?;
+    let result = integration_service::read_agent_config_with_targets(targets, &query.target_id)
+        .map_err(ApiError::from)?;
     Ok(Json(result))
 }
 

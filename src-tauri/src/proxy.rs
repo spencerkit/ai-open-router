@@ -10,9 +10,9 @@ use axum::Router;
 use reqwest::Client;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use tauri::AppHandle;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
-use tauri::AppHandle;
 
 mod net;
 mod observability;
