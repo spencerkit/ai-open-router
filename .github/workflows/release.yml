@@ -114,7 +114,13 @@ jobs:
           merge-multiple: true
 
       - name: Merge updater manifests
-        run: node ./scripts/merge-updater-manifests.js --input release-artifacts --output release-artifacts/latest.json
+        run: |
+          node ./scripts/merge-updater-manifests.js \
+            --input release-artifacts \
+            --output release-artifacts/latest.json \
+            --repo "${{ github.repository }}" \
+            --tag "${{ steps.release.outputs.tag }}" \
+            --version "${{ steps.release.outputs.version }}"
 
       - name: Prepare release payload
         shell: bash

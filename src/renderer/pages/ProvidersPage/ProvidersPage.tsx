@@ -285,6 +285,7 @@ export const ProvidersPage: React.FC = () => {
       const providerIds = (
         group.providerIds ?? group.providers.map(provider => provider.id)
       ).filter(providerId => providerId !== pendingDeleteProviderId)
+      const providers = group.providers.filter(provider => provider.id !== pendingDeleteProviderId)
       const activeProviderId =
         group.activeProviderId && providerIds.includes(group.activeProviderId)
           ? group.activeProviderId
@@ -292,6 +293,7 @@ export const ProvidersPage: React.FC = () => {
       return {
         ...group,
         providerIds,
+        providers,
         activeProviderId,
       }
     })

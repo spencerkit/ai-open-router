@@ -348,6 +348,9 @@ export const ServicePage: React.FC = () => {
         const nextProviderIds = currentProviderIds.filter(
           providerId => providerId !== pendingDeleteProviderId
         )
+        const nextProviders = group.providers.filter(
+          provider => provider.id !== pendingDeleteProviderId
+        )
         const newActiveId =
           group.activeProviderId === pendingDeleteProviderId
             ? nextProviderIds.length > 0
@@ -357,6 +360,7 @@ export const ServicePage: React.FC = () => {
         return {
           ...group,
           providerIds: nextProviderIds,
+          providers: nextProviders,
           activeProviderId: newActiveId,
         }
       }

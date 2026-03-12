@@ -35,8 +35,12 @@ async fn main() -> Result<(), String> {
     let _ = config_store.initialize();
     let integration_store = IntegrationStore::new(app_data_dir.join("client-integrations.json"));
     let _ = integration_store.initialize();
-    let log_store =
-        LogStore::with_dev_log_file(100, Some(app_data_dir.join("proxy-dev-logs.jsonl")));
+    let dev_log_path = if cfg!(debug_assertions) {
+        Some(app_data_dir.join("proxy-dev-logs.jsonl"))
+    } else {
+        None
+    };
+    let log_store = LogStore::with_dev_log_file(100, dev_log_path);
     let stats_store = StatsStore::new(app_data_dir.join("request-stats.sqlite"));
     let _ = stats_store.initialize();
 
