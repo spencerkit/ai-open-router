@@ -24,8 +24,10 @@ jobs:
         include:
           - os: macos-latest
             os_name: macos
+            bundles: app,dmg
           - os: windows-latest
             os_name: windows
+            bundles: nsis
 
     steps:
       - name: Checkout
@@ -54,9 +56,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          cargo tauri build
+          cargo tauri build --bundles "${{ matrix.bundles }}"
           cargo build --release --bin ai-open-router --manifest-path src-tauri/Cargo.toml
           npm run tauri:collect
+          bash ./scripts/sign-updater-artifacts.sh
           bash ./scripts/package-headless-artifacts.sh "${{ github.workspace }}/dist/target/release/ai-open-router"
 
       - name: Stage updater manifest
