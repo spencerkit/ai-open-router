@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.2.11 - 2026-03-13
+### Fixes
+- fix(release): build and sign updater artifacts explicitly (7482d5e)
+- fix(release): only synthesize updater manifest from signed assets (da2b56e)
+- fix: harden provider cleanup and updater release flow (b0fbdc5)
+- fix(ci): correct headless packaging condition (bf34883)
+- fix(ci): configure npm registry auth (47a2c31)
+- fix(release): publish updater and headless assets (59dc5d5)
+### Maintenance
+- docs: add macOS damaged app workaround (d4796d0)
+- chore: clarify updater manifest error (1325f3c)
+
 ## v0.2.10 - 2026-03-12
 ### Features
 - feat(headless): default integration targets (abdddfd)
