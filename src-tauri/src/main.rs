@@ -7,12 +7,21 @@
 use ai_open_router_tauri::bootstrap;
 use ai_open_router_tauri::commands::build_invoke_handler;
 use tauri::Manager;
+use tauri_plugin_log::{Target, TargetKind};
 
 #[tokio::main]
 /// Application entrypoint for the Tauri runtime.
 async fn main() {
     let app_name = "AI Open Router".to_string();
     let app_version = env!("CARGO_PKG_VERSION").to_string();
+    let log_plugin = if cfg!(debug_assertions) {
+        tauri_plugin_log::Builder::default().build()
+    } else {
+        tauri_plugin_log::Builder::default()
+            .clear_targets()
+            .target(Target::new(TargetKind::Stdout))
+            .build()
+    };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -23,7 +32,7 @@ async fn main() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_log::Builder::default().build())
+        .plugin(log_plugin)
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

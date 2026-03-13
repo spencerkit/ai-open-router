@@ -261,13 +261,34 @@ fn normalize_groups_and_providers(
         provider_order.push(provider_id.clone());
         provider_map.insert(provider_id, provider);
     }
+    let has_global_providers = !provider_order.is_empty();
 
     let mut normalized_groups = Vec::new();
     for group in groups {
+        let scoped_provider_ids: HashSet<String> = if has_global_providers {
+            group
+                .provider_ids
+                .iter()
+                .map(|provider_id| provider_id.trim())
+                .filter(|provider_id| !provider_id.is_empty())
+                .map(|provider_id| provider_id.to_string())
+                .collect()
+        } else {
+            group
+                .providers
+                .iter()
+                .map(|provider| provider.id.trim())
+                .filter(|provider_id| !provider_id.is_empty())
+                .map(|provider_id| provider_id.to_string())
+                .collect()
+        };
         let mut group_provider_id_remap: HashMap<String, String> = HashMap::new();
         for provider in &group.providers {
             let provider_id = provider.id.trim().to_string();
             if provider_id.is_empty() {
+                continue;
+            }
+            if !scoped_provider_ids.contains(&provider_id) {
                 continue;
             }
             if let Some(existing_provider) = provider_map.get(&provider_id) {
@@ -287,7 +308,7 @@ fn normalize_groups_and_providers(
             provider_map.insert(provider_id, provider.clone());
         }
 
-        let raw_provider_ids = if !group.provider_ids.is_empty() {
+        let raw_provider_ids = if has_global_providers {
             group.provider_ids.clone()
         } else {
             group
@@ -651,6 +672,20 @@ mod tests {
         }
     }
 
+    fn sample_provider(id: &str) -> Rule {
+        Rule {
+            id: id.to_string(),
+            name: id.to_string(),
+            protocol: RuleProtocol::Openai,
+            token: "test-token".to_string(),
+            api_address: "https://api.openai.com".to_string(),
+            default_model: "gpt-4o-mini".to_string(),
+            model_mappings: HashMap::new(),
+            quota: default_rule_quota_config(),
+            cost: default_rule_cost_config(),
+        }
+    }
+
     #[test]
     /// Initializes imports groups from config file into sqlite for this module's workflow.
     fn initialize_imports_groups_from_config_file_into_sqlite() {
@@ -758,6 +793,57 @@ mod tests {
         second_store.initialize().expect("second initialize");
         let cfg_after = second_store.get();
         assert!(cfg_after.groups.is_empty());
+    }
+
+    #[test]
+    fn normalize_config_for_storage_ignores_unlinked_group_providers_when_global_providers_present()
+    {
+        let linked_provider = sample_provider("provider-1");
+        let stale_provider = sample_provider("provider-stale");
+        let mut cfg = default_config();
+        cfg.providers = vec![linked_provider.clone()];
+        cfg.groups = vec![Group {
+            id: "group-1".to_string(),
+            name: "group-1".to_string(),
+            models: vec!["gpt-4o-mini".to_string()],
+            provider_ids: vec!["provider-1".to_string()],
+            active_provider_id: Some("provider-1".to_string()),
+            providers: vec![linked_provider.clone(), stale_provider],
+        }];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].id, "provider-1");
+        assert_eq!(
+            normalized.groups[0].provider_ids,
+            vec!["provider-1".to_string()]
+        );
+        assert_eq!(normalized.groups[0].providers.len(), 1);
+        assert_eq!(normalized.groups[0].providers[0].id, "provider-1");
+    }
+
+    #[test]
+    fn normalize_config_for_storage_backfills_group_providers_when_global_providers_missing() {
+        let linked_provider = sample_provider("provider-1");
+        let mut cfg = default_config();
+        cfg.groups = vec![Group {
+            id: "group-1".to_string(),
+            name: "group-1".to_string(),
+            models: vec!["gpt-4o-mini".to_string()],
+            provider_ids: vec![],
+            active_provider_id: Some("provider-1".to_string()),
+            providers: vec![linked_provider],
+        }];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].id, "provider-1");
+        assert_eq!(
+            normalized.groups[0].provider_ids,
+            vec!["provider-1".to_string()]
+        );
+        assert_eq!(normalized.groups[0].providers.len(), 1);
+        assert_eq!(normalized.groups[0].providers[0].id, "provider-1");
     }
 
     #[test]

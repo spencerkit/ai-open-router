@@ -1005,76 +1005,78 @@ export const SettingsPage: React.FC = () => {
             )}
           </div>
 
-          <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>{t("settings.updateSection")}</h3>
+          {!isHeadlessRuntime && (
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>{t("settings.updateSection")}</h3>
 
-            <div className={styles.formGroupSwitch}>
-              <div className={styles.switchLabel}>
-                <label htmlFor="autoUpdateEnabled">{t("settings.autoUpdateEnabled")}</label>
-                <p>{t("settings.autoUpdateEnabledHint")}</p>
-              </div>
-              <Switch
-                id="autoUpdateEnabled"
-                checked={autoUpdateEnabled}
-                disabled={savingConfig}
-                onChange={next => {
-                  setAutoUpdateEnabled(next)
-                  void applyImmediateConfig(current => ({
-                    ...current,
-                    ui: {
-                      ...current.ui,
-                      autoUpdateEnabled: next,
-                    },
-                  }))
-                }}
-              />
-            </div>
-
-            <div className={styles.updateCard}>
-              <div className={styles.updateMeta}>
-                <div>
-                  <span className={styles.updateLabel}>{t("settings.updateCurrentVersion")}</span>
-                  <span>{appInfo?.version ?? "-"}</span>
+              <div className={styles.formGroupSwitch}>
+                <div className={styles.switchLabel}>
+                  <label htmlFor="autoUpdateEnabled">{t("settings.autoUpdateEnabled")}</label>
+                  <p>{t("settings.autoUpdateEnabledHint")}</p>
                 </div>
-                <div>
-                  <span className={styles.updateLabel}>{t("settings.updateLastChecked")}</span>
-                  <span>{formatSyncTime(lastUpdateCheckedAt ?? undefined)}</span>
-                </div>
+                <Switch
+                  id="autoUpdateEnabled"
+                  checked={autoUpdateEnabled}
+                  disabled={savingConfig}
+                  onChange={next => {
+                    setAutoUpdateEnabled(next)
+                    void applyImmediateConfig(current => ({
+                      ...current,
+                      ui: {
+                        ...current.ui,
+                        autoUpdateEnabled: next,
+                      },
+                    }))
+                  }}
+                />
               </div>
-              <div className={styles.updateStatus}>{updateStatusText}</div>
-              {updateAvailable?.body && (
-                <details className={styles.updateNotes}>
-                  <summary>{t("settings.updateReleaseNotes")}</summary>
-                  <div className={styles.updateNotesBody}>{updateAvailable.body}</div>
-                </details>
-              )}
-            </div>
 
-            <div className={styles.actions}>
-              <Button
-                variant="default"
-                onClick={handleCheckUpdate}
-                disabled={updateChecking || updateInstalling}
-                loading={updateChecking}
-                type="button"
-              >
-                {t("settings.updateCheckButton")}
-              </Button>
-              {updateAvailable && (
+              <div className={styles.updateCard}>
+                <div className={styles.updateMeta}>
+                  <div>
+                    <span className={styles.updateLabel}>{t("settings.updateCurrentVersion")}</span>
+                    <span>{appInfo?.version ?? "-"}</span>
+                  </div>
+                  <div>
+                    <span className={styles.updateLabel}>{t("settings.updateLastChecked")}</span>
+                    <span>{formatSyncTime(lastUpdateCheckedAt ?? undefined)}</span>
+                  </div>
+                </div>
+                <div className={styles.updateStatus}>{updateStatusText}</div>
+                {updateAvailable?.body && (
+                  <details className={styles.updateNotes}>
+                    <summary>{t("settings.updateReleaseNotes")}</summary>
+                    <div className={styles.updateNotesBody}>{updateAvailable.body}</div>
+                  </details>
+                )}
+              </div>
+
+              <div className={styles.actions}>
                 <Button
-                  variant="primary"
-                  onClick={handleInstallUpdate}
-                  disabled={updateInstalling || updateChecking}
-                  loading={updateInstalling}
+                  variant="default"
+                  onClick={handleCheckUpdate}
+                  disabled={updateChecking || updateInstalling}
+                  loading={updateChecking}
                   type="button"
                 >
-                  {updateInstalling
-                    ? t("settings.updateInstallingButton")
-                    : t("settings.updateInstallButton")}
+                  {t("settings.updateCheckButton")}
                 </Button>
-              )}
+                {updateAvailable && (
+                  <Button
+                    variant="primary"
+                    onClick={handleInstallUpdate}
+                    disabled={updateInstalling || updateChecking}
+                    loading={updateInstalling}
+                    type="button"
+                  >
+                    {updateInstalling
+                      ? t("settings.updateInstallingButton")
+                      : t("settings.updateInstallButton")}
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className={styles.section}>
             <h3 className={styles.sectionTitle}>{t("settings.aboutSection")}</h3>
