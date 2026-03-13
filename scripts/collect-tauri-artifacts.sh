@@ -45,16 +45,34 @@ for target_dir in "${TARGET_DIRS[@]}"; do
   for file in "${target_dir}"/release/bundle/nsis/*-setup.exe.sig; do
     copy_artifact "${file}"
   done
+  for file in "${target_dir}"/release/bundle/nsis-updater/*.zip; do
+    copy_artifact "${file}"
+  done
+  for file in "${target_dir}"/release/bundle/nsis-updater/*.zip.sig; do
+    copy_artifact "${file}"
+  done
   for file in "${target_dir}"/*/*/release/bundle/nsis/*-setup.exe; do
     copy_artifact "${file}"
   done
   for file in "${target_dir}"/*/*/release/bundle/nsis/*-setup.exe.sig; do
     copy_artifact "${file}"
   done
+  for file in "${target_dir}"/*/*/release/bundle/nsis-updater/*.zip; do
+    copy_artifact "${file}"
+  done
+  for file in "${target_dir}"/*/*/release/bundle/nsis-updater/*.zip.sig; do
+    copy_artifact "${file}"
+  done
   for file in "${target_dir}"/release/bundle/msi/*.msi; do
     copy_artifact "${file}"
   done
   for file in "${target_dir}"/release/bundle/msi/*.msi.sig; do
+    copy_artifact "${file}"
+  done
+  for file in "${target_dir}"/release/bundle/msi-updater/*.zip; do
+    copy_artifact "${file}"
+  done
+  for file in "${target_dir}"/release/bundle/msi-updater/*.zip.sig; do
     copy_artifact "${file}"
   done
   for file in "${target_dir}"/release/ai-open-router-tauri.exe; do

@@ -183,7 +183,7 @@ function parseMacArchFromDmg(fileName) {
 }
 
 function parseWindowsUpdater(fileName) {
-  const match = fileName.match(/_(x64|x86|arm64)(?:-setup)?\.(exe|msi)$/i)
+  const match = fileName.match(/_(x64|x86|arm64)(?:-setup)?\.(exe|msi)(?:\.zip)?$/i)
   if (!match) return null
 
   return {
@@ -254,18 +254,12 @@ function synthesizeManifest({ inputDir, repo, tag, version, pubDate }) {
     signatureByAsset.set(assetName, fs.readFileSync(filePath, "utf8").trim())
   }
 
-  const macDmgArchs = new Set(
-    basenames.map(parseMacArchFromDmg).filter((value) => value !== null)
-  )
+  const macDmgArchs = new Set(basenames.map(parseMacArchFromDmg).filter((value) => value !== null))
   const fallbackMacArch = macDmgArchs.size === 1 ? [...macDmgArchs][0] : null
 
   const candidates = []
-  for (const fileName of basenames) {
-    if (
-      fileName.endsWith(".sig") ||
-      fileName === "latest.json" ||
-      /^latest-[^.]+\.json$/.test(fileName)
-    ) {
+  for (const fileName of [...signatureByAsset.keys()].sort()) {
+    if (fileName === "latest.json" || /^latest-[^.]+\.json$/.test(fileName)) {
       continue
     }
 
@@ -278,16 +272,11 @@ function synthesizeManifest({ inputDir, repo, tag, version, pubDate }) {
       continue
     }
 
-    const signature = signatureByAsset.get(fileName)
-    if (!signature) {
-      throw new Error(`Missing updater signature for ${fileName}`)
-    }
-
     const baseTarget = `${detected.os}-${detected.arch}`
     const exactTarget = `${baseTarget}-${detected.installer}`
     const value = {
       url: buildAssetUrl(repo, tag, fileName),
-      signature,
+      signature: signatureByAsset.get(fileName),
     }
 
     candidates.push({ baseTarget, exactTarget, value, fileName })
