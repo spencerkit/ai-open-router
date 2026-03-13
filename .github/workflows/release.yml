@@ -78,7 +78,8 @@ jobs:
             dist/*.dmg
             dist/*-setup.exe
             dist/*.msi
-            dist/*.zip
+            dist/*-setup.exe.zip
+            dist/*.msi.zip
             dist/*.app.tar.gz
             dist/*.AppImage
             dist/*.sig
@@ -135,7 +136,7 @@ jobs:
             case "${name}" in
               latest.json.sig)
                 ;;
-              *.dmg|*-setup.exe|*.msi|*.zip|*.app.tar.gz|*.AppImage|*.sig|ai-open-router-*.tar.gz|ai-open-router-*.zip|ai-open-router-*.exe|latest.json)
+              *.dmg|*-setup.exe|*.msi|*-setup.exe.zip|*.msi.zip|*.app.tar.gz|*.AppImage|*.sig|ai-open-router-*.tar.gz|ai-open-router-*.zip|ai-open-router-*.exe|latest.json)
                 cp -f "${file}" release-publish/
                 ;;
               ai-open-router-darwin-*|ai-open-router-linux-*)
