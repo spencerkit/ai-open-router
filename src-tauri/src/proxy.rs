@@ -172,7 +172,10 @@ impl ProxyRuntime {
         self.inner.metrics.mark_started();
 
         let handle = tokio::spawn(async move {
-            let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>());
+            let server = axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            );
             let graceful = server.with_graceful_shutdown(async {
                 let _ = rx.await;
             });

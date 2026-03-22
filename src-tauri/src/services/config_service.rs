@@ -47,7 +47,7 @@ pub fn set_remote_admin_password(
         .remote_admin_auth
         .set_password(&password)
         .map_err(AppError::validation)?;
-    Ok(auth_session_status(state, remote_request, !remote_request))
+    Ok(auth_session_status(state, remote_request, true))
 }
 
 /// Clears the remote admin password used by `/api/*` and `/management`.
@@ -276,10 +276,19 @@ fn provider_name_key(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_state::AppState;
     use crate::domain::entities::{
         default_rule_cost_config, default_rule_quota_config, Rule, RuleProtocol,
     };
+    use crate::integration_store::IntegrationStore;
+    use crate::log_store::LogStore;
+    use crate::models::AppInfo;
+    use crate::proxy::ProxyRuntime;
+    use crate::stats_store::StatsStore;
     use std::collections::HashMap;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     /// Performs provider.
     fn provider(id: &str, name: &str, model: &str) -> Rule {
@@ -309,6 +318,56 @@ mod tests {
             active_provider_id: active.map(|v| v.to_string()),
             providers,
         }
+    }
+
+    fn test_shared_state() -> SharedState {
+        let unique_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time must move forward")
+            .as_nanos();
+        let base_dir = std::env::temp_dir().join(format!("oc-proxy-config-service-{unique_id}"));
+        std::fs::create_dir_all(&base_dir).expect("temp dir should be created");
+
+        let config_store = crate::config_store::ConfigStore::new(base_dir.join("config.json"));
+        config_store
+            .initialize()
+            .expect("config store should initialize");
+
+        let integration_store = IntegrationStore::new(base_dir.join("integrations.json"));
+        integration_store
+            .initialize()
+            .expect("integration store should initialize");
+
+        let remote_admin_auth =
+            crate::auth::RemoteAdminAuthStore::new(base_dir.join("remote-admin-auth.json"));
+        remote_admin_auth
+            .initialize()
+            .expect("remote admin auth should initialize");
+
+        let stats_store = StatsStore::new(base_dir.join("stats.sqlite"));
+        stats_store
+            .initialize()
+            .expect("stats store should initialize");
+
+        let runtime = ProxyRuntime::new(
+            config_store.shared_config(),
+            config_store.shared_revision(),
+            LogStore::new(64),
+            stats_store,
+        )
+        .expect("runtime should initialize");
+
+        Arc::new(AppState {
+            app_info: AppInfo {
+                name: "test".to_string(),
+                version: "0.0.0".to_string(),
+            },
+            config_store,
+            integration_store,
+            remote_admin_auth,
+            runtime,
+            renderer_ready: AtomicBool::new(false),
+        })
     }
 
     #[test]
@@ -375,5 +434,18 @@ mod tests {
         assert_eq!(merged.len(), 2);
         assert!(merged.iter().any(|group| group.id == "group-local"));
         assert!(merged.iter().any(|group| group.id == "group-new"));
+    }
+
+    #[test]
+    fn set_remote_admin_password_marks_remote_request_authenticated() {
+        let state = test_shared_state();
+
+        let status =
+            set_remote_admin_password(&state, "correct horse battery staple".to_string(), true)
+                .expect("password should be set");
+
+        assert!(status.remote_request);
+        assert!(status.password_configured);
+        assert!(status.authenticated);
     }
 }

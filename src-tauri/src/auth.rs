@@ -306,7 +306,9 @@ mod tests {
             .set_password("correct horse battery staple")
             .expect("set password");
 
-        assert!(store.verify_password("correct horse battery staple").unwrap());
+        assert!(store
+            .verify_password("correct horse battery staple")
+            .unwrap());
         assert!(!store.verify_password("wrong").unwrap());
         assert!(store.password_configured());
     }
@@ -327,7 +329,9 @@ mod tests {
     fn auth_headers_support_bearer_and_cookie() {
         let store = RemoteAdminAuthStore::new(temp_store_path());
         store.initialize().expect("store should init");
-        store.set_password("very-secret-password").expect("set password");
+        store
+            .set_password("very-secret-password")
+            .expect("set password");
         let session = store.issue_session().expect("issue session");
 
         let mut bearer_headers = HeaderMap::new();

@@ -167,6 +167,10 @@ export const zhCN = {
       title: "Codex",
       hint: "默认目录 ~/.codex；写入 config.toml 的 model_providers.<model_provider>.base_url。",
     },
+    openclaw: {
+      title: "OpenClaw",
+      hint: "默认目录 ~/.openclaw；写入 openclaw.json 的 models.providers.<providerId>.baseUrl，并同步 agent 目录下的 models.json。",
+    },
     opencode: {
       title: "OpenCode",
       hint: "默认目录 ~/.config/opencode；写入 opencode.json(c) 的 provider.aor_shared.options.baseURL。",
@@ -176,7 +180,7 @@ export const zhCN = {
   // Agent Management
   agentManagement: {
     title: "Agent 管理",
-    subtitle: "统一管理 Claude、Codex 和 OpenCode 的配置目录与基础连接参数。",
+    subtitle: "统一管理 Claude、Codex、OpenClaw 和 OpenCode 的配置目录与基础连接参数。",
     headlessDisabled: "Headless 模式仅使用默认路径，无法新增或删除目录。",
     selectType: "选择 Agent 类型",
     selectAgent: "选择 Agent",
@@ -237,6 +241,19 @@ export const zhCN = {
     runtimeSection: "运行参数",
     runtimeHint: "这些字段会映射到当前 Agent 支持的基础配置项。",
     behaviorHint: "Claude 专属行为开关会写回 settings.json 顶层字段。",
+    openclawScopeSection: "OpenClaw 范围",
+    openclawScopeHint:
+      "OpenClaw 采用状态目录 + agent 目录结构。这里先管理一个默认 agent 与一个目标 provider。",
+    openclawAgentId: "Agent ID",
+    openclawAgentIdHint: "决定 auth-profiles.json 与 models.json 的目标子目录，默认是 default。",
+    openclawProviderId: "Provider ID",
+    openclawProviderIdHint: "将当前代理写入 OpenClaw 时使用的 provider 名称，默认 aor_shared。",
+    openclawApiFormat: "Provider API",
+    openclawApiFormatHint: "推荐保持 openai-responses，与当前代理的 /v1/responses 能力匹配。",
+    openclawFallbackModels: "回退模型",
+    openclawFallbackModelsHint: "用逗号分隔多个模型，例如 gpt-4.1-mini, gpt-4o-mini。",
+    openclawTokenHint:
+      "优先写入 OpenClaw provider 的 apiKey；高级凭证仍可切到 auth-profiles.json 源文件编辑。",
     alwaysThinkingHint: "在支持的请求中默认开启思考模式。",
     coAuthoredByHint: "提交或生成变更时附带 Co-Authored-By 信息。",
     skipPermissionHint: "跳过危险模式前的额外确认。",
@@ -244,6 +261,12 @@ export const zhCN = {
     codexTokenHint: "Codex 的 token 存储在 auth.json 的 OPENAI_API_KEY 字段。",
     codexConfigSourceHint: "config.toml 仅保存地址和模型配置，不保存 token。",
     codexAuthSourceHint: "auth.json 保存 OPENAI_API_KEY；删除该键会清除本地 token。",
+    openclawPrimarySourceHint:
+      "openclaw.json 保存全局 provider 与默认模型配置；表单模式会优先维护这里。",
+    openclawAuthSourceHint:
+      "auth-profiles.json 位于目标 agent 目录下，适合管理更复杂的凭证档案或 SecretRef。",
+    openclawModelsSourceHint:
+      "models.json 位于目标 agent 目录下，OpenClaw 会把 provider 注册表写到这里；表单保存时也会同步。",
     showToken: "显示 Token",
     hideToken: "隐藏 Token",
     unsavedChanges: "有未保存的改动",
@@ -260,6 +283,7 @@ export const zhCN = {
     add: "添加",
     claude: "Claude",
     codex: "Codex",
+    openclaw: "OpenClaw",
     opencode: "OpenCode",
   },
 

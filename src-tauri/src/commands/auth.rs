@@ -24,8 +24,6 @@ pub async fn auth_login(
 
 #[tauri::command]
 /// IPC command: performs a best-effort logout no-op for desktop runtime compatibility.
-pub async fn auth_logout(
-    state: State<'_, SharedState>,
-) -> Result<AuthSessionStatus, String> {
+pub async fn auth_logout(state: State<'_, SharedState>) -> Result<AuthSessionStatus, String> {
     Ok(config_service::auth_session_status(&state, false, true))
 }

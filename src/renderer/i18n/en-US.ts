@@ -175,6 +175,10 @@ export const enUS = {
       title: "Codex",
       hint: "Default: ~/.codex; writes model_providers.<model_provider>.base_url in config.toml.",
     },
+    openclaw: {
+      title: "OpenClaw",
+      hint: "Default: ~/.openclaw; writes models.providers.<providerId>.baseUrl in openclaw.json and syncs the agent-level models.json registry.",
+    },
     opencode: {
       title: "OpenCode",
       hint: "Default: ~/.config/opencode; writes provider.aor_shared.options.baseURL in opencode.json(c).",
@@ -185,7 +189,7 @@ export const enUS = {
   agentManagement: {
     title: "Agent Management",
     subtitle:
-      "Manage Claude, Codex, and OpenCode config directories and baseline connection settings.",
+      "Manage Claude, Codex, OpenClaw, and OpenCode config directories and baseline connection settings.",
     headlessDisabled:
       "Headless mode uses default paths only; adding or removing directories is disabled.",
     selectType: "Select Agent Type",
@@ -250,6 +254,23 @@ export const enUS = {
     runtimeHint: "These fields map to the baseline settings supported by the current agent.",
     behaviorHint:
       "Claude-only behavior switches are written back to top-level settings.json fields.",
+    openclawScopeSection: "OpenClaw Scope",
+    openclawScopeHint:
+      "OpenClaw uses a state directory plus an agent-specific registry. This editor manages one working agent and one target provider.",
+    openclawAgentId: "Agent ID",
+    openclawAgentIdHint:
+      "Determines which auth-profiles.json and models.json directory to manage. Default: default.",
+    openclawProviderId: "Provider ID",
+    openclawProviderIdHint:
+      "Provider name written into OpenClaw for this proxy target. Default: aor_shared.",
+    openclawApiFormat: "Provider API",
+    openclawApiFormatHint:
+      "Recommended: openai-responses, matching this proxy's /v1/responses capability.",
+    openclawFallbackModels: "Fallback Models",
+    openclawFallbackModelsHint:
+      "Comma-separated model list, for example gpt-4.1-mini, gpt-4o-mini.",
+    openclawTokenHint:
+      "The form writes apiKey on the OpenClaw provider directly. Switch to auth-profiles.json source mode for advanced credential profiles.",
     alwaysThinkingHint: "Enable thinking mode by default for supported requests.",
     coAuthoredByHint: "Include Co-Authored-By information when changes are generated.",
     skipPermissionHint: "Skip the extra confirmation before dangerous mode.",
@@ -260,6 +281,12 @@ export const enUS = {
       "config.toml stores endpoint and model settings; token is not stored in this file.",
     codexAuthSourceHint:
       "auth.json stores OPENAI_API_KEY. Clearing this key revokes local token usage.",
+    openclawPrimarySourceHint:
+      "openclaw.json stores the global provider definition and default model routing. Form mode primarily maintains this file.",
+    openclawAuthSourceHint:
+      "auth-profiles.json lives inside the selected agent directory and is useful for advanced credential profiles or SecretRef-backed auth.",
+    openclawModelsSourceHint:
+      "models.json lives inside the selected agent directory. OpenClaw writes provider registry data here, and form saves sync it too.",
     showToken: "Show Token",
     hideToken: "Hide Token",
     unsavedChanges: "Unsaved changes",
@@ -276,6 +303,7 @@ export const enUS = {
     add: "Add",
     claude: "Claude",
     codex: "Codex",
+    openclaw: "OpenClaw",
     opencode: "OpenCode",
   },
 

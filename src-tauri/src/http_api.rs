@@ -10,12 +10,11 @@ use crate::auth::{
 use crate::backup::{backup_default_file_name, create_groups_backup_payload};
 use crate::models::{
     AgentConfig, AgentConfigFile, AppInfo, AuthSessionStatus, ClipboardTextResult,
-    GroupBackupExportResult,
-    GroupBackupImportResult, GroupsExportJsonResult, IntegrationClientKind, IntegrationTarget,
-    IntegrationWriteResult, LogEntry, ProviderModelTestResult, ProxyConfig, ProxyStatus,
-    RemoteRulesPullResult, RemoteRulesUploadResult, RuleCardStatsItem, RuleQuotaConfig,
-    RuleQuotaSnapshot, RuleQuotaTestResult, SaveConfigResult, StatsSummaryResult,
-    WriteAgentConfigResult,
+    GroupBackupExportResult, GroupBackupImportResult, GroupsExportJsonResult,
+    IntegrationClientKind, IntegrationTarget, IntegrationWriteResult, LogEntry,
+    ProviderModelTestResult, ProxyConfig, ProxyStatus, RemoteRulesPullResult,
+    RemoteRulesUploadResult, RuleCardStatsItem, RuleQuotaConfig, RuleQuotaSnapshot,
+    RuleQuotaTestResult, SaveConfigResult, StatsSummaryResult, WriteAgentConfigResult,
 };
 use crate::proxy::ServiceState;
 use crate::services::{
@@ -367,12 +366,10 @@ fn protected_api_router() -> Router<ServiceState> {
 
 pub(crate) fn router(service_state: ServiceState) -> Router<ServiceState> {
     public_api_router()
-        .merge(
-            protected_api_router().layer(middleware::from_fn_with_state(
-                service_state.clone(),
-                require_remote_admin_auth,
-            )),
-        )
+        .merge(protected_api_router().layer(middleware::from_fn_with_state(
+            service_state.clone(),
+            require_remote_admin_auth,
+        )))
         .merge(management_router())
 }
 
@@ -391,7 +388,9 @@ fn request_is_remote(request: &Request<axum::body::Body>) -> bool {
 fn set_cookie_header(response: &mut Response, cookie_value: &str) -> Result<(), ApiError> {
     let header_value = HeaderValue::from_str(cookie_value)
         .map_err(|e| ApiError::internal(format!("build Set-Cookie header failed: {e}")))?;
-    response.headers_mut().append(header::SET_COOKIE, header_value);
+    response
+        .headers_mut()
+        .append(header::SET_COOKIE, header_value);
     Ok(())
 }
 
@@ -408,7 +407,10 @@ async fn require_remote_admin_auth(
         return next.run(request).await;
     }
 
-    match shared.remote_admin_auth.authenticate_request(request.headers()) {
+    match shared
+        .remote_admin_auth
+        .authenticate_request(request.headers())
+    {
         Ok(true) => next.run(request).await,
         Ok(false) => unauthorized_remote_admin().into_response(),
         Err(message) => ApiError::internal(message).into_response(),
@@ -454,8 +456,12 @@ async fn auth_login(
     let shared = require_shared_state(&state)?;
     let remote_request = is_remote_request(Some(socket_addr));
     if !remote_request || !shared.remote_admin_auth.password_configured() {
-        return Ok(Json(config_service::auth_session_status(&shared, remote_request, true))
-            .into_response());
+        return Ok(Json(config_service::auth_session_status(
+            &shared,
+            remote_request,
+            true,
+        ))
+        .into_response());
     }
 
     let valid = shared
@@ -490,8 +496,12 @@ async fn auth_logout(
         shared.remote_admin_auth.revoke_session(&session_token);
     }
     let remote_request = is_remote_request(Some(socket_addr));
-    let mut response =
-        Json(config_service::auth_session_status(&shared, remote_request, false)).into_response();
+    let mut response = Json(config_service::auth_session_status(
+        &shared,
+        remote_request,
+        false,
+    ))
+    .into_response();
     set_cookie_header(&mut response, &build_clear_session_cookie())?;
     Ok(response)
 }
@@ -644,8 +654,9 @@ async fn config_set_remote_admin_password(
 ) -> Result<Response, ApiError> {
     let shared = require_shared_state(&state)?;
     let remote_request = is_remote_request(Some(socket_addr));
-    let status = config_service::set_remote_admin_password(&shared, payload.password, remote_request)
-        .map_err(ApiError::from)?;
+    let status =
+        config_service::set_remote_admin_password(&shared, payload.password, remote_request)
+            .map_err(ApiError::from)?;
     let mut response = Json(status).into_response();
     if remote_request {
         let session_token = shared
@@ -663,8 +674,8 @@ async fn config_clear_remote_admin_password(
 ) -> Result<Response, ApiError> {
     let shared = require_shared_state(&state)?;
     let remote_request = is_remote_request(Some(socket_addr));
-    let status =
-        config_service::clear_remote_admin_password(&shared, remote_request).map_err(ApiError::from)?;
+    let status = config_service::clear_remote_admin_password(&shared, remote_request)
+        .map_err(ApiError::from)?;
     let mut response = Json(status).into_response();
     set_cookie_header(&mut response, &build_clear_session_cookie())?;
     Ok(response)

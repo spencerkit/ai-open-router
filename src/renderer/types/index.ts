@@ -247,12 +247,16 @@ export interface AppInfo {
   version: string
 }
 
-export type IntegrationClientKind = "claude" | "codex" | "opencode"
+export type IntegrationClientKind = "claude" | "codex" | "openclaw" | "opencode"
 
 export interface AgentConfig {
+  agentId?: string
+  providerId?: string
   url?: string
   apiToken?: string
+  apiFormat?: string
   model?: string
+  fallbackModels?: string[]
   timeout?: number
   alwaysThinkingEnabled?: boolean
   includeCoAuthoredBy?: boolean

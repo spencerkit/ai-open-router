@@ -67,6 +67,7 @@ fn resolve_starting_directory(
     let candidate = match kind {
         Some(IntegrationClientKind::Claude) => Some(home.join(".claude")),
         Some(IntegrationClientKind::Codex) => Some(home.join(".codex")),
+        Some(IntegrationClientKind::Openclaw) => Some(home.join(".openclaw")),
         Some(IntegrationClientKind::Opencode) => {
             let config_path = home.join(".config").join("opencode");
             if config_path.exists() {

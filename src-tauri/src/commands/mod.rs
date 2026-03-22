@@ -25,9 +25,9 @@ pub use app::{
 };
 pub use auth::{auth_get_session_status, auth_login, auth_logout};
 pub use config::{
-    config_export_groups, config_export_groups_clipboard, config_export_groups_folder, config_get,
-    config_import_groups, config_import_groups_json, config_save,
-    config_set_remote_admin_password, config_clear_remote_admin_password,
+    config_clear_remote_admin_password, config_export_groups, config_export_groups_clipboard,
+    config_export_groups_folder, config_get, config_import_groups, config_import_groups_json,
+    config_save, config_set_remote_admin_password,
 };
 pub use integration::{
     integration_add_target, integration_list_targets, integration_pick_directory,

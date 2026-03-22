@@ -107,15 +107,20 @@ pub struct AppInfo {
 pub enum IntegrationClientKind {
     Claude,
     Codex,
+    Openclaw,
     Opencode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentConfig {
+    pub agent_id: Option<String>,
+    pub provider_id: Option<String>,
     pub url: Option<String>,
     pub api_token: Option<String>,
+    pub api_format: Option<String>,
     pub model: Option<String>,
+    pub fallback_models: Option<Vec<String>>,
     pub timeout: Option<u64>,
     // Claude行为选项
     pub always_thinking_enabled: Option<bool>,
