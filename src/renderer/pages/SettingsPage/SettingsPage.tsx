@@ -77,7 +77,6 @@ export const SettingsPage: React.FC = () => {
   const [portText, setPortText] = useState("8080")
   const [ocAuthEnabled, setOcAuthEnabled] = useState(false)
   const [ocBearerToken, setOcBearerToken] = useState("")
-  const [ocBearerTokenConfirm, setOcBearerTokenConfirm] = useState("")
   const [strictMode, setStrictMode] = useState(false)
   const [textToolCallFallbackEnabled, setTextToolCallFallbackEnabled] = useState(true)
   const [detailedLogs, setDetailedLogs] = useState(false)
@@ -154,7 +153,6 @@ export const SettingsPage: React.FC = () => {
       const nextToken = config.server.localBearerToken ?? ""
       setOcAuthEnabled(!!config.server.authEnabled)
       setOcBearerToken(nextToken)
-      setOcBearerTokenConfirm(nextToken)
     }
 
     const nextRemoteSnapshot = JSON.stringify({
@@ -284,23 +282,11 @@ export const SettingsPage: React.FC = () => {
 
   const ocAuthValidationMessage = useMemo(() => {
     const nextToken = ocBearerToken.trim()
-    const nextConfirm = ocBearerTokenConfirm.trim()
-    const requiresToken =
-      ocAuthEnabled ||
-      nextToken.length > 0 ||
-      nextConfirm.length > 0 ||
-      Boolean(config?.server.localBearerToken)
-
     if (ocAuthEnabled && !nextToken) {
       return t("settings.ocAuthValidationRequired")
     }
-
-    if (requiresToken && nextToken !== nextConfirm) {
-      return t("settings.ocAuthValidationMismatch")
-    }
-
     return ""
-  }, [config?.server.localBearerToken, ocAuthEnabled, ocBearerToken, ocBearerTokenConfirm, t])
+  }, [ocAuthEnabled, ocBearerToken, t])
 
   const remoteAdminValidationMessage = useMemo(() => {
     const nextPassword = remoteAdminPassword.trim()
@@ -332,8 +318,7 @@ export const SettingsPage: React.FC = () => {
   const isOcAuthDirty = Boolean(
     config &&
       (ocAuthEnabled !== !!config.server.authEnabled ||
-        ocBearerToken !== (config.server.localBearerToken ?? "") ||
-        ocBearerTokenConfirm !== (config.server.localBearerToken ?? ""))
+        ocBearerToken !== (config.server.localBearerToken ?? ""))
   )
   const canSaveServer = Boolean(
     config && isServerDirty && !savingConfig && !portError && Number.isInteger(parsedPort)
@@ -825,19 +810,11 @@ export const SettingsPage: React.FC = () => {
           <div className={styles.section}>
             <h3 className={styles.sectionTitle}>{t("settings.accessSection")}</h3>
 
-            <div className={styles.securityCard}>
-              <div className={styles.securityHeader}>
-                <div>
-                  <h4 className={styles.securityTitle}>{t("settings.ocAuthTitle")}</h4>
-                  <p className={styles.securityDescription}>{t("settings.ocAuthHint")}</p>
-                </div>
-                <span className={styles.securitySurfaceTag}>/oc/*</span>
-              </div>
-
+            <div className={styles.accessInlineBlock}>
               <div className={styles.formGroupSwitch}>
                 <div className={styles.switchLabel}>
                   <label htmlFor="settings-oc-auth-enabled">{t("settings.ocAuthEnabled")}</label>
-                  <p>{t("settings.ocAuthEnabledHint")}</p>
+                  <p>{t("settings.ocAuthHint")}</p>
                 </div>
                 <Switch
                   id="settings-oc-auth-enabled"
@@ -848,7 +825,7 @@ export const SettingsPage: React.FC = () => {
               </div>
 
               <div className={styles.securityFields}>
-                <div className={styles.formGroup}>
+                <div className={`${styles.formGroup} ${styles.fieldSpanFull}`}>
                   <label htmlFor="settings-oc-bearer-token">{t("settings.ocAuthToken")}</label>
                   <Input
                     id="settings-oc-bearer-token"
@@ -856,22 +833,6 @@ export const SettingsPage: React.FC = () => {
                     value={ocBearerToken}
                     onChange={event => setOcBearerToken(event.target.value)}
                     placeholder={t("settings.ocAuthTokenPlaceholder")}
-                    hint={!ocAuthValidationMessage ? t("settings.ocAuthTokenHint") : undefined}
-                    error={ocAuthValidationMessage || undefined}
-                    disabled={savingConfig || savingOcAuth}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label htmlFor="settings-oc-bearer-token-confirm">
-                    {t("settings.ocAuthTokenConfirm")}
-                  </label>
-                  <Input
-                    id="settings-oc-bearer-token-confirm"
-                    type="password"
-                    value={ocBearerTokenConfirm}
-                    onChange={event => setOcBearerTokenConfirm(event.target.value)}
-                    placeholder={t("settings.ocAuthTokenConfirmPlaceholder")}
                     error={ocAuthValidationMessage || undefined}
                     disabled={savingConfig || savingOcAuth}
                   />
