@@ -40,7 +40,7 @@
     "npm": ">=10.0.0"
   },
   "dependencies": {
-    "@relax-state/core": "0.0.9",
+    "@relax-state/core": "0.0.10",
     "@relax-state/react": "0.0.9",
     "echarts": "^5.6.0",
     "i18next": "^23.10.0",
