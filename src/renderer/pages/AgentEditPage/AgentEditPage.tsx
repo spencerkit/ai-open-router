@@ -126,7 +126,7 @@ function buildSourcePlaceholder(kind: IntegrationClientKind, sourceId: string): 
       }
       return '{\n  "agents": {\n    "defaults": {\n      "model": {\n        "primary": "gpt-4.1-mini",\n        "fallbacks": ["gpt-4o-mini"]\n      }\n    }\n  },\n  "models": {\n    "providers": {\n      "aor_shared": {\n        "api": "openai-responses",\n        "baseUrl": "http://localhost:8080/oc/your-group/v1",\n        "apiKey": "sk-..."\n      }\n    }\n  }\n}\n'
     case "opencode":
-      return '{\n  "provider": {\n    "aor_shared": {\n      "options": {\n        "baseURL": "http://localhost:8080/oc/your-group"\n      }\n    }\n  }\n}\n'
+      return '{\n  "provider": {\n    "aor_shared": {\n      "options": {\n        "baseURL": "http://localhost:8080/oc/your-group",\n        "apiKey": "sk-..."\n      }\n    }\n  }\n}\n'
   }
 }
 

@@ -69,12 +69,7 @@ fn resolve_starting_directory(
         Some(IntegrationClientKind::Codex) => Some(home.join(".codex")),
         Some(IntegrationClientKind::Openclaw) => Some(home.join(".openclaw")),
         Some(IntegrationClientKind::Opencode) => {
-            let config_path = home.join(".config").join("opencode");
-            if config_path.exists() {
-                Some(config_path)
-            } else {
-                Some(home.join(".local").join("share").join("opencode"))
-            }
+            Some(integration_service::preferred_opencode_config_dir(&home))
         }
         None => None,
     };

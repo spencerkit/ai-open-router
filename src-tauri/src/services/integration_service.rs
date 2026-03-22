@@ -77,6 +77,24 @@ fn build_default_target(kind: IntegrationClientKind, config_dir: PathBuf) -> Int
     }
 }
 
+fn opencode_dir_has_config(config_dir: &Path) -> bool {
+    config_dir.join("opencode.jsonc").exists() || config_dir.join("opencode.json").exists()
+}
+
+pub(crate) fn preferred_opencode_config_dir(home: &Path) -> PathBuf {
+    let config_dir = home.join(".config").join("opencode");
+    if opencode_dir_has_config(&config_dir) {
+        return config_dir;
+    }
+
+    let data_dir = home.join(".local").join("share").join("opencode");
+    if opencode_dir_has_config(&data_dir) {
+        return data_dir;
+    }
+
+    config_dir
+}
+
 pub fn list_default_targets() -> Vec<IntegrationTarget> {
     let Some(home) = user_home_dir() else {
         return Vec::new();
@@ -86,7 +104,10 @@ pub fn list_default_targets() -> Vec<IntegrationTarget> {
         build_default_target(IntegrationClientKind::Claude, home.join(".claude")),
         build_default_target(IntegrationClientKind::Codex, home.join(".codex")),
         build_default_target(IntegrationClientKind::Openclaw, home.join(".openclaw")),
-        build_default_target(IntegrationClientKind::Opencode, home.join(".opencode")),
+        build_default_target(
+            IntegrationClientKind::Opencode,
+            preferred_opencode_config_dir(&home),
+        ),
     ]
 }
 
@@ -1237,6 +1258,144 @@ base_url = "http://should-not-change"
     }
 
     #[test]
+    fn parse_opencode_config_reads_api_key_from_options() {
+        let root = json!({
+            "provider": {
+                "aor_shared": {
+                    "options": {
+                        "baseURL": "http://127.0.0.1:11434",
+                        "apiKey": "local-opencode-token",
+                        "timeout": 45000
+                    }
+                }
+            },
+            "model": "gpt-5-mini"
+        })
+        .as_object()
+        .cloned()
+        .expect("root must be object");
+
+        let parsed = parse_opencode_config(&root).expect("opencode parse should succeed");
+
+        assert_eq!(parsed.url.as_deref(), Some("http://127.0.0.1:11434"));
+        assert_eq!(parsed.api_token.as_deref(), Some("local-opencode-token"));
+        assert_eq!(parsed.timeout, Some(45000));
+        assert_eq!(parsed.model.as_deref(), Some("gpt-5-mini"));
+    }
+
+    #[test]
+    fn write_opencode_full_config_persists_api_key() {
+        let unique_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time must move forward")
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("oc-proxy-opencode-{unique_id}"));
+        std::fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+
+        let config_path = temp_dir.join("opencode.json");
+        std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&json!({
+                "provider": {
+                    "aor_shared": {
+                        "options": {
+                            "baseURL": "http://legacy",
+                            "apiKey": "legacy-token"
+                        }
+                    },
+                    "unchanged": {
+                        "options": {
+                            "baseURL": "http://keep-me"
+                        }
+                    }
+                },
+                "model": "legacy-model"
+            }))
+            .expect("serialize opencode.json"),
+        )
+        .expect("seed opencode.json");
+
+        let first = AgentConfig {
+            agent_id: None,
+            provider_id: Some("aor_shared".to_string()),
+            url: Some("http://127.0.0.1:8080/oc/test".to_string()),
+            api_token: Some("fresh-token".to_string()),
+            api_format: None,
+            model: Some("gpt-5".to_string()),
+            fallback_models: None,
+            timeout: Some(60000),
+            always_thinking_enabled: None,
+            include_coauthored_by: None,
+            skip_dangerous_mode_permission_prompt: None,
+        };
+        write_opencode_full_config(&temp_dir, &first).expect("first write should succeed");
+
+        let raw = std::fs::read_to_string(&config_path).expect("read opencode.json");
+        let root = serde_json::from_str::<Value>(&raw).expect("opencode.json must be valid");
+        assert_eq!(
+            root["provider"]["aor_shared"]["options"]["baseURL"].as_str(),
+            Some("http://127.0.0.1:8080/oc/test")
+        );
+        assert_eq!(
+            root["provider"]["aor_shared"]["options"]["apiKey"].as_str(),
+            Some("fresh-token")
+        );
+        assert_eq!(
+            root["provider"]["aor_shared"]["options"]["timeout"].as_u64(),
+            Some(60000)
+        );
+        assert_eq!(root["model"].as_str(), Some("gpt-5"));
+        assert_eq!(
+            root["provider"]["unchanged"]["options"]["baseURL"].as_str(),
+            Some("http://keep-me")
+        );
+
+        let second = AgentConfig {
+            agent_id: None,
+            provider_id: Some("aor_shared".to_string()),
+            url: Some("http://127.0.0.1:8080/oc/test".to_string()),
+            api_token: None,
+            api_format: None,
+            model: Some("gpt-5".to_string()),
+            fallback_models: None,
+            timeout: Some(60000),
+            always_thinking_enabled: None,
+            include_coauthored_by: None,
+            skip_dangerous_mode_permission_prompt: None,
+        };
+        write_opencode_full_config(&temp_dir, &second).expect("second write should succeed");
+
+        let raw = std::fs::read_to_string(&config_path).expect("read opencode.json after clear");
+        let root = serde_json::from_str::<Value>(&raw).expect("opencode.json must remain valid");
+        assert!(root["provider"]["aor_shared"]["options"]
+            .get("apiKey")
+            .is_none());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn preferred_opencode_config_dir_prefers_config_and_supports_legacy_data_dir() {
+        let unique_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time must move forward")
+            .as_nanos();
+        let home_dir = std::env::temp_dir().join(format!("oc-proxy-opencode-home-{unique_id}"));
+        let config_dir = home_dir.join(".config").join("opencode");
+        let data_dir = home_dir.join(".local").join("share").join("opencode");
+
+        std::fs::create_dir_all(&data_dir).expect("legacy data dir should be created");
+        std::fs::write(data_dir.join("opencode.json"), "{}").expect("seed legacy config");
+        assert_eq!(preferred_opencode_config_dir(&home_dir), data_dir);
+
+        std::fs::create_dir_all(&config_dir).expect("config dir should be created");
+        std::fs::write(config_dir.join("opencode.jsonc"), "{}").expect("seed config jsonc");
+        assert_eq!(preferred_opencode_config_dir(&home_dir), config_dir);
+
+        let _ = std::fs::remove_dir_all(&home_dir);
+    }
+
+    #[test]
     fn openclaw_config_merges_primary_and_agent_registry_sources() {
         let primary_root = json!({
             "agents": {
@@ -1784,9 +1943,17 @@ fn parse_opencode_config(root: &Map<String, Value>) -> AppResult<AgentConfig> {
     let aor_shared = provider
         .and_then(|p| p.get("aor_shared"))
         .and_then(|v| v.as_object());
+    let options = aor_shared
+        .and_then(|a| a.get("options"))
+        .and_then(|o| o.as_object());
     let url = aor_shared
         .and_then(|a| a.get("options"))
         .and_then(|o| o.get("baseURL"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let api_token = options
+        .and_then(|o| o.get("apiKey").or_else(|| o.get("api_key")))
+        .or_else(|| aor_shared.and_then(|a| a.get("apiKey").or_else(|| a.get("api_key"))))
         .and_then(|v| v.as_str())
         .map(String::from);
     let timeout = aor_shared
@@ -1799,7 +1966,7 @@ fn parse_opencode_config(root: &Map<String, Value>) -> AppResult<AgentConfig> {
         agent_id: None,
         provider_id: Some("aor_shared".to_string()),
         url,
-        api_token: None,
+        api_token,
         api_format: None,
         model,
         fallback_models: None,
@@ -2084,6 +2251,21 @@ fn write_opencode_full_config(config_dir: &Path, config: &AgentConfig) -> AppRes
     }
     if let Some(timeout) = config.timeout {
         options.insert("timeout".to_string(), Value::Number(timeout.into()));
+    }
+    match config
+        .api_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(token) => {
+            options.insert("apiKey".to_string(), Value::String(token.to_string()));
+            options.remove("api_key");
+        }
+        None => {
+            options.remove("apiKey");
+            options.remove("api_key");
+        }
     }
 
     // Write model at root level
