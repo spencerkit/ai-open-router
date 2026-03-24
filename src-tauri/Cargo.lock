@@ -42,7 +42,7 @@ dependencies = [
 
 [[package]]
 name = "ai-open-router-tauri"
-version = "0.2.16"
+version = "0.2.17"
 dependencies = [
  "argon2",
  "axum",
@@ -50,6 +50,7 @@ dependencies = [
  "directories",
  "futures-util",
  "json5",
+ "libc",
  "mime_guess",
  "reqwest 0.12.28",
  "rusqlite",

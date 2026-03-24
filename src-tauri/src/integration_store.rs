@@ -175,6 +175,60 @@ impl IntegrationStore {
         Ok(updated)
     }
 
+    /// Creates or updates a target with a caller-provided stable ID.
+    pub fn put_target(
+        &self,
+        target_id: &str,
+        kind: IntegrationClientKind,
+        config_dir: String,
+        config: Option<AgentConfig>,
+    ) -> Result<IntegrationTarget, String> {
+        let normalized_id = target_id.trim();
+        if normalized_id.is_empty() {
+            return Err("target id is required".to_string());
+        }
+
+        let normalized_dir = normalize_config_dir(&config_dir)?;
+        let mut guard = self
+            .targets
+            .lock()
+            .map_err(|_| "integration store lock poisoned".to_string())?;
+
+        let existing_index = guard.iter().position(|item| item.id == normalized_id);
+        if guard.iter().enumerate().any(|(item_index, item)| {
+            Some(item_index) != existing_index
+                && item.kind == kind
+                && item.config_dir == normalized_dir
+        }) {
+            return Err("same config directory already exists".to_string());
+        }
+
+        let now = Utc::now().to_rfc3339();
+        let updated = if let Some(index) = existing_index {
+            guard[index].kind = kind;
+            guard[index].config_dir = normalized_dir;
+            if config.is_some() {
+                guard[index].config = config;
+            }
+            guard[index].updated_at = now;
+            guard[index].clone()
+        } else {
+            let target = IntegrationTarget {
+                id: normalized_id.to_string(),
+                kind,
+                config_dir: normalized_dir,
+                config,
+                created_at: now.clone(),
+                updated_at: now,
+            };
+            guard.push(target.clone());
+            target
+        };
+
+        self.persist(&guard)?;
+        Ok(updated)
+    }
+
     /// Removes target for this module's workflow.
     pub fn remove_target(&self, target_id: &str) -> Result<bool, String> {
         let normalized_id = target_id.trim();
