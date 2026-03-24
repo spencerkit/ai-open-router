@@ -108,14 +108,17 @@ pub(crate) fn preferred_client_config_dir_with_root_paths(
     }
 }
 
-fn headless_default_id(kind: &IntegrationClientKind) -> String {
-    let label = match kind {
+fn integration_kind_slug(kind: &IntegrationClientKind) -> &'static str {
+    match kind {
         IntegrationClientKind::Claude => "claude",
         IntegrationClientKind::Codex => "codex",
         IntegrationClientKind::Openclaw => "openclaw",
         IntegrationClientKind::Opencode => "opencode",
-    };
-    format!("{HEADLESS_DEFAULT_PREFIX}:{label}")
+    }
+}
+
+fn headless_default_id(kind: &IntegrationClientKind) -> String {
+    format!("{HEADLESS_DEFAULT_PREFIX}:{}", integration_kind_slug(kind))
 }
 
 fn build_default_target(kind: IntegrationClientKind, config_dir: PathBuf) -> IntegrationTarget {
@@ -172,6 +175,54 @@ fn list_default_targets_with_home(home: &Path) -> Vec<IntegrationTarget> {
     list_default_targets_with_root_paths(home, Path::new("/root"), Path::new("/"))
 }
 
+fn target_kind_dir_key(kind: &IntegrationClientKind, config_dir: &str) -> String {
+    format!("{}|{}", integration_kind_slug(kind), config_dir.trim())
+}
+
+fn merge_default_and_saved_targets(
+    default_targets: Vec<IntegrationTarget>,
+    saved_targets: Vec<IntegrationTarget>,
+) -> Vec<IntegrationTarget> {
+    let saved_ids = saved_targets
+        .iter()
+        .map(|target| target.id.as_str())
+        .collect::<HashSet<_>>();
+    let saved_kind_dir_keys = saved_targets
+        .iter()
+        .map(|target| target_kind_dir_key(&target.kind, &target.config_dir))
+        .collect::<HashSet<_>>();
+
+    let mut merged = default_targets
+        .into_iter()
+        .filter(|target| {
+            !saved_ids.contains(target.id.as_str())
+                && !saved_kind_dir_keys
+                    .contains(&target_kind_dir_key(&target.kind, &target.config_dir))
+        })
+        .collect::<Vec<_>>();
+    merged.extend(saved_targets);
+    merged
+}
+
+fn list_targets_with_saved_and_root_paths(
+    saved_targets: Vec<IntegrationTarget>,
+    home: &Path,
+    root_home: &Path,
+    root_base: &Path,
+) -> Vec<IntegrationTarget> {
+    merge_default_and_saved_targets(
+        list_default_targets_with_root_paths(home, root_home, root_base),
+        saved_targets,
+    )
+}
+
+fn list_targets_with_saved(
+    saved_targets: Vec<IntegrationTarget>,
+    home: &Path,
+) -> Vec<IntegrationTarget> {
+    list_targets_with_saved_and_root_paths(saved_targets, home, Path::new("/root"), Path::new("/"))
+}
+
 pub fn list_default_targets() -> Vec<IntegrationTarget> {
     let Some(home) = user_home_dir() else {
         return Vec::new();
@@ -182,7 +233,12 @@ pub fn list_default_targets() -> Vec<IntegrationTarget> {
 
 /// Performs list targets.
 pub fn list_targets(state: &SharedState) -> Vec<IntegrationTarget> {
-    state.integration_store.list()
+    let saved_targets = state.integration_store.list();
+    let Some(home) = user_home_dir() else {
+        return saved_targets;
+    };
+
+    list_targets_with_saved(saved_targets, &home)
 }
 
 fn resolve_target_by_id(
@@ -206,6 +262,14 @@ pub fn add_target(
     kind: IntegrationClientKind,
     config_dir: String,
 ) -> AppResult<IntegrationTarget> {
+    let normalized_config_dir = config_dir.trim();
+    if list_targets(state)
+        .iter()
+        .any(|target| target.kind == kind && target.config_dir == normalized_config_dir)
+    {
+        return Err(AppError::validation("same config directory already exists"));
+    }
+
     state
         .integration_store
         .add_target(kind, config_dir)
@@ -218,9 +282,11 @@ pub fn update_target(
     target_id: &str,
     config_dir: String,
 ) -> AppResult<IntegrationTarget> {
+    let target = resolve_target_by_id(&list_targets(state), target_id)?;
+
     state
         .integration_store
-        .update_target(target_id, config_dir)
+        .put_target(target_id, target.kind, config_dir, target.config)
         .map_err(AppError::validation)
 }
 
@@ -238,7 +304,7 @@ pub fn write_group_entry(
     group_id: &str,
     target_ids: Vec<String>,
 ) -> AppResult<IntegrationWriteResult> {
-    let targets = state.integration_store.list();
+    let targets = list_targets(state);
     write_group_entry_with_targets(state, group_id, targets, target_ids)
 }
 
@@ -1698,6 +1764,79 @@ base_url = "http://should-not-change"
     }
 
     #[test]
+    fn list_targets_with_saved_and_root_paths_merges_default_targets_for_desktop() {
+        let unique_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time must move forward")
+            .as_nanos();
+        let sandbox_root =
+            std::env::temp_dir().join(format!("oc-proxy-desktop-targets-root-{unique_id}"));
+        let fake_root_home = sandbox_root.join("root-home");
+        let fake_root_base = sandbox_root.join("fs-root");
+        let root_claude = fake_root_base.join(".claude");
+        let custom_codex = sandbox_root.join("custom-codex");
+
+        std::fs::create_dir_all(&fake_root_home).expect("fake root home should be created");
+        std::fs::create_dir_all(&root_claude).expect("root-level claude dir should be created");
+        std::fs::create_dir_all(&custom_codex).expect("custom codex dir should be created");
+
+        let saved_targets = vec![IntegrationTarget {
+            id: "custom-codex".to_string(),
+            kind: IntegrationClientKind::Codex,
+            config_dir: custom_codex.to_string_lossy().to_string(),
+            config: None,
+            created_at: "2026-03-24T00:00:00Z".to_string(),
+            updated_at: "2026-03-24T00:00:00Z".to_string(),
+        }];
+
+        let targets = list_targets_with_saved_and_root_paths(
+            saved_targets,
+            &fake_root_home,
+            &fake_root_home,
+            &fake_root_base,
+        );
+
+        assert!(targets.iter().any(|target| {
+            target.id == "default:claude"
+                && target.kind == IntegrationClientKind::Claude
+                && PathBuf::from(&target.config_dir) == root_claude
+        }));
+        assert!(targets.iter().any(|target| {
+            target.id == "custom-codex"
+                && target.kind == IntegrationClientKind::Codex
+                && PathBuf::from(&target.config_dir) == custom_codex
+        }));
+
+        let _ = std::fs::remove_dir_all(&sandbox_root);
+    }
+
+    #[test]
+    fn merge_default_and_saved_targets_prefers_saved_duplicates() {
+        let default_target = IntegrationTarget {
+            id: "default:claude".to_string(),
+            kind: IntegrationClientKind::Claude,
+            config_dir: "/.claude".to_string(),
+            config: None,
+            created_at: "2026-03-24T00:00:00Z".to_string(),
+            updated_at: "2026-03-24T00:00:00Z".to_string(),
+        };
+        let saved_target = IntegrationTarget {
+            id: "saved-claude".to_string(),
+            kind: IntegrationClientKind::Claude,
+            config_dir: "/.claude".to_string(),
+            config: None,
+            created_at: "2026-03-24T01:00:00Z".to_string(),
+            updated_at: "2026-03-24T01:00:00Z".to_string(),
+        };
+
+        let merged =
+            merge_default_and_saved_targets(vec![default_target], vec![saved_target.clone()]);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].id, saved_target.id);
+    }
+
+    #[test]
     fn openclaw_config_merges_primary_and_agent_registry_sources() {
         let primary_root = json!({
             "agents": {
@@ -1929,7 +2068,7 @@ base_url = "http://should-not-change"
 
 /// Reads Agent configuration file content.
 pub fn read_agent_config(state: &SharedState, target_id: &str) -> AppResult<AgentConfigFile> {
-    let targets = state.integration_store.list();
+    let targets = list_targets(state);
     read_agent_config_with_targets(targets, target_id)
 }
 
@@ -2339,7 +2478,7 @@ pub fn write_agent_config(
     target_id: &str,
     config: AgentConfig,
 ) -> AppResult<WriteAgentConfigResult> {
-    let targets = state.integration_store.list();
+    let targets = list_targets(state);
     write_agent_config_with_targets(Some(state), targets, target_id, config)
 }
 
@@ -2368,8 +2507,9 @@ pub fn write_agent_config_with_targets(
     };
 
     if let Some(state) = state {
-        let _ = state.integration_store.update_target_config(
+        let _ = state.integration_store.put_target(
             target_id,
+            target.kind.clone(),
             target.config_dir,
             Some(config),
         );
@@ -2390,7 +2530,7 @@ pub fn write_agent_config_source(
     content: &str,
     source_id: Option<&str>,
 ) -> AppResult<WriteAgentConfigResult> {
-    let targets = state.integration_store.list();
+    let targets = list_targets(state);
     write_agent_config_source_with_targets(Some(state), targets, target_id, content, source_id)
 }
 
@@ -2481,8 +2621,9 @@ pub fn write_agent_config_source_with_targets(
         _ => parse_agent_config(&target.kind, &parsed_root).ok(),
     };
     if let Some(state) = state {
-        let _ = state.integration_store.update_target_config(
+        let _ = state.integration_store.put_target(
             target_id,
+            target.kind.clone(),
             target.config_dir,
             parsed_config,
         );
