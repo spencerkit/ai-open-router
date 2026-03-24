@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.2.17 - 2026-03-24
+### Fixes
+- fix(integration): merge auto-detected desktop targets (6538da0)
+- fix(integration): resolve root home for web targets (dbcdbc2)
+
 ## v0.2.16 - 2026-03-24
 ### Features
 - feat(cli): add admin password commands (fe28f51)
