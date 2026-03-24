@@ -55,8 +55,13 @@ fn user_home_dir() -> Option<PathBuf> {
     }
 }
 
-fn root_hidden_config_fallback(home: &Path, dir_name: &str, root_base: &Path) -> Option<PathBuf> {
-    if home != Path::new("/root") {
+fn root_hidden_config_fallback_with_root_home(
+    home: &Path,
+    dir_name: &str,
+    root_home: &Path,
+    root_base: &Path,
+) -> Option<PathBuf> {
+    if home != root_home {
         return None;
     }
 
@@ -68,9 +73,10 @@ fn root_hidden_config_fallback(home: &Path, dir_name: &str, root_base: &Path) ->
     }
 }
 
-fn preferred_hidden_config_dir_with_root_base(
+fn preferred_hidden_config_dir_with_root_paths(
     home: &Path,
     dir_name: &str,
+    root_home: &Path,
     root_base: &Path,
 ) -> PathBuf {
     let home_candidate = home.join(dir_name);
@@ -78,18 +84,26 @@ fn preferred_hidden_config_dir_with_root_base(
         return home_candidate;
     }
 
-    root_hidden_config_fallback(home, dir_name, root_base).unwrap_or(home_candidate)
+    root_hidden_config_fallback_with_root_home(home, dir_name, root_home, root_base)
+        .unwrap_or(home_candidate)
 }
 
-pub(crate) fn preferred_hidden_config_dir(home: &Path, dir_name: &str) -> PathBuf {
-    preferred_hidden_config_dir_with_root_base(home, dir_name, Path::new("/"))
-}
-
-pub(crate) fn preferred_client_config_dir(kind: &IntegrationClientKind, home: &Path) -> PathBuf {
+pub(crate) fn preferred_client_config_dir_with_root_paths(
+    kind: &IntegrationClientKind,
+    home: &Path,
+    root_home: &Path,
+    root_base: &Path,
+) -> PathBuf {
     match kind {
-        IntegrationClientKind::Claude => preferred_hidden_config_dir(home, ".claude"),
-        IntegrationClientKind::Codex => preferred_hidden_config_dir(home, ".codex"),
-        IntegrationClientKind::Openclaw => preferred_hidden_config_dir(home, ".openclaw"),
+        IntegrationClientKind::Claude => {
+            preferred_hidden_config_dir_with_root_paths(home, ".claude", root_home, root_base)
+        }
+        IntegrationClientKind::Codex => {
+            preferred_hidden_config_dir_with_root_paths(home, ".codex", root_home, root_base)
+        }
+        IntegrationClientKind::Openclaw => {
+            preferred_hidden_config_dir_with_root_paths(home, ".openclaw", root_home, root_base)
+        }
         IntegrationClientKind::Opencode => preferred_opencode_config_dir(home),
     }
 }
@@ -134,29 +148,36 @@ pub(crate) fn preferred_opencode_config_dir(home: &Path) -> PathBuf {
     config_dir
 }
 
+fn list_default_targets_with_root_paths(
+    home: &Path,
+    root_home: &Path,
+    root_base: &Path,
+) -> Vec<IntegrationTarget> {
+    [
+        IntegrationClientKind::Claude,
+        IntegrationClientKind::Codex,
+        IntegrationClientKind::Openclaw,
+        IntegrationClientKind::Opencode,
+    ]
+    .into_iter()
+    .map(|kind| {
+        let config_dir =
+            preferred_client_config_dir_with_root_paths(&kind, home, root_home, root_base);
+        build_default_target(kind, config_dir)
+    })
+    .collect()
+}
+
+fn list_default_targets_with_home(home: &Path) -> Vec<IntegrationTarget> {
+    list_default_targets_with_root_paths(home, Path::new("/root"), Path::new("/"))
+}
+
 pub fn list_default_targets() -> Vec<IntegrationTarget> {
     let Some(home) = user_home_dir() else {
         return Vec::new();
     };
 
-    vec![
-        build_default_target(
-            IntegrationClientKind::Claude,
-            preferred_client_config_dir(&IntegrationClientKind::Claude, &home),
-        ),
-        build_default_target(
-            IntegrationClientKind::Codex,
-            preferred_client_config_dir(&IntegrationClientKind::Codex, &home),
-        ),
-        build_default_target(
-            IntegrationClientKind::Openclaw,
-            preferred_client_config_dir(&IntegrationClientKind::Openclaw, &home),
-        ),
-        build_default_target(
-            IntegrationClientKind::Opencode,
-            preferred_client_config_dir(&IntegrationClientKind::Opencode, &home),
-        ),
-    ]
+    list_default_targets_with_home(&home)
 }
 
 /// Performs list targets.
@@ -1583,15 +1604,20 @@ base_url = "http://should-not-change"
             .expect("time must move forward")
             .as_nanos();
         let sandbox_root = std::env::temp_dir().join(format!("oc-proxy-root-fallback-{unique_id}"));
+        let fake_root_home = sandbox_root.join("root-home");
         let fake_root_base = sandbox_root.join("fs-root");
-        let fake_root_home = PathBuf::from("/root");
         let root_level = fake_root_base.join(".claude");
 
+        std::fs::create_dir_all(&fake_root_home).expect("fake root home should be created");
         std::fs::create_dir_all(&fake_root_base).expect("fake root base should be created");
         std::fs::create_dir_all(&root_level).expect("root-level claude dir should be created");
 
-        let preferred =
-            preferred_hidden_config_dir_with_root_base(&fake_root_home, ".claude", &fake_root_base);
+        let preferred = preferred_hidden_config_dir_with_root_paths(
+            &fake_root_home,
+            ".claude",
+            &fake_root_home,
+            &fake_root_base,
+        );
         assert_eq!(preferred, root_level);
 
         let _ = std::fs::remove_dir_all(&sandbox_root);
@@ -1608,10 +1634,67 @@ base_url = "http://should-not-change"
 
         std::fs::create_dir_all(&home_candidate).expect("home hidden dir should be created");
 
-        let preferred = preferred_hidden_config_dir(&home_dir, ".openclaw");
+        let preferred = preferred_hidden_config_dir_with_root_paths(
+            &home_dir,
+            ".openclaw",
+            Path::new("/root"),
+            Path::new("/"),
+        );
         assert_eq!(preferred, home_candidate);
 
         let _ = std::fs::remove_dir_all(&home_dir);
+    }
+
+    #[test]
+    fn list_default_targets_with_root_paths_prefers_root_level_hidden_dirs() {
+        let unique_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time must move forward")
+            .as_nanos();
+        let sandbox_root =
+            std::env::temp_dir().join(format!("oc-proxy-default-targets-root-{unique_id}"));
+        let fake_root_home = sandbox_root.join("root-home");
+        let fake_root_base = sandbox_root.join("fs-root");
+        let root_claude = fake_root_base.join(".claude");
+        let root_codex = fake_root_base.join(".codex");
+        let root_openclaw = fake_root_base.join(".openclaw");
+
+        std::fs::create_dir_all(&fake_root_home).expect("fake root home should be created");
+        std::fs::create_dir_all(&root_claude).expect("root-level claude dir should be created");
+        std::fs::create_dir_all(&root_codex).expect("root-level codex dir should be created");
+        std::fs::create_dir_all(&root_openclaw).expect("root-level openclaw dir should be created");
+
+        let targets =
+            list_default_targets_with_root_paths(&fake_root_home, &fake_root_home, &fake_root_base);
+
+        let claude = targets
+            .iter()
+            .find(|target| target.kind == IntegrationClientKind::Claude)
+            .expect("claude target should exist");
+        assert_eq!(PathBuf::from(&claude.config_dir), root_claude);
+
+        let codex = targets
+            .iter()
+            .find(|target| target.kind == IntegrationClientKind::Codex)
+            .expect("codex target should exist");
+        assert_eq!(PathBuf::from(&codex.config_dir), root_codex);
+
+        let openclaw = targets
+            .iter()
+            .find(|target| target.kind == IntegrationClientKind::Openclaw)
+            .expect("openclaw target should exist");
+        assert_eq!(PathBuf::from(&openclaw.config_dir), root_openclaw);
+
+        let opencode = targets
+            .iter()
+            .find(|target| target.kind == IntegrationClientKind::Opencode)
+            .expect("opencode target should exist");
+        assert_eq!(
+            PathBuf::from(&opencode.config_dir),
+            fake_root_home.join(".config").join("opencode")
+        );
+
+        let _ = std::fs::remove_dir_all(&sandbox_root);
     }
 
     #[test]
