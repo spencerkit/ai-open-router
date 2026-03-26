@@ -3,9 +3,9 @@ import * as echarts from "echarts"
 import { Check, ChevronLeft, ChevronRight, RotateCcw, Trash2, X } from "lucide-react"
 import type React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { Button, Modal } from "@/components"
-import { useLogs, useTranslation } from "@/hooks"
+import { resolveLogsRefreshPlan, useLogs, useTranslation } from "@/hooks"
 import {
   clearLogsAction,
   clearLogsStatsAction,
@@ -149,6 +149,7 @@ function formatDelta(delta: number): string {
  */
 export const LogsPage: React.FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { t } = useTranslation()
   const logs = useRelaxValue(logsState)
   const logsStats = useRelaxValue(logsStatsState)
@@ -258,6 +259,10 @@ export const LogsPage: React.FC = () => {
   }, [ruleOptions])
 
   const selectedGroupIdSet = useMemo(() => new Set(selectedGroupIds), [selectedGroupIds])
+  const refreshPlan = useMemo(
+    () => resolveLogsRefreshPlan(location.pathname, activeTab),
+    [location.pathname, activeTab]
+  )
 
   const selectedGroupOptions = useMemo(() => {
     const map = new Map(groupOptions.map(option => [option.id, option]))
@@ -321,45 +326,31 @@ export const LogsPage: React.FC = () => {
   }, [allGroupIds])
 
   useEffect(() => {
-    if (!hasInitializedGroupSelectionRef.current) return
+    if (!hasInitializedGroupSelectionRef.current || !refreshPlan.pollStats) return
     void refreshLogsStats({
       hours: hoursFilter,
       ruleKeys: selectedRuleKeys,
       dimension: "rule",
       enableComparison,
     })
-  }, [hoursFilter, refreshLogsStats, selectedRuleKeys, enableComparison])
+  }, [hoursFilter, refreshLogsStats, selectedRuleKeys, enableComparison, refreshPlan.pollStats])
 
   useEffect(() => {
+    if (!refreshPlan.pollLogs) return
     void refreshLogs()
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState !== "visible") return
-      void refreshLogs()
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-  }, [refreshLogs])
+  }, [refreshLogs, refreshPlan.pollLogs])
 
   useEffect(() => {
-    if (activeTab !== "logs") return
-    void refreshLogs()
-  }, [activeTab, refreshLogs])
-
-  useEffect(() => {
-    if (activeTab !== "logs") return
+    if (!refreshPlan.pollLogs) return
     const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return
       void refreshLogs()
     }, 3000)
     return () => window.clearInterval(timer)
-  }, [activeTab, refreshLogs])
+  }, [refreshLogs, refreshPlan.pollLogs])
 
   useEffect(() => {
-    if (!hasInitializedGroupSelectionRef.current) return
+    if (!hasInitializedGroupSelectionRef.current || !refreshPlan.pollStats) return
     const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return
       void refreshLogsStats({
         hours: hoursFilter,
         ruleKeys: selectedRuleKeys,
@@ -368,7 +359,7 @@ export const LogsPage: React.FC = () => {
       })
     }, 3000)
     return () => window.clearInterval(timer)
-  }, [hoursFilter, refreshLogsStats, selectedRuleKeys, enableComparison])
+  }, [hoursFilter, refreshLogsStats, selectedRuleKeys, enableComparison, refreshPlan.pollStats])
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {

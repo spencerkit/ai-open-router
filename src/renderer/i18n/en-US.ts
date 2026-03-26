@@ -94,6 +94,8 @@ export const enUS = {
     token: "Token",
     apiAddress: "API Address",
     current: "Currently Active",
+    preferred: "Preferred",
+    failover: "Failover",
     rulesCount: "{{count}} providers",
     modelsCount: "{{count}} models",
     saveRule: "Save Provider",
@@ -281,6 +283,8 @@ export const enUS = {
     skipPermissionHint: "Skip the extra confirmation before dangerous mode.",
     sourceHint:
       "Edit the raw {{format}} content directly. Save validates the corresponding format first.",
+    openclawSourceValidationHint:
+      "Saving any OpenClaw source file validates the full related file set, including openclaw.json, models.json, and auth-profiles.json when present.",
     codexTokenHint: "Codex token is stored in auth.json as OPENAI_API_KEY.",
     codexConfigSourceHint:
       "config.toml stores endpoint and model settings; token is not stored in this file.",
@@ -294,6 +298,7 @@ export const enUS = {
       "models.json lives inside the selected agent directory. OpenClaw writes provider registry data here, and form saves sync it too.",
     showToken: "Show Token",
     hideToken: "Hide Token",
+    formatCurrentFile: "Format Current File",
     unsavedChanges: "Unsaved changes",
     allChangesSaved: "Everything is synced",
     timeoutInvalid: "Timeout must be a non-negative integer",
@@ -444,7 +449,20 @@ export const enUS = {
     exportConfirm: "Confirm Export",
     importModalTitle: "Confirm Group/Provider Import",
     importModalWarning:
-      "Import will overwrite all current groups and providers. Continue only if you are sure.",
+      "Choose how incoming groups and providers should be applied before starting the import.",
+    importModeLabel: "Import Mode",
+    importModeHint:
+      "Incremental keeps current groups and merges imported entries. Overwrite replaces all current groups and providers with the imported snapshot.",
+    importModeIncremental: "Incremental Merge",
+    importModeIncrementalHint:
+      "Keep current groups/providers and merge matching entries from the import.",
+    importModeIncrementalWarning:
+      "Incremental import keeps current groups/providers and only updates matching imported entries.",
+    importModeOverwrite: "Full Overwrite",
+    importModeOverwriteHint:
+      "Replace current groups/providers with the imported groups/providers only.",
+    importModeOverwriteWarning:
+      "Full overwrite replaces current groups/providers with the imported snapshot only. Server, compat, logging, UI, and remote sync settings stay unchanged.",
     importSourceLabel: "Import Source",
     importSourceFile: "Select JSON File",
     importSourceClipboard: "Paste Clipboard JSON",
@@ -815,6 +833,12 @@ export const enUS = {
     title: "Edit Group",
     sectionBasic: "Basic",
     sectionModels: "Group Models",
+    sectionFailover: "Automatic Switch",
+    failoverEnabled: "Enable automatic switch",
+    failoverEnabledHint:
+      "After the active provider fails repeatedly, route the next request to the next provider without adding extra retries.",
+    failoverFailureThreshold: "Failure threshold",
+    failoverCooldownSeconds: "Cooldown seconds",
     groupNameHint: "Display-only field in UI; does not affect client request path.",
     groupIdImmutable:
       "Used for client route prefix `/oc/{groupId}` and cannot be changed after creation.",

@@ -215,6 +215,7 @@ fn merge_group_by_provider_name(current: &Group, imported: &Group) -> Group {
             .collect(),
         active_provider_id: next_active_provider_id,
         providers,
+        failover: imported.failover.clone(),
     }
 }
 
@@ -278,7 +279,8 @@ mod tests {
     use super::*;
     use crate::app_state::AppState;
     use crate::domain::entities::{
-        default_rule_cost_config, default_rule_quota_config, Rule, RuleProtocol,
+        default_group_failover_config, default_rule_cost_config, default_rule_quota_config, Rule,
+        RuleProtocol,
     };
     use crate::integration_store::IntegrationStore;
     use crate::log_store::LogStore;
@@ -318,6 +320,7 @@ mod tests {
                 .collect(),
             active_provider_id: active.map(|v| v.to_string()),
             providers,
+            failover: default_group_failover_config(),
         }
     }
 
