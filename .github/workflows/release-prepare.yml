@@ -39,6 +39,14 @@ jobs:
           ref: ${{ format('refs/heads/{0}', inputs.base_branch) }}
           fetch-depth: 0
 
+      - name: Normalize checked out base branch
+        run: |
+          CURRENT_BRANCH="$(git symbolic-ref HEAD --short)"
+          NORMALIZED_BRANCH="${CURRENT_BRANCH#heads/}"
+          if [ "$CURRENT_BRANCH" != "$NORMALIZED_BRANCH" ]; then
+            git switch "$NORMALIZED_BRANCH"
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

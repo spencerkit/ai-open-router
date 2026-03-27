@@ -11,9 +11,12 @@ function readWorkflow() {
   return readFileSync(workflowPath, "utf8")
 }
 
-function extractReadVersionCommand() {
+function extractStepBlock(stepName: string) {
   const workflow = readWorkflow()
-  const blockMatch = workflow.match(/- name: Read version[\s\S]*?run:\s*\|\n((?: {10}.+(?:\n|$))+)/)
+  const escapedStepName = stepName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const blockMatch = workflow.match(
+    new RegExp(`- name: ${escapedStepName}[\\s\\S]*?run:\\s*\\|\\n((?: {10}.+(?:\\n|$))+)`)
+  )
 
   if (blockMatch) {
     return blockMatch[1]
@@ -23,9 +26,13 @@ function extractReadVersionCommand() {
       .join("\n")
   }
 
-  const inlineMatch = workflow.match(/- name: Read version[\s\S]*?run:\s*(.+)/)
-  assert.ok(inlineMatch, "expected Read version step in release-prepare workflow")
+  const inlineMatch = workflow.match(new RegExp(`- name: ${escapedStepName}[\\s\\S]*?run:\\s*(.+)`))
+  assert.ok(inlineMatch, `expected ${stepName} step in release-prepare workflow`)
   return inlineMatch[1].trim()
+}
+
+function extractReadVersionCommand() {
+  return extractStepBlock("Read version")
 }
 
 test("release-prepare checks out the base branch via refs/heads to avoid tag ambiguity", () => {
@@ -35,6 +42,14 @@ test("release-prepare checks out the base branch via refs/heads to avoid tag amb
     workflow,
     /- name: Checkout[\s\S]*?ref:\s*\$\{\{\s*format\('refs\/heads\/\{0\}',\s*inputs\.base_branch\)\s*\}\}/
   )
+})
+
+test("release-prepare normalizes the checked out base branch name before create-pull-request", () => {
+  const command = extractStepBlock("Normalize checked out base branch")
+
+  assert.match(command, /git symbolic-ref HEAD --short/)
+  assert.match(command, /\$\{CURRENT_BRANCH#heads\/\}/)
+  assert.match(command, /git switch "\$NORMALIZED_BRANCH"/)
 })
 
 test("release-prepare Read version command is shell-safe", () => {
