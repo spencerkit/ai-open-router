@@ -36,7 +36,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.base_branch }}
+          ref: ${{ format('refs/heads/{0}', inputs.base_branch) }}
           fetch-depth: 0
 
       - name: Setup Node.js

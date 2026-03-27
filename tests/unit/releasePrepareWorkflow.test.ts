@@ -7,8 +7,12 @@ import { test } from "node:test"
 const repoRoot = process.cwd()
 const workflowPath = path.join(repoRoot, ".github/workflows/release-prepare.yml")
 
+function readWorkflow() {
+  return readFileSync(workflowPath, "utf8")
+}
+
 function extractReadVersionCommand() {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readWorkflow()
   const blockMatch = workflow.match(/- name: Read version[\s\S]*?run:\s*\|\n((?: {10}.+(?:\n|$))+)/)
 
   if (blockMatch) {
@@ -23,6 +27,15 @@ function extractReadVersionCommand() {
   assert.ok(inlineMatch, "expected Read version step in release-prepare workflow")
   return inlineMatch[1].trim()
 }
+
+test("release-prepare checks out the base branch via refs/heads to avoid tag ambiguity", () => {
+  const workflow = readWorkflow()
+
+  assert.match(
+    workflow,
+    /- name: Checkout[\s\S]*?ref:\s*\$\{\{\s*format\('refs\/heads\/\{0\}',\s*inputs\.base_branch\)\s*\}\}/
+  )
+})
 
 test("release-prepare Read version command is shell-safe", () => {
   const outputDir = path.join(repoRoot, ".tmp")
