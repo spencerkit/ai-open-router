@@ -72,6 +72,22 @@ test("parseProviderImport parses AOR JSON payload with aliases", () => {
   })
 })
 
+test("parseProviderImport rejects explicit AOR payloads missing the required marker", () => {
+  assert.throws(
+    () =>
+      parseProviderImport({
+        format: "aor",
+        raw: JSON.stringify({
+          name: "SuperCodex",
+          protocol: "openai",
+          base_url: "https://supercodex.space/v1",
+        }),
+      }),
+    (error: unknown) =>
+      error instanceof ProviderImportParseError && error.code === "unrecognized_format"
+  )
+})
+
 test("parseProviderImport auto-detects Claude Code payloads", () => {
   const result = parseProviderImport({
     format: "auto",
@@ -83,6 +99,84 @@ test("parseProviderImport auto-detects Claude Code payloads", () => {
   })
 
   assert.equal(result.format, "claude_code")
+})
+
+test("parseProviderImport auto-detects AOR payloads from the required marker", () => {
+  const result = parseProviderImport({
+    format: "auto",
+    raw: JSON.stringify({
+      format: "aor-provider/v1",
+      protocol: "openai",
+      base_url: "https://supercodex.space/v1",
+    }),
+  })
+
+  assert.equal(result.format, "aor")
+  assert.deepEqual(result.draft, {
+    protocol: "openai",
+    apiAddress: "https://supercodex.space/v1",
+  })
+})
+
+test("parseProviderImport auto-detect rejects unrelated JSON", () => {
+  assert.throws(
+    () =>
+      parseProviderImport({
+        format: "auto",
+        raw: JSON.stringify({
+          hello: "world",
+        }),
+      }),
+    (error: unknown) =>
+      error instanceof ProviderImportParseError && error.code === "unrecognized_format"
+  )
+})
+
+test("parseProviderImport auto-detect rejects unrelated TOML", () => {
+  assert.throws(
+    () =>
+      parseProviderImport({
+        format: "auto",
+        raw: `
+title = "hello"
+
+[service]
+url = "https://example.com"
+`.trim(),
+      }),
+    (error: unknown) =>
+      error instanceof ProviderImportParseError && error.code === "unrecognized_format"
+  )
+})
+
+test("parseProviderImport auto-detect rejects AOR-like JSON without the required marker", () => {
+  assert.throws(
+    () =>
+      parseProviderImport({
+        format: "auto",
+        raw: JSON.stringify({
+          protocol: "openai",
+          apiAddress: "https://supercodex.space/v1",
+        }),
+      }),
+    (error: unknown) =>
+      error instanceof ProviderImportParseError && error.code === "unrecognized_format"
+  )
+})
+
+test("parseProviderImport auto-detect rejects AOR payloads with unsupported protocols", () => {
+  assert.throws(
+    () =>
+      parseProviderImport({
+        format: "auto",
+        raw: JSON.stringify({
+          format: "aor-provider/v1",
+          protocol: "unsupported",
+        }),
+      }),
+    (error: unknown) =>
+      error instanceof ProviderImportParseError && error.code === "unsupported_protocol"
+  )
 })
 
 test("parseProviderImport rejects invalid JSON payloads", () => {

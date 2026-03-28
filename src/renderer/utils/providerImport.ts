@@ -95,6 +95,10 @@ function detectProviderImportFormat(raw: string): ProviderImportFormat {
   const firstCharacter = raw[0]
   if (firstCharacter === "{") {
     const parsed = parseJsonRecord(raw)
+    if (normalizeString(parsed.format) === "aor-provider/v1") {
+      return "aor"
+    }
+
     const env = asRecord(parsed.env)
     if (
       env &&
@@ -103,29 +107,11 @@ function detectProviderImportFormat(raw: string): ProviderImportFormat {
       return "claude_code"
     }
 
-    if (
-      normalizeString(parsed.format) === "aor-provider/v1" ||
-      normalizeProtocol(parsed.protocol) ||
-      normalizeString(parsed.base_url) ||
-      normalizeString(parsed.apiAddress)
-    ) {
-      return "aor"
-    }
-
     throw new ProviderImportParseError("unrecognized_format")
   }
 
-  if (raw.includes("model_provider") || raw.includes("[model_providers")) {
+  if (raw.includes("model_provider") && raw.includes("[model_providers.")) {
     return "codex"
-  }
-
-  try {
-    const parsed = TOML.parse(raw)
-    if (typeof parsed === "object" && parsed !== null) {
-      return "codex"
-    }
-  } catch {
-    // Ignore TOML parse failure so the caller gets the format error below.
   }
 
   throw new ProviderImportParseError("unrecognized_format")
@@ -195,6 +181,10 @@ function parseClaudeCodeImport(raw: string): ProviderImportParseResult {
 
 function parseAorImport(raw: string): ProviderImportParseResult {
   const parsed = parseJsonRecord(raw)
+  if (normalizeString(parsed.format) !== "aor-provider/v1") {
+    throw new ProviderImportParseError("unrecognized_format")
+  }
+
   const protocol = normalizeProtocol(parsed.protocol)
 
   if (parsed.protocol !== undefined && !protocol) {
