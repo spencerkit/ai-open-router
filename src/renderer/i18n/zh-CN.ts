@@ -755,6 +755,7 @@ export const zhCN = {
       website: "官网",
       defaultModel: "默认模型",
     },
+    importWarnings: "警告",
     importMissingFields: "缺少字段：{{fields}}",
     importErrorUnrecognizedFormat: "无法识别导入格式",
     importErrorInvalidJson: "输入不是合法 JSON",

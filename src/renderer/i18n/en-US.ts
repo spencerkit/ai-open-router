@@ -789,6 +789,7 @@ export const enUS = {
       website: "Website",
       defaultModel: "Default Model",
     },
+    importWarnings: "Warnings",
     importMissingFields: "Missing: {{fields}}",
     importErrorUnrecognizedFormat: "Unable to recognize import format",
     importErrorInvalidJson: "Input is not valid JSON",

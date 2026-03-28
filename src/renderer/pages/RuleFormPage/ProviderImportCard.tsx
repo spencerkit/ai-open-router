@@ -63,6 +63,8 @@ export const ProviderImportCard: React.FC<ProviderImportCardProps> = ({
         return value === undefined ? [] : [{ field, value: String(value) }]
       })
     : []
+  const missingFieldLabels =
+    parseResult?.missingFields.map(field => t(getFieldLabelKey(field))) ?? []
 
   return (
     <section className={styles.importCard}>
@@ -127,10 +129,15 @@ export const ProviderImportCard: React.FC<ProviderImportCardProps> = ({
               </div>
             ))}
           </div>
-          {parseResult.missingFields.length > 0 ? (
+          {parseResult.warnings.length > 0 ? (
+            <div className={styles.fieldHint}>
+              <strong>{t("ruleForm.importWarnings")}:</strong> {parseResult.warnings.join(" ")}
+            </div>
+          ) : null}
+          {missingFieldLabels.length > 0 ? (
             <p className={styles.fieldHint}>
               {t("ruleForm.importMissingFields", {
-                fields: parseResult.missingFields.join(", "),
+                fields: missingFieldLabels.join(", "),
               })}
             </p>
           ) : null}

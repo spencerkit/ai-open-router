@@ -51,6 +51,7 @@ const translations: Record<string, string> = {
   "ruleForm.importField.apiAddress": "API Address",
   "ruleForm.importField.website": "Website",
   "ruleForm.importField.defaultModel": "Default Model",
+  "ruleForm.importWarnings": "Warnings",
 }
 
 function translate(key: string, options?: Record<string, unknown>): string {
@@ -169,7 +170,53 @@ function createParseResult(
   }
 }
 
-test("ProviderImportCard renders parse controls, error state, and parsed preview", () => {
+test("ProviderImportCard renders parser warnings when present", () => {
+  const { ProviderImportCard } = loadProviderImportCard()
+
+  const markup = renderToStaticMarkup(
+    React.createElement(ProviderImportCard, {
+      format: "auto",
+      rawValue: 'wire_api = "chat"',
+      parseError: null,
+      parseResult: createParseResult({
+        warnings: ["Unsupported Codex wire_api: chat"],
+      }),
+      onFormatChange: () => {},
+      onRawChange: () => {},
+      onParse: () => {},
+      onClear: () => {},
+      onApply: () => {},
+    })
+  )
+
+  assert.match(markup, /Warnings/)
+  assert.match(markup, /Unsupported Codex wire_api: chat/)
+})
+
+test("ProviderImportCard renders localized labels in missing fields summary", () => {
+  const { ProviderImportCard } = loadProviderImportCard()
+
+  const markup = renderToStaticMarkup(
+    React.createElement(ProviderImportCard, {
+      format: "auto",
+      rawValue: 'model_provider = "OpenAI"',
+      parseError: null,
+      parseResult: createParseResult({
+        missingFields: ["token", "website"],
+      }),
+      onFormatChange: () => {},
+      onRawChange: () => {},
+      onParse: () => {},
+      onClear: () => {},
+      onApply: () => {},
+    })
+  )
+
+  assert.match(markup, /Missing: Token, Website/)
+  assert.doesNotMatch(markup, /Missing: token, website/)
+})
+
+test("ProviderImportCard renders parse error without preview when parse result is absent", () => {
   const { ProviderImportCard } = loadProviderImportCard()
 
   const markup = renderToStaticMarkup(
@@ -177,7 +224,7 @@ test("ProviderImportCard renders parse controls, error state, and parsed preview
       format: "auto",
       rawValue: 'model_provider = "OpenAI"',
       parseError: "Unable to parse snippet",
-      parseResult: createParseResult(),
+      parseResult: null,
       onFormatChange: () => {},
       onRawChange: () => {},
       onParse: () => {},
@@ -196,19 +243,9 @@ test("ProviderImportCard renders parse controls, error state, and parsed preview
   assert.match(markup, /Parse/)
   assert.match(markup, /Clear/)
   assert.match(markup, /Unable to parse snippet/)
-  assert.match(markup, /Parsed Preview/)
-  assert.match(markup, /Detected Format/)
-  assert.match(markup, />Codex</)
-  assert.match(markup, /Name/)
-  assert.match(markup, /OpenAI/)
-  assert.match(markup, /Protocol/)
-  assert.match(markup, /openai/)
-  assert.match(markup, /API Address/)
-  assert.match(markup, /https:\/\/supercodex\.space\/v1/)
-  assert.match(markup, /Default Model/)
-  assert.match(markup, /gpt-5\.4/)
-  assert.match(markup, /Missing: token, website/)
-  assert.match(markup, /Apply To Form/)
+  assert.doesNotMatch(markup, /Parsed Preview/)
+  assert.doesNotMatch(markup, /Detected Format/)
+  assert.doesNotMatch(markup, /Apply To Form/)
 })
 
 test.after(() => {
