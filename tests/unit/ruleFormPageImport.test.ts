@@ -20,6 +20,8 @@ type CssModuleExports = Record<string, string>
 type TestState<T> = { current: T }
 type UnknownProps = Record<string, unknown>
 type ReactElementNode = React.ReactElement<UnknownProps>
+type SelectElementNode = React.ReactElement<React.ComponentProps<"select">>
+type ButtonElementNode = React.ReactElement<React.ComponentProps<"button">>
 
 const unitOutDir = path.join(process.cwd(), ".tmp/unit-tests")
 const originalResolveFilename = Module._resolveFilename
@@ -365,6 +367,52 @@ function createComponentHarness(mode: "create" | "edit") {
   return { renderReady }
 }
 
+function findElement(
+  node: React.ReactNode,
+  predicate: (element: ReactElementNode) => boolean
+): ReactElementNode | null {
+  if (!node) return null
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const match = findElement(child, predicate)
+      if (match) return match
+    }
+    return null
+  }
+  if (!React.isValidElement(node)) {
+    return null
+  }
+
+  const element = node as ReactElementNode
+  if (predicate(element)) {
+    return element
+  }
+
+  return findElement(element.props.children as React.ReactNode, predicate)
+}
+
+function createSelectChangeEvent(value: string): React.ChangeEvent<HTMLSelectElement> {
+  return { target: { value } } as unknown as React.ChangeEvent<HTMLSelectElement>
+}
+
+function findImportFormatSelect(tree: React.ReactNode): SelectElementNode {
+  const element = findElement(
+    tree,
+    node => node.type === "select" && node.props.id === "provider-import-format"
+  )
+  assert.ok(element)
+  return element as SelectElementNode
+}
+
+function findButtonByText(tree: React.ReactNode, label: string): ButtonElementNode {
+  const element = findElement(
+    tree,
+    node => node.type === "button" && String(node.props.children) === label
+  )
+  assert.ok(element)
+  return element as ButtonElementNode
+}
+
 test("RuleFormPage shows provider import card only in create mode above routing", () => {
   resetHarness()
 
@@ -381,6 +429,28 @@ test("RuleFormPage shows provider import card only in create mode above routing"
 
   assert.doesNotMatch(editMarkup, /Paste Config Import/)
   assert.match(editMarkup, /Routing/)
+})
+
+test("RuleFormPage clear import resets format back to auto", () => {
+  resetHarness()
+  const harness = createComponentHarness("create")
+
+  let tree = harness.renderReady()
+  let formatSelect = findImportFormatSelect(tree)
+  assert.equal(formatSelect.props.value, "auto")
+
+  formatSelect.props.onChange?.(createSelectChangeEvent("codex"))
+
+  tree = harness.renderReady()
+  formatSelect = findImportFormatSelect(tree)
+  assert.equal(formatSelect.props.value, "codex")
+
+  const clearButton = findButtonByText(tree, "Clear")
+  clearButton.props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
+
+  tree = harness.renderReady()
+  formatSelect = findImportFormatSelect(tree)
+  assert.equal(formatSelect.props.value, "auto")
 })
 
 process.on("exit", () => {

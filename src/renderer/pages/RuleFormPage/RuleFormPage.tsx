@@ -385,6 +385,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   }
 
   const handleImportClear = () => {
+    setImportFormat("auto")
     setImportText("")
     resetImportFeedback()
   }
