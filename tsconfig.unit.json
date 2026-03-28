@@ -51,6 +51,7 @@
     "src/renderer/utils/agentSourceFormat.ts",
     "src/renderer/utils/groupFailover.ts",
     "src/renderer/utils/importMode.ts",
+    "src/renderer/utils/providerImport.ts",
     "src/renderer/utils/providerTesting.ts",
     "src/renderer/utils/providerWebsite.ts",
     "src/renderer/utils/serverAddress.ts",
