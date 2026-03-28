@@ -179,6 +179,50 @@ test("parseProviderImport auto-detect rejects AOR payloads with unsupported prot
   )
 })
 
+test("parseProviderImport auto-detects Codex payloads when model_provider and model_providers table are both present", () => {
+  const result = parseProviderImport({
+    format: "auto",
+    raw: `
+model_provider = "OpenAI"
+model = "gpt-5.4"
+
+[model_providers.OpenAI]
+name = "OpenAI"
+base_url = "https://supercodex.space/v1"
+wire_api = "responses"
+`.trim(),
+  })
+
+  assert.equal(result.format, "codex")
+  assert.deepEqual(result.draft, {
+    name: "OpenAI",
+    protocol: "openai",
+    apiAddress: "https://supercodex.space/v1",
+    defaultModel: "gpt-5.4",
+  })
+})
+
+test("parseProviderImport auto-detect prefers AOR over Claude Code when both markers are present", () => {
+  const result = parseProviderImport({
+    format: "auto",
+    raw: JSON.stringify({
+      format: "aor-provider/v1",
+      protocol: "openai",
+      base_url: "https://supercodex.space/v1",
+      env: {
+        ANTHROPIC_BASE_URL: "https://anthropic.example/v1",
+        ANTHROPIC_AUTH_TOKEN: "sk-anthropic",
+      },
+    }),
+  })
+
+  assert.equal(result.format, "aor")
+  assert.deepEqual(result.draft, {
+    protocol: "openai",
+    apiAddress: "https://supercodex.space/v1",
+  })
+})
+
 test("parseProviderImport rejects invalid JSON payloads", () => {
   assert.throws(
     () => parseProviderImport({ format: "claude_code", raw: "{not-json}" }),
