@@ -10,8 +10,6 @@ import type { BillingTemplateAttribution } from "@/types/proxy"
 import {
   applyBillingTemplateToCost,
   canApplyBillingTemplate,
-  doesCostMatchBillingTemplate,
-  findBillingTemplate,
   searchBillingTemplates,
 } from "@/utils/billingTemplates"
 import { createStableId } from "@/utils/id"
@@ -103,6 +101,38 @@ const resolveAppliedCostFieldValue = (
   currentRawValue: string,
   templateValue: number | undefined
 ) => (templateValue === undefined ? currentRawValue : String(templateValue))
+
+interface CostTemplateBaseline {
+  currency: string
+  inputPricePerM: number
+  outputPricePerM: number
+  cacheInputPricePerM: number
+  cacheOutputPricePerM: number
+}
+
+const buildCostTemplateBaseline = ({
+  currency,
+  inputPricePerM,
+  outputPricePerM,
+  cacheInputPricePerM,
+  cacheOutputPricePerM,
+}: CostTemplateBaseline): CostTemplateBaseline => ({
+  currency,
+  inputPricePerM,
+  outputPricePerM,
+  cacheInputPricePerM,
+  cacheOutputPricePerM,
+})
+
+const doesCostMatchTemplateBaseline = (
+  current: CostTemplateBaseline,
+  baseline: CostTemplateBaseline
+): boolean =>
+  current.currency === baseline.currency &&
+  current.inputPricePerM === baseline.inputPricePerM &&
+  current.outputPricePerM === baseline.outputPricePerM &&
+  current.cacheInputPricePerM === baseline.cacheInputPricePerM &&
+  current.cacheOutputPricePerM === baseline.cacheOutputPricePerM
 
 const PROVIDER_IMPORT_ERROR_KEYS: Record<
   ProviderImportParseError["code"],
@@ -291,6 +321,9 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const [cacheOutputPricePerM, setCacheOutputPricePerM] = useState("")
   const [costCurrency, setCostCurrency] = useState("USD")
   const [costTemplate, setCostTemplate] = useState<BillingTemplateAttribution | null>(null)
+  const [costTemplateBaseline, setCostTemplateBaseline] = useState<CostTemplateBaseline | null>(
+    null
+  )
 
   const [loading, setLoading] = useState(mode === "edit")
   const [errors, setErrors] = useState<{
@@ -335,24 +368,23 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       template =>
         template.vendorId === selectedBillingVendorId && template.modelId === selectedBillingModelId
     ) ?? null
-  const currentCostDraft = {
-    enabled: costEnabled,
+  const currentCostBaseline = buildCostTemplateBaseline({
+    currency: costCurrency.trim() || "USD",
     inputPricePerM: parseCostInputValue(inputPricePerM),
     outputPricePerM: parseCostInputValue(outputPricePerM),
     cacheInputPricePerM: parseCostInputValue(cacheInputPricePerM),
     cacheOutputPricePerM: parseCostInputValue(cacheOutputPricePerM),
-    currency: costCurrency.trim() || "USD",
+  })
+  const currentCostDraft = {
+    enabled: costEnabled,
+    ...currentCostBaseline,
     template: costTemplate,
   }
-  const appliedBillingTemplate =
-    costTemplate && findBillingTemplate(costTemplate.vendorId, costTemplate.modelId)
-      ? findBillingTemplate(costTemplate.vendorId, costTemplate.modelId) || null
-      : null
   const billingTemplateMarkedModified =
     !!costTemplate &&
     (costTemplate.modifiedAfterApply ||
-      (appliedBillingTemplate
-        ? !doesCostMatchBillingTemplate(currentCostDraft, appliedBillingTemplate)
+      (costTemplateBaseline
+        ? !doesCostMatchTemplateBaseline(currentCostBaseline, costTemplateBaseline)
         : false))
   const billingTemplateSummaryText = costTemplate
     ? t(
@@ -416,6 +448,17 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setCacheOutputPricePerM(String(provider.cost?.cacheOutputPricePerM ?? ""))
     setCostCurrency(provider.cost?.currency || "USD")
     setCostTemplate(provider.cost?.template ?? null)
+    setCostTemplateBaseline(
+      provider.cost?.template
+        ? buildCostTemplateBaseline({
+            currency: provider.cost.currency || "USD",
+            inputPricePerM: provider.cost.inputPricePerM ?? 0,
+            outputPricePerM: provider.cost.outputPricePerM ?? 0,
+            cacheInputPricePerM: provider.cost.cacheInputPricePerM ?? 0,
+            cacheOutputPricePerM: provider.cost.cacheOutputPricePerM ?? 0,
+          })
+        : null
+    )
 
     setLoading(false)
   }, [config, group, isEditMode, isGlobalMode, navigate, provider, showToast, t])
@@ -559,11 +602,21 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       )
     )
     setCostTemplate(nextCost.template ?? null)
+    setCostTemplateBaseline(
+      buildCostTemplateBaseline({
+        currency: nextCost.currency,
+        inputPricePerM: nextCost.inputPricePerM,
+        outputPricePerM: nextCost.outputPricePerM,
+        cacheInputPricePerM: nextCost.cacheInputPricePerM,
+        cacheOutputPricePerM: nextCost.cacheOutputPricePerM,
+      })
+    )
     setShowBillingTemplateModal(false)
   }
 
   const handleClearBillingTemplateAttribution = () => {
     setCostTemplate(null)
+    setCostTemplateBaseline(null)
   }
 
   const focusField = (id: string) => {

@@ -869,6 +869,50 @@ test("RuleFormPage marks template attribution as modified after manual price edi
   assert.equal(savedProvider.cost?.template?.modelId, "claude-sonnet-4-5")
 })
 
+test("RuleFormPage keeps applied summary stable when stored template prices differ from current catalog", () => {
+  resetHarness()
+  currentParams = { providerId: "provider-1" }
+  const config = configStateValue.current
+  if (!config) {
+    throw new Error("expected config")
+  }
+  const existingProvider = config.providers?.[0]
+  if (!existingProvider) {
+    throw new Error("expected existing provider")
+  }
+  existingProvider.cost = {
+    enabled: true,
+    inputPricePerM: 4,
+    outputPricePerM: 17,
+    cacheInputPricePerM: 0.45,
+    cacheOutputPricePerM: 4.25,
+    currency: "USD",
+    template: {
+      vendorId: "anthropic",
+      vendorLabel: "Anthropic",
+      modelId: "claude-sonnet-4-5",
+      modelLabel: "Claude Sonnet 4.5",
+      sourceUrl: "https://platform.claude.com/docs/zh-CN/about-claude/pricing",
+      verifiedAt: "2026-03-29",
+      appliedAt: "2026-03-29T00:00:00.000Z",
+      modifiedAfterApply: false,
+    },
+  }
+
+  const harness = createComponentHarness("edit")
+  let tree = harness.renderReady()
+  let markup = renderToStaticMarkup(tree as React.ReactElement)
+  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.5/)
+  assert.doesNotMatch(markup, /modified after apply/)
+
+  const outputInput = findInputById(tree, "cost-output")
+  outputInput.props.onChange?.(createInputChangeEvent("18"))
+
+  tree = harness.renderReady()
+  markup = renderToStaticMarkup(tree as React.ReactElement)
+  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.5, modified after apply/)
+})
+
 process.on("exit", () => {
   Module._resolveFilename = originalResolveFilename
   Object.assign(globalThis, {
