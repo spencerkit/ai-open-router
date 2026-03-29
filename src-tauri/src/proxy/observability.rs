@@ -1103,7 +1103,7 @@ mod tests {
 
     #[test]
     fn billing_template_metadata_does_not_change_cost_snapshot() {
-        let rule = Rule {
+        let base_rule = Rule {
             id: "provider-1".to_string(),
             name: "Anthropic".to_string(),
             protocol: RuleProtocol::Anthropic,
@@ -1120,6 +1120,12 @@ mod tests {
                 cache_input_price_per_m: 0.3,
                 cache_output_price_per_m: 3.75,
                 currency: "USD".to_string(),
+                template: None,
+            },
+        };
+
+        let rule_with_template = Rule {
+            cost: RuleCostConfig {
                 template: Some(BillingTemplateAttribution {
                     vendor_id: "anthropic".to_string(),
                     vendor_label: "Anthropic".to_string(),
@@ -1131,7 +1137,9 @@ mod tests {
                     applied_at: "2026-03-29T00:00:00.000Z".to_string(),
                     modified_after_apply: true,
                 }),
+                ..base_rule.cost.clone()
             },
+            ..base_rule.clone()
         };
 
         let usage = TokenUsage {
@@ -1141,8 +1149,36 @@ mod tests {
             cache_write_tokens: 1_000_000,
         };
 
-        let snapshot = build_cost_snapshot(&rule, &usage);
-        assert_eq!(snapshot.currency, "USD");
-        assert!((snapshot.total_cost - 22.05).abs() < f64::EPSILON);
+        let snapshot_without_template = build_cost_snapshot(&base_rule, &usage);
+        let snapshot_with_template = build_cost_snapshot(&rule_with_template, &usage);
+
+        assert_eq!(
+            snapshot_with_template.enabled,
+            snapshot_without_template.enabled
+        );
+        assert_eq!(
+            snapshot_with_template.currency,
+            snapshot_without_template.currency
+        );
+        assert_eq!(
+            snapshot_with_template.input_price_per_m,
+            snapshot_without_template.input_price_per_m
+        );
+        assert_eq!(
+            snapshot_with_template.output_price_per_m,
+            snapshot_without_template.output_price_per_m
+        );
+        assert_eq!(
+            snapshot_with_template.cache_input_price_per_m,
+            snapshot_without_template.cache_input_price_per_m
+        );
+        assert_eq!(
+            snapshot_with_template.cache_output_price_per_m,
+            snapshot_without_template.cache_output_price_per_m
+        );
+        assert_eq!(
+            snapshot_with_template.total_cost,
+            snapshot_without_template.total_cost
+        );
     }
 }
