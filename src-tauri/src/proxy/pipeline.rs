@@ -312,10 +312,14 @@ pub(super) async fn handle_proxy_request(
     let body_bytes = match to_bytes(body, MAX_REQUEST_BODY_BYTES).await {
         Ok(v) => v,
         Err(_) => {
+            let message = format!(
+                "Request body too large (max {} bytes)",
+                MAX_REQUEST_BODY_BYTES
+            );
             return proxy_error_response(
                 413,
                 "proxy_error",
-                "Request body too large (max 10485760 bytes)",
+                &message,
                 None,
                 "proxy",
                 &trace_id,
@@ -2627,6 +2631,34 @@ mod tests {
             status,
             String::from_utf8(body_bytes.to_vec()).expect("stream response should be utf8"),
         )
+    }
+
+    #[tokio::test]
+    async fn request_body_larger_than_10m_reaches_validation_stage() {
+        let service_state = headless_service_state_for_tests();
+        install_failover_group(
+            &service_state,
+            vec![test_rule(
+                "p1",
+                RuleProtocol::OpenaiCompletion,
+                "http://127.0.0.1:1".to_string(),
+                "gpt-test",
+            )],
+            1,
+        );
+
+        let oversized_messages = "x".repeat(10 * 1024 * 1024 + 1024);
+        let (status, _) = send_messages_request(
+            &service_state,
+            json!({
+                "model": "claude-test",
+                "max_tokens": 16,
+                "messages": oversized_messages
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
