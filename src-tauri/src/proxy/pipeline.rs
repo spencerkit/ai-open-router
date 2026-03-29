@@ -316,14 +316,7 @@ pub(super) async fn handle_proxy_request(
                 "Request body too large (max {} bytes)",
                 MAX_REQUEST_BODY_BYTES
             );
-            return proxy_error_response(
-                413,
-                "proxy_error",
-                &message,
-                None,
-                "proxy",
-                &trace_id,
-            )
+            return proxy_error_response(413, "proxy_error", &message, None, "proxy", &trace_id);
         }
     };
     let request_body = if body_bytes.is_empty() {

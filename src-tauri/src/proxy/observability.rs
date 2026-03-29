@@ -1131,8 +1131,8 @@ mod tests {
                     vendor_label: "Anthropic".to_string(),
                     model_id: "claude-sonnet-4-5".to_string(),
                     model_label: "Claude Sonnet 4.5".to_string(),
-                    source_url:
-                        "https://platform.claude.com/docs/zh-CN/about-claude/pricing".to_string(),
+                    source_url: "https://platform.claude.com/docs/zh-CN/about-claude/pricing"
+                        .to_string(),
                     verified_at: "2026-03-29".to_string(),
                     applied_at: "2026-03-29T00:00:00.000Z".to_string(),
                     modified_after_apply: true,
