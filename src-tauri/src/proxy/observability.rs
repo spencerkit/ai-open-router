@@ -1091,3 +1091,94 @@ pub(super) fn proxy_error_response(
     apply_headers(&mut resp, &response_headers_json(trace_id));
     resp
 }
+
+#[cfg(test)]
+mod tests {
+    use super::build_cost_snapshot;
+    use crate::domain::entities::{
+        default_rule_quota_config, BillingTemplateAttribution, Rule, RuleCostConfig, RuleProtocol,
+        TokenUsage,
+    };
+    use std::collections::HashMap;
+
+    #[test]
+    fn billing_template_metadata_does_not_change_cost_snapshot() {
+        let base_rule = Rule {
+            id: "provider-1".to_string(),
+            name: "Anthropic".to_string(),
+            protocol: RuleProtocol::Anthropic,
+            token: "secret".to_string(),
+            api_address: "https://api.example.com".to_string(),
+            website: String::new(),
+            default_model: "claude-sonnet-4.5".to_string(),
+            model_mappings: HashMap::new(),
+            quota: default_rule_quota_config(),
+            cost: RuleCostConfig {
+                enabled: true,
+                input_price_per_m: 3.0,
+                output_price_per_m: 15.0,
+                cache_input_price_per_m: 0.3,
+                cache_output_price_per_m: 3.75,
+                currency: "USD".to_string(),
+                template: None,
+            },
+        };
+
+        let rule_with_template = Rule {
+            cost: RuleCostConfig {
+                template: Some(BillingTemplateAttribution {
+                    vendor_id: "anthropic".to_string(),
+                    vendor_label: "Anthropic".to_string(),
+                    model_id: "claude-sonnet-4-5".to_string(),
+                    model_label: "Claude Sonnet 4.5".to_string(),
+                    source_url: "https://platform.claude.com/docs/zh-CN/about-claude/pricing"
+                        .to_string(),
+                    verified_at: "2026-03-29".to_string(),
+                    applied_at: "2026-03-29T00:00:00.000Z".to_string(),
+                    modified_after_apply: true,
+                }),
+                ..base_rule.cost.clone()
+            },
+            ..base_rule.clone()
+        };
+
+        let usage = TokenUsage {
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            cache_read_tokens: 1_000_000,
+            cache_write_tokens: 1_000_000,
+        };
+
+        let snapshot_without_template = build_cost_snapshot(&base_rule, &usage);
+        let snapshot_with_template = build_cost_snapshot(&rule_with_template, &usage);
+
+        assert_eq!(
+            snapshot_with_template.enabled,
+            snapshot_without_template.enabled
+        );
+        assert_eq!(
+            snapshot_with_template.currency,
+            snapshot_without_template.currency
+        );
+        assert_eq!(
+            snapshot_with_template.input_price_per_m,
+            snapshot_without_template.input_price_per_m
+        );
+        assert_eq!(
+            snapshot_with_template.output_price_per_m,
+            snapshot_without_template.output_price_per_m
+        );
+        assert_eq!(
+            snapshot_with_template.cache_input_price_per_m,
+            snapshot_without_template.cache_input_price_per_m
+        );
+        assert_eq!(
+            snapshot_with_template.cache_output_price_per_m,
+            snapshot_without_template.cache_output_price_per_m
+        );
+        assert_eq!(
+            snapshot_with_template.total_cost,
+            snapshot_without_template.total_cost
+        );
+    }
+}

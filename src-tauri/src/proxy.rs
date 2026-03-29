@@ -21,7 +21,7 @@ mod observability;
 mod pipeline;
 pub(crate) mod routing;
 
-const MAX_REQUEST_BODY_BYTES: usize = 10 * 1024 * 1024;
+const MAX_REQUEST_BODY_BYTES: usize = 1000 * 1024 * 1024;
 const MAX_STREAM_LOG_BODY_BYTES: usize = 256 * 1024;
 const NON_STREAM_REQUEST_TIMEOUT_MS: u64 = 60_000;
 const MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS: u64 = 300_000;

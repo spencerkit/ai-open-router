@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.0 - 2026-03-29
+### Features
+- add curated billing pricing templates for common vendors, including OpenAI, Anthropic, MiniMax, and Zhipu families (c4ab077)
+- add a billing template picker in the rule form for one-click preset application (20596c7)
+- persist billing template attribution in stored rule metadata and types (7409b6c)
+### Fixes
+- default missing template price fields to `0`, including cases where official cache output pricing is unavailable (ab402d0)
+- harden billing template application, preserve intentionally blank partial fields, and stabilize modified-state tracking in the rule form (33adca1, b97fc5c, ed234fb)
+- raise the proxy request body size limit to accept larger upstream payloads (a4e9973)
+### Maintenance
+- add billing template regression coverage, including nested default handling and snapshot protection (059fb65, ad20fb0, 1e1f066)
+- remove superpowers planning artifacts and keep the billing template design note in repo history (0584bfc, b5f8d74)
+- upgrade npm dependencies and realign proxy Rust files with `rustfmt` for CI stability (9ac5e42, 5abdccd)
+
 ## v0.2.20 - 2026-03-29
 ### Features
 - feat: add provider paste import parser (25024b9)
