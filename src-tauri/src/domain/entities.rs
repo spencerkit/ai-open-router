@@ -169,6 +169,20 @@ pub fn default_rule_quota_config() -> RuleQuotaConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BillingTemplateAttribution {
+    pub vendor_id: String,
+    pub vendor_label: String,
+    pub model_id: String,
+    pub model_label: String,
+    pub source_url: String,
+    pub verified_at: String,
+    pub applied_at: String,
+    #[serde(default)]
+    pub modified_after_apply: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuleCostConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -182,6 +196,8 @@ pub struct RuleCostConfig {
     pub cache_output_price_per_m: f64,
     #[serde(default = "default_cost_currency")]
     pub currency: String,
+    #[serde(default)]
+    pub template: Option<BillingTemplateAttribution>,
 }
 
 /// Performs default cost currency.
@@ -198,6 +214,7 @@ pub fn default_rule_cost_config() -> RuleCostConfig {
         cache_input_price_per_m: 0.0,
         cache_output_price_per_m: 0.0,
         currency: default_cost_currency(),
+        template: None,
     }
 }
 

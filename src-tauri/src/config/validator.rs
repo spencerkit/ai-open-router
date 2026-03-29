@@ -119,7 +119,8 @@ mod tests {
     use super::validate_config;
     use crate::config::schema::default_config;
     use crate::domain::entities::{
-        default_rule_cost_config, default_rule_quota_config, Group, Rule, RuleProtocol,
+        default_rule_cost_config, default_rule_quota_config, Group, Rule, RuleCostConfig,
+        RuleProtocol,
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -161,6 +162,49 @@ mod tests {
         assert!(!group.failover.enabled);
         assert_eq!(group.failover.failure_threshold, 3);
         assert_eq!(group.failover.cooldown_seconds, 300);
+    }
+
+    #[test]
+    fn rule_cost_template_deserializes_when_present() {
+        let raw = json!({
+            "enabled": true,
+            "inputPricePerM": 3.0,
+            "outputPricePerM": 15.0,
+            "cacheInputPricePerM": 0.3,
+            "cacheOutputPricePerM": 3.75,
+            "currency": "USD",
+            "template": {
+                "vendorId": "anthropic",
+                "vendorLabel": "Anthropic",
+                "modelId": "claude-sonnet-4-5",
+                "modelLabel": "Claude Sonnet 4.5",
+                "sourceUrl": "https://platform.claude.com/docs/zh-CN/about-claude/pricing",
+                "verifiedAt": "2026-03-29",
+                "appliedAt": "2026-03-29T00:00:00.000Z",
+                "modifiedAfterApply": false
+            }
+        });
+
+        let cost: RuleCostConfig = serde_json::from_value(raw).expect("cost should deserialize");
+        let template = cost.template.expect("template should exist");
+        assert_eq!(template.vendor_id, "anthropic");
+        assert_eq!(template.model_label, "Claude Sonnet 4.5");
+        assert!(!template.modified_after_apply);
+    }
+
+    #[test]
+    fn rule_cost_template_defaults_to_none_when_missing() {
+        let raw = json!({
+            "enabled": true,
+            "inputPricePerM": 2.5,
+            "outputPricePerM": 10.0,
+            "cacheInputPricePerM": 1.25,
+            "cacheOutputPricePerM": 0.0,
+            "currency": "USD"
+        });
+
+        let cost: RuleCostConfig = serde_json::from_value(raw).expect("cost should deserialize");
+        assert!(cost.template.is_none());
     }
 
     #[test]

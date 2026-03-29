@@ -88,6 +88,18 @@ export interface RuleCostConfig {
   cacheInputPricePerM: number
   cacheOutputPricePerM: number
   currency: string
+  template?: BillingTemplateAttribution | null
+}
+
+export interface BillingTemplateAttribution {
+  vendorId: string
+  vendorLabel: string
+  modelId: string
+  modelLabel: string
+  sourceUrl: string
+  verifiedAt: string
+  appliedAt: string
+  modifiedAfterApply: boolean
 }
 
 /**
