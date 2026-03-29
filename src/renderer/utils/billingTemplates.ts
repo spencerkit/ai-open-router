@@ -4,26 +4,33 @@ export type BillingTemplateCompleteness = "full" | "partial"
 export type BillingTemplateAvailability = "ready" | "unpriced"
 
 export interface BillingTemplate {
-  vendorId: string
-  vendorLabel: string
-  modelId: string
-  modelLabel: string
-  searchAliases: string[]
-  currency: string
-  inputPricePerM?: number
-  outputPricePerM?: number
-  cacheInputPricePerM?: number
-  cacheOutputPricePerM?: number
-  completeness: BillingTemplateCompleteness
-  availability: BillingTemplateAvailability
-  sourceUrl: string
-  sourceNote: string
-  verifiedAt: string
+  readonly vendorId: string
+  readonly vendorLabel: string
+  readonly modelId: string
+  readonly modelLabel: string
+  readonly searchAliases: readonly string[]
+  readonly currency: string
+  readonly inputPricePerM?: number
+  readonly outputPricePerM?: number
+  readonly cacheInputPricePerM?: number
+  readonly cacheOutputPricePerM?: number
+  readonly completeness: BillingTemplateCompleteness
+  readonly availability: BillingTemplateAvailability
+  readonly sourceUrl: string
+  readonly sourceNote: string
+  readonly verifiedAt: string
 }
 
 const VERIFIED_AT = "2026-03-29"
 
-export const BILLING_TEMPLATES: BillingTemplate[] = [
+function freezeBillingTemplate(template: BillingTemplate): BillingTemplate {
+  return Object.freeze({
+    ...template,
+    searchAliases: Object.freeze([...template.searchAliases]),
+  })
+}
+
+const BILLING_TEMPLATE_CATALOG: BillingTemplate[] = [
   {
     vendorId: "openai",
     vendorLabel: "OpenAI",
@@ -335,9 +342,13 @@ export const BILLING_TEMPLATES: BillingTemplate[] = [
   },
 ]
 
-export function searchBillingTemplates(query: string): BillingTemplate[] {
+export const BILLING_TEMPLATES: readonly BillingTemplate[] = Object.freeze(
+  BILLING_TEMPLATE_CATALOG.map(template => freezeBillingTemplate(template))
+)
+
+export function searchBillingTemplates(query: string): readonly BillingTemplate[] {
   const normalized = query.trim().toLowerCase()
-  if (!normalized) return BILLING_TEMPLATES
+  if (!normalized) return [...BILLING_TEMPLATES]
 
   return BILLING_TEMPLATES.filter(template => {
     const haystacks = [
@@ -394,6 +405,10 @@ export function applyBillingTemplateToCost(
   template: BillingTemplate,
   appliedAt: string
 ): RuleCostConfig {
+  if (!canApplyBillingTemplate(template)) {
+    throw new Error(`Cannot apply billing template for ${template.vendorId}/${template.modelId}`)
+  }
+
   const next: RuleCostConfig = {
     ...current,
     currency: template.currency,

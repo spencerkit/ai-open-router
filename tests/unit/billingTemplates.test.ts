@@ -3,6 +3,7 @@ import { test } from "node:test"
 
 import {
   applyBillingTemplateToCost,
+  BILLING_TEMPLATES,
   canApplyBillingTemplate,
   doesCostMatchBillingTemplate,
   findBillingTemplate,
@@ -22,6 +23,16 @@ test("searchBillingTemplates matches vendor, model, and alias text", () => {
     searchBillingTemplates("glm5").some(item => item.modelId === "glm-5"),
     true
   )
+})
+
+test("searchBillingTemplates returns detached arrays and exposes a readonly catalog shape", () => {
+  const allTemplates = searchBillingTemplates("")
+  const secondSearch = searchBillingTemplates("")
+
+  assert.notEqual(allTemplates, BILLING_TEMPLATES)
+  assert.notEqual(allTemplates, secondSearch)
+  assert.deepEqual(allTemplates, BILLING_TEMPLATES)
+  assert.deepEqual(secondSearch, BILLING_TEMPLATES)
 })
 
 test("applyBillingTemplateToCost only overwrites defined fields for partial templates", () => {
@@ -49,10 +60,58 @@ test("applyBillingTemplateToCost only overwrites defined fields for partial temp
   assert.equal(next.template?.modifiedAfterApply, false)
 })
 
+test("applyBillingTemplateToCost overwrites all priced fields for full templates including Anthropic cache mapping", () => {
+  const template = findBillingTemplate("anthropic", "claude-sonnet-4-5")
+  assert.ok(template)
+
+  const next = applyBillingTemplateToCost(
+    {
+      enabled: true,
+      inputPricePerM: 999,
+      outputPricePerM: 888,
+      cacheInputPricePerM: 777,
+      cacheOutputPricePerM: 666,
+      currency: "CNY",
+    },
+    template,
+    "2026-03-29T00:00:00.000Z"
+  )
+
+  assert.equal(next.currency, "USD")
+  assert.equal(next.inputPricePerM, 3)
+  assert.equal(next.outputPricePerM, 15)
+  assert.equal(next.cacheInputPricePerM, 0.3)
+  assert.equal(next.cacheOutputPricePerM, 3.75)
+  assert.equal(next.template?.vendorId, "anthropic")
+  assert.equal(next.template?.modelId, "claude-sonnet-4-5")
+})
+
 test("canApplyBillingTemplate returns false for official but unpriced placeholders", () => {
   const template = findBillingTemplate("zhipu", "glm-5")
   assert.ok(template)
   assert.equal(canApplyBillingTemplate(template), false)
+})
+
+test("applyBillingTemplateToCost rejects official but unpriced placeholders when called directly", () => {
+  const template = findBillingTemplate("zhipu", "glm-5")
+  assert.ok(template)
+
+  assert.throws(
+    () =>
+      applyBillingTemplateToCost(
+        {
+          enabled: true,
+          inputPricePerM: 9,
+          outputPricePerM: 8,
+          cacheInputPricePerM: 7,
+          cacheOutputPricePerM: 6,
+          currency: "USD",
+        },
+        template,
+        "2026-03-29T00:00:00.000Z"
+      ),
+    /cannot apply billing template/i
+  )
 })
 
 test("doesCostMatchBillingTemplate detects modified pricing against the seeded template", () => {
