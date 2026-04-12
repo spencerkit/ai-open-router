@@ -333,6 +333,7 @@ function createConfig(): ProxyConfig {
         apiAddress: "https://api.example.com/v1",
         website: "https://example.com",
         defaultModel: "gpt-test",
+        models: ["gpt-test"],
         modelMappings: {},
         quota: {
           enabled: false,
@@ -643,7 +644,6 @@ test("RuleFormPage parse and apply fills imported fields, preserves omitted webs
   assert.match(markup, /Rule Name is required/)
   assert.match(markup, /Token is required/)
   assert.match(markup, /API Address is required/)
-  assert.match(markup, /Default Model is required/)
 
   tree = harness.renderReady()
   const openButton = findButtonByText(tree, "Open Import")
@@ -678,13 +678,12 @@ test("RuleFormPage parse and apply fills imported fields, preserves omitted webs
   assert.equal(findInputById(tree, "name").props.value, "Imported Provider")
   assert.equal(findInputById(tree, "token").props.value, "imported-secret")
   assert.equal(findInputById(tree, "apiAddress").props.value, "https://imported.example.com/v1")
-  assert.equal(findInputById(tree, "defaultModel").props.value, "gpt-imported")
+  assert.equal(findInputById(tree, "provider-models").props.value, "")
   assert.equal(findInputById(tree, "website").props.value, "https://preserved.example.com")
   assert.doesNotMatch(markup, /Paste Config Import/)
   assert.doesNotMatch(markup, /Rule Name is required/)
   assert.doesNotMatch(markup, /Token is required/)
   assert.doesNotMatch(markup, /API Address is required/)
-  assert.doesNotMatch(markup, /Default Model is required/)
 })
 
 test("RuleFormPage opens billing template picker only after cost is enabled", () => {

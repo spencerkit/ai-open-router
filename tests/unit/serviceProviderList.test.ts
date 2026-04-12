@@ -51,10 +51,20 @@ const translations: Record<string, string> = {
   "servicePage.availabilityAvailable": "Available",
   "servicePage.availabilityUnavailable": "Unavailable",
   "servicePage.availabilityUntested": "Untested",
+  "servicePage.providerCost": "Cost Calculation",
+  "servicePage.miniRequests": "Req",
+  "servicePage.miniInputTokens": "Input",
+  "servicePage.miniOutputTokens": "Output",
+  "providersPage.models": "Models",
+  "providersPage.duplicateProvider": "Duplicate Provider",
+  "providersPage.deleteProvider": "Delete Provider",
+  "providersPage.addProvider": "Add Provider",
+  "providersPage.empty": "No providers yet",
   "ruleForm.officialWebsite": "Official Website",
   "ruleProtocol.openai": "OpenAI",
   "ruleProtocol.openai_completion": "OpenAI Completion",
   "ruleProtocol.anthropic": "Anthropic",
+  "ruleQuota.unsupported": "Unsupported",
 }
 
 function translate(key: string, options?: TranslateOptions): string {
@@ -168,6 +178,14 @@ function loadCatalogProviderList() {
   return require("../../src/renderer/pages/ProvidersPage/ProviderList") as typeof import("../../src/renderer/pages/ProvidersPage/ProviderList")
 }
 
+function loadCommonComponents() {
+  return require("../../src/renderer/components/common") as typeof import("../../src/renderer/components/common")
+}
+
+function loadSelectModule() {
+  return require("../../src/renderer/components/common/Select") as typeof import("../../src/renderer/components/common/Select")
+}
+
 function createProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     id: overrides.id ?? "provider-1",
@@ -177,6 +195,7 @@ function createProvider(overrides: Partial<Provider> = {}): Provider {
     apiAddress: overrides.apiAddress ?? "https://provider.example.com/v1",
     website: overrides.website,
     defaultModel: overrides.defaultModel ?? "gpt-4.1-mini",
+    models: overrides.models ?? [],
     modelMappings: overrides.modelMappings ?? {},
     quota: overrides.quota ?? {
       enabled: false,
@@ -316,7 +335,7 @@ test("keeps provider name, protocol, status, and compact metadata visible in ser
   assert.match(markup, /Delete: Provider A/)
 })
 
-test("keeps provider name, protocol, status, default model, and compact API address visible in catalog cards", () => {
+test("keeps provider name, protocol, status, default model, compact API address, and models visible in catalog cards", () => {
   const markup = renderCatalogProviderList({
     providers: [
       createProvider({
@@ -325,6 +344,7 @@ test("keeps provider name, protocol, status, default model, and compact API addr
         protocol: "openai",
         apiAddress: "https://api.openai.com/v1/responses?foo=bar",
         defaultModel: "gpt-4.1-mini",
+        models: ["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini"],
       }),
     ],
     providerHealthByProviderId: {
@@ -345,6 +365,9 @@ test("keeps provider name, protocol, status, default model, and compact API addr
   assert.match(markup, />gpt-4\.1-mini</)
   assert.match(markup, />API Address</)
   assert.match(markup, />api\.openai\.com</)
+  assert.match(markup, />Models:/)
+  assert.match(markup, />gpt-4\.1<\/span>/)
+  assert.match(markup, />gpt-4o-mini<\/span>/)
 })
 
 test("shows testing badge while a provider test is in progress", () => {
@@ -357,6 +380,51 @@ test("shows testing badge while a provider test is in progress", () => {
   })
 
   assert.match(markup, />Testing</)
+})
+
+test("exports Select from the common barrel and renders placeholder, hint, and disabled options", () => {
+  const { Select } = loadCommonComponents()
+  const { Select: DirectSelect } = loadSelectModule()
+
+  assert.equal(Select, DirectSelect)
+
+  const markup = renderToStaticMarkup(
+    React.createElement(Select, {
+      label: "Provider",
+      placeholder: "Choose a provider",
+      value: "",
+      disabled: false,
+      hint: "Pick the active provider",
+      options: [
+        { label: "Anthropic", value: "anthropic" },
+        { label: "OpenAI", value: "openai", disabled: true },
+      ],
+      onChange: () => {},
+    })
+  )
+
+  assert.match(markup, /<label[^>]*>Provider<\/label>/)
+  assert.match(markup, /<option value=""[^>]*>Choose a provider<\/option>/)
+  assert.match(markup, /<option value="anthropic"[^>]*>Anthropic<\/option>/)
+  assert.match(markup, /<option value="openai" disabled=""[^>]*>OpenAI<\/option>/)
+  assert.match(markup, /Pick the active provider/)
+})
+
+test("renders Select error state with aria-invalid and error message", () => {
+  const { Select } = loadSelectModule()
+
+  const markup = renderToStaticMarkup(
+    React.createElement(Select, {
+      value: "anthropic",
+      error: "Provider is required",
+      options: [{ label: "Anthropic", value: "anthropic" }],
+      onChange: () => {},
+    })
+  )
+
+  assert.match(markup, /aria-invalid="true"/)
+  assert.match(markup, /role="alert"/)
+  assert.match(markup, /Provider is required/)
 })
 
 test.after(() => {

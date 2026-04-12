@@ -302,7 +302,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const [showToken, setShowToken] = useState(false)
   const [apiAddress, setApiAddress] = useState("")
   const [website, setWebsite] = useState("")
-  const [defaultModel, setDefaultModel] = useState("")
   const [modelMappings, setModelMappings] = useState<Record<string, string>>({})
   const [models, setModels] = useState<string[]>([])
   const [newModelName, setNewModelName] = useState("")
@@ -351,7 +350,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     name?: string
     token?: string
     apiAddress?: string
-    defaultModel?: string
     quotaEndpoint?: string
     quotaHeaders?: string
     quotaRemaining?: string
@@ -444,7 +442,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setToken(provider.token)
     setApiAddress(provider.apiAddress)
     setWebsite(provider.website || "")
-    setDefaultModel(provider.defaultModel ?? "")
     setModelMappings(provider.modelMappings || {})
     setModels(provider.models ?? [])
     setHeaderPassthroughAllowText(formatHeaderPassthroughList(provider.headerPassthroughAllow))
@@ -554,7 +551,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
         token,
         apiAddress,
         website,
-        defaultModel,
+        defaultModel: models[0] ?? "",
       },
       importResult.draft
     )
@@ -564,13 +561,11 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setToken(nextFields.token)
     setApiAddress(nextFields.apiAddress)
     setWebsite(nextFields.website)
-    setDefaultModel(nextFields.defaultModel)
     setErrors(prev => ({
       ...prev,
       name: undefined,
       token: undefined,
       apiAddress: undefined,
-      defaultModel: undefined,
     }))
     setShowImportModal(false)
   }
@@ -663,7 +658,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       name?: string
       token?: string
       apiAddress?: string
-      defaultModel?: string
       quotaEndpoint?: string
       quotaHeaders?: string
       quotaRemaining?: string
@@ -686,9 +680,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     }
     if (!apiAddress.trim()) {
       nextErrors.apiAddress = t("validation.required", { field: t("servicePage.apiAddress") })
-    }
-    if (!defaultModel.trim()) {
-      nextErrors.defaultModel = t("validation.required", { field: t("servicePage.defaultModel") })
     }
 
     if (quotaEnabled) {
@@ -724,10 +715,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     }
     if (nextErrors.apiAddress) {
       focusField("apiAddress")
-      return false
-    }
-    if (nextErrors.defaultModel) {
-      focusField("defaultModel")
       return false
     }
     if (nextErrors.quotaEndpoint) {
@@ -823,7 +810,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
         name: name.trim() || "Draft Provider",
         token,
         apiAddress,
-        defaultModel,
+        defaultModel: models[0] ?? "",
         quotaConfig,
       })
       setQuotaTestResult(result)
@@ -874,8 +861,8 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       token,
       apiAddress,
       website: website.trim(),
+      defaultModel: models[0] ?? "",
       models,
-      defaultModel: defaultModel.trim(),
       modelMappings: Object.fromEntries(
         Object.entries(modelMappings)
           .map(([key, value]) => [key.trim(), value.trim()])
@@ -951,7 +938,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     name.trim() &&
     token.trim() &&
     apiAddress.trim() &&
-    defaultModel.trim() &&
     (!quotaEnabled || (quotaEndpoint.trim() && quotaRemainingExpr.trim()))
   const breadcrumbLabel = isEditMode && provider ? provider.name : t("ruleCreatePage.newRule")
   const backLabel = isGlobalMode ? t("header.providers") : t("header.backToService")
@@ -1084,21 +1070,48 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
               <h2 className={styles.sectionTitle}>{t("ruleForm.sectionModelSettings")}</h2>
 
               <div className={styles.formGroup}>
-                <label htmlFor="defaultModel">{t("servicePage.defaultModel")}</label>
-                <Input
-                  id="defaultModel"
-                  value={defaultModel}
-                  onChange={e => {
-                    setDefaultModel(e.target.value)
-                    if (errors.defaultModel) {
-                      setErrors(prev => ({ ...prev, defaultModel: undefined }))
-                    }
-                  }}
-                  placeholder={t("ruleForm.defaultModelPlaceholder")}
-                  className={styles.input}
-                  error={errors.defaultModel}
-                  hint={t("ruleForm.defaultModelHint")}
-                />
+                <label htmlFor="provider-models">{t("providersPage.models")}</label>
+                {models.length > 0 && (
+                  <div className={styles.modelsTags}>
+                    {models.map((model, index) => (
+                      <span key={model} className={styles.modelTag}>
+                        {model}
+                        <button
+                          type="button"
+                          onClick={() => setModels(models.filter((_, i) => i !== index))}
+                          className={styles.modelTagRemove}
+                          aria-label={`Remove ${model}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.modelInputRow}>
+                  <Input
+                    id="provider-models"
+                    type="text"
+                    value={newModelName}
+                    onChange={e => setNewModelName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleAddModel()
+                      }
+                    }}
+                    placeholder={t("ruleForm.addModelPlaceholder")}
+                    className={styles.input}
+                  />
+                  <Button
+                    type="button"
+                    variant="default"
+                    onClick={handleAddModel}
+                    disabled={!newModelName.trim()}
+                  >
+                    {t("ruleForm.add")}
+                  </Button>
+                </div>
               </div>
             </section>
 
@@ -1615,52 +1628,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
                   </div>
                 </>
               )}
-            </section>
-
-            <section className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <span className={styles.sectionTitle}>{t("providersPage.models")}</span>
-              </div>
-              {models.length > 0 && (
-                <div className={styles.modelsTags}>
-                  {models.map((model, index) => (
-                    <span key={model} className={styles.modelTag}>
-                      {model}
-                      <button
-                        type="button"
-                        onClick={() => setModels(models.filter((_, i) => i !== index))}
-                        className={styles.modelTagRemove}
-                        aria-label={`Remove ${model}`}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className={styles.modelInputRow}>
-                <Input
-                  type="text"
-                  value={newModelName}
-                  onChange={e => setNewModelName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      handleAddModel()
-                    }
-                  }}
-                  placeholder={t("ruleForm.addModelPlaceholder")}
-                  className={styles.input}
-                />
-                <Button
-                  type="button"
-                  variant="default"
-                  onClick={handleAddModel}
-                  disabled={!newModelName.trim()}
-                >
-                  {t("ruleForm.add")}
-                </Button>
-              </div>
             </section>
 
             <div className={styles.formActions}>

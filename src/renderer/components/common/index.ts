@@ -2,6 +2,7 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from ".
 export { Input, type InputProps, type InputSize, type InputType } from "./Input"
 export { JsonTreeView, type JsonTreeViewProps } from "./JsonTreeView"
 export { Modal, type ModalProps, type ModalSize } from "./Modal"
+export { Select, type SelectOption, type SelectProps } from "./Select"
 export { Switch, type SwitchProps, type SwitchSize } from "./Switch"
 export {
   Toast,

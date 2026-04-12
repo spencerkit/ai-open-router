@@ -1,3 +1,11 @@
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-secondary);
+}
+
 .groupEditPage {
   height: 100%;
   display: flex;
@@ -8,6 +16,9 @@
 .form {
   display: grid;
   gap: var(--sp-4);
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-6);
 }
 
 .section {
@@ -25,6 +36,7 @@
   font-weight: var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  margin: 0;
 }
 
 .formGroup label {
@@ -32,23 +44,6 @@
   font-size: var(--text-sm);
   color: var(--text-secondary);
   margin-bottom: var(--sp-2);
-}
-
-.checkboxRow {
-  display: grid;
-  gap: var(--sp-2);
-}
-
-.checkboxLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.checkboxLabel input {
-  margin: 0;
 }
 
 .hint {
@@ -61,19 +56,132 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--sp-2);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
 }
 
-.loading {
+/* ── Routing Table ── */
+.routingSectionHeader {
   display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.routingHeaderActions {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.templateSelect {
+  min-width: 140px;
+}
+
+.select {
+  width: 100%;
+}
+
+.routingTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.routingTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.routingTable th {
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-xs);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.routingTable td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.routingTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.defaultRow {
+  background: var(--bg-surface);
+}
+
+.readonlyInput {
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+}
+
+.select {
+  width: 100%;
+}
+
+.actionCell {
+  width: 80px;
+  text-align: center;
+}
+
+.removeButton {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  font-size: var(--text-sm);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
   color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.removeButton:hover {
+  background: var(--bg-danger-subtle);
+  color: var(--text-danger);
+  border-color: var(--border-danger);
+}
+
+.lockedLabel {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 
 @media (max-width: 768px) {
   .actions {
     flex-direction: column-reverse;
+  }
+
+  .routingSectionHeader {
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .routingHeaderActions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .templateSelect {
+    flex: 1;
   }
 }

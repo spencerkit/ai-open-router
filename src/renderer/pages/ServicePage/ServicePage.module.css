@@ -124,11 +124,6 @@
   color: var(--accent);
 }
 
-.groupItem.active .groupRuleCount {
-  background: var(--accent-subtle);
-  color: var(--accent);
-}
-
 .groupPath {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
@@ -152,6 +147,11 @@
   color: var(--text-tertiary);
   font-size: 10px;
   font-family: var(--font-mono);
+}
+
+.groupItem.active .groupRuleCount {
+  background: var(--accent-subtle);
+  color: var(--accent);
 }
 
 .activeIcon {
@@ -660,6 +660,68 @@
   gap: var(--sp-2);
 }
 
+.ruleItemContainer .ruleItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: color var(--transition-fast);
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  gap: 4px;
+}
+
+.ruleItemContainer .ruleCardTop {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  gap: var(--sp-2);
+  min-height: 40px;
+}
+
+.ruleItemContainer .ruleTitleLine {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.ruleItemContainer .ruleModel {
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.ruleItemContainer .ruleDirection {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-active);
+  flex-shrink: 0;
+}
+
+.ruleItemContainer .ruleHeaderRight {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
+
 .ruleItemContainerCompact .ruleItem {
   padding: 0;
   min-height: auto;
@@ -721,23 +783,39 @@
   gap: 8px;
 }
 
-.ruleItemContainerCatalog .ruleTitleLine {
-  flex-wrap: wrap;
-  gap: 6px;
+.ruleItemContainerCatalog .ruleTitleLine,
+.ruleItemContainerCompact .ruleTitleLine,
+.ruleItemContainer .ruleTitleLine {
+  display: flex;
   align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-width: 0;
 }
 
-.ruleItemContainerCatalog .ruleModel {
-  font-size: 14px;
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0;
+.ruleItemContainerCatalog .ruleModel,
+.ruleItemContainerCompact .ruleModel,
+.ruleItemContainer .ruleModel {
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
-.ruleItemContainerCatalog .ruleDirection {
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  border: none;
-  background: color-mix(in oklab, var(--accent) 10%, var(--surface));
+.ruleItemContainerCatalog .ruleDirection,
+.ruleItemContainerCompact .ruleDirection,
+.ruleItemContainer .ruleDirection {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-active);
+  flex-shrink: 0;
 }
 
 .ruleItemContainerCatalog .ruleHeaderRight {
@@ -841,30 +919,6 @@
   border: 1px solid color-mix(in oklab, var(--success) 44%, transparent);
 }
 
-.ruleItem {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  width: 100%;
-  padding: 0 var(--sp-2);
-  border-radius: var(--radius-sm);
-  text-align: left;
-  transition: color var(--transition-fast);
-  flex: 1;
-  min-width: 0;
-  min-height: 40px;
-  gap: 4px;
-}
-
-.ruleCardTop {
-  display: flex;
-  align-items: flex-start;
-  width: 100%;
-  gap: var(--sp-2);
-  min-height: 40px;
-}
-
 .ruleCardBottom {
   display: flex;
   align-items: center;
@@ -908,6 +962,61 @@
   flex-wrap: wrap;
 }
 
+.quotaRefreshButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.quotaRefreshButton:hover {
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
+.quotaRefreshButton:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.quotaBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  max-width: 160px;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 2px;
+  font-size: 8px;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: none;
+  flex-shrink: 0;
+}
+
+.quotaResetAt {
+  font-size: 8px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 .ruleMetaLeftCatalog .quotaRefreshButton {
   width: 24px;
   height: 24px;
@@ -931,6 +1040,146 @@
 
 .ruleMetaLeftCatalog .quotaResetAt {
   font-size: 9px;
+}
+
+.activateIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.ruleItemContainer:hover .activateIconButton {
+  opacity: 1;
+}
+
+.activateIconButton:hover {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.activateIconButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.activateIconButton:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+.testIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  position: relative;
+  opacity: 0;
+}
+
+.ruleItemContainer:hover .testIconButton {
+  opacity: 1;
+}
+
+.testIconButton:hover {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.testIconButton:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.testIconButton:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+.editButton,
+.deleteButton,
+.testIconButton,
+.headerIconButton {
+  position: relative;
+}
+
+.editButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.ruleItemContainer:hover .editButton {
+  opacity: 1;
+}
+
+.editButton:hover {
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
+.editButton:focus-visible {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+.deleteButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.ruleItemContainer:hover .deleteButton {
+  opacity: 1;
+}
+
+.deleteButton:hover {
+  background: rgba(192, 57, 43, 0.08);
+  color: var(--danger);
+}
+
+.deleteButton:focus-visible {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
 }
 
 .ruleActionButtons {
@@ -967,15 +1216,6 @@
   box-shadow:
     inset 0 1px 0 color-mix(in oklab, white 14%, transparent),
     0 2px 8px color-mix(in oklab, black 5%, transparent);
-}
-
-.ruleHeaderRight {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-left: auto;
-  flex-shrink: 0;
-  justify-content: flex-end;
 }
 
 .quotaBadge {
@@ -1019,35 +1259,28 @@
   background: var(--surface-active);
 }
 
-.ruleModel {
-  font-weight: var(--weight-medium);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
+.providerCompactApiValue {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.25;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  flex: 0 1 auto;
+  font-variant-numeric: tabular-nums;
 }
 
-.ruleTitleLine {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  width: 100%;
-  min-width: 0;
-}
-
-.providerCompactCardTop,
-.providerCatalogCardTop {
+.providerCatalogCardTop,
+.providerCompactCardTop {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
 }
 
-.providerCompactCardHeader,
-.providerCatalogCardHeader {
+.providerCatalogCardHeader,
+.providerCompactCardHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1063,33 +1296,22 @@
   flex: 1 1 auto;
 }
 
-.providerCompactCardHeader .ruleTitleLine,
-.providerCatalogCardHeader .ruleTitleLine {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.providerCompactCardHeader .ruleHeaderRight,
-.providerCatalogCardHeader .ruleHeaderRight {
-  flex: 0 0 auto;
-}
-
-.providerPanelEyebrow {
-  color: var(--text-tertiary);
-  font-size: 9px;
-  font-weight: var(--weight-semibold);
-  font-family: var(--font-body);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.providerCompactSummaryRow {
+.providerCompactSummaryRow,
+.providerCatalogSummaryRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   align-items: stretch;
+}
+
+.providerCompactSummaryRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.providerCatalogSummaryRow {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
 
 .providerCompactModelPanel,
@@ -1115,20 +1337,10 @@
 
 .providerCatalogModelPanel,
 .providerCatalogUsagePanel {
+  display: grid;
+  align-content: start;
+  gap: 6px;
   padding: 7px 8px;
-}
-
-.providerCompactModelValue,
-.providerCatalogModelValue {
-  min-width: 0;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-variant-numeric: tabular-nums;
 }
 
 .providerCompactSignalPanel {
@@ -1147,22 +1359,6 @@
   width: 100%;
 }
 
-.providerCatalogSummaryRow {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  align-items: stretch;
-}
-
-.providerCatalogModelPanel,
-.providerCatalogUsagePanel {
-  display: grid;
-  align-content: start;
-  gap: 6px;
-}
-
 .providerCatalogMetaRow {
   display: grid;
   gap: 4px;
@@ -1173,6 +1369,19 @@
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.providerCompactModelValue,
+.providerCatalogModelValue {
+  min-width: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 
 .providerCompactApiValue {
@@ -1229,6 +1438,32 @@
   text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.providerPanelEyebrow {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.providerCompactCardHeader .ruleTitleLine,
+.providerCatalogCardHeader .ruleTitleLine {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.providerCompactCardHeader .ruleHeaderRight,
+.providerCatalogCardHeader .ruleHeaderRight,
+.ruleItemContainer .ruleHeaderRight {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+  flex-shrink: 0;
+  justify-content: flex-end;
 }
 
 .ruleTitleExternalLink {
@@ -1466,16 +1701,6 @@
   color: var(--text-tertiary);
 }
 
-.ruleDirection {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  padding: 2px var(--sp-2);
-  border-radius: var(--radius-full);
-  background: var(--surface-active);
-  flex-shrink: 0;
-}
-
 .ruleApiAddress {
   display: inline-block;
   flex: 0 1 280px;
@@ -1498,17 +1723,6 @@
   min-width: 0;
   flex: 1 1 auto;
   flex-wrap: wrap;
-}
-
-.quotaResetAt {
-  font-size: 8px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
 }
 
 .activateIconButton {
@@ -2206,6 +2420,146 @@
   margin-top: var(--sp-5);
 }
 
+.routingEditor {
+  display: grid;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.routingEditorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.routingEditorTitleWrap {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.routingEditorTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+
+.routingEditorHint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.routingEditorToolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.routingEditorTemplateSelect {
+  min-width: 220px;
+}
+
+.routingEditorTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.routingEditorTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.routingEditorTable th,
+.routingEditorTable td {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.routingEditorTable th {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: color-mix(in oklab, var(--surface) 70%, var(--bg-raised));
+}
+
+.routingEditorTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.routingEditorDefaultRow {
+  background: color-mix(in oklab, var(--accent) 6%, var(--surface));
+}
+
+.routingEditorReadonlyInput {
+  font-family: var(--font-mono);
+}
+
+.routingEditorActionCell {
+  width: 92px;
+  text-align: center;
+}
+
+.routingEditorLockedLabel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.routingEditorRemoveButton {
+  width: 32px;
+  height: 32px;
+  border: 1px solid color-mix(in oklab, var(--danger) 24%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--danger) 7%, var(--surface));
+  color: var(--danger);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.routingEditorRemoveButton:hover {
+  background: color-mix(in oklab, var(--danger) 12%, var(--surface));
+  border-color: color-mix(in oklab, var(--danger) 36%, var(--border));
+}
+
+.routingEditorRemoveButton:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.routingEditorFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.routingEditorError {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
 @media (max-width: 1024px) {
   .servicePage {
     gap: var(--sp-4);
@@ -2220,6 +2574,25 @@
 @media (max-width: 768px) {
   .servicePage {
     flex-direction: column;
+  }
+
+  .routingEditorHeader,
+  .routingEditorFooter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .routingEditorToolbar {
+    width: 100%;
+  }
+
+  .routingEditorTemplateSelect {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .routingEditorActionCell {
+    width: auto;
   }
 
   .sidebar {
@@ -2275,7 +2648,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .ruleItem {
+  .ruleItemContainerCompact .ruleItem,
+  .ruleItemContainer .ruleItem {
     min-height: 52px;
   }
 
@@ -2368,14 +2742,17 @@
     display: flex;
   }
 
+  .ruleItemContainerCompact .deleteButton,
   .deleteButton {
     opacity: 1;
   }
 
+  .ruleItemContainerCompact .editButton,
   .editButton {
     opacity: 1;
   }
 
+  .ruleItemContainerCompact .testIconButton,
   .testIconButton {
     opacity: 1;
   }

@@ -362,6 +362,14 @@ export const ProviderList: React.FC<{
                             {compactApiAddress}
                           </span>
                         </div>
+                        <div className={styles.providerCompactModelPanel}>
+                          <span className={styles.providerPanelEyebrow}>
+                            {t("servicePage.latency")}
+                          </span>
+                          <span className={styles.providerCompactModelValue}>
+                            {health.latencyLabel || "-"}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>

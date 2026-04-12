@@ -128,17 +128,45 @@ fn resolve_provider_for_test(
             .iter()
             .find(|group| group.id == group_id)
             .ok_or_else(|| AppError::not_found(format!("group not found: {group_id}")))?;
-        return group
+
+        if let Some(provider) = group
             .providers
             .iter()
             .flatten()
             .find(|provider| provider.id == normalized_provider_id)
             .cloned()
-            .ok_or_else(|| {
-                AppError::not_found(format!(
-                    "provider not found in group {group_id}: {provider_id}"
-                ))
+        {
+            return Ok(provider);
+        }
+
+        let routed_provider_id = group
+            .routing_table
+            .iter()
+            .find_map(|route| {
+                let route_provider_id = route.provider_id.trim();
+                if route_provider_id == normalized_provider_id {
+                    Some(route_provider_id)
+                } else {
+                    None
+                }
             });
+
+        if routed_provider_id.is_some() {
+            return config
+                .providers
+                .iter()
+                .find(|provider| provider.id == normalized_provider_id)
+                .cloned()
+                .ok_or_else(|| {
+                    AppError::not_found(format!(
+                        "provider not found in group {group_id}: {provider_id}"
+                    ))
+                });
+        }
+
+        return Err(AppError::not_found(format!(
+            "provider not found in group {group_id}: {provider_id}"
+        )));
     }
 
     config
@@ -625,7 +653,11 @@ mod tests {
             groups: vec![Group {
                 id: "group-a".to_string(),
                 name: "Group A".to_string(),
-                routing_table: vec![],
+                routing_table: vec![crate::models::RouteEntry {
+                    request_model: "default".to_string(),
+                    provider_id: "global-provider".to_string(),
+                    target_model: "gpt-5-mini".to_string(),
+                }],
                 models: Some(vec![]),
                 provider_ids: Some(vec!["group-provider".to_string()]),
                 active_provider_id: Some("group-provider".to_string()),
@@ -675,6 +707,18 @@ mod tests {
 
         assert_eq!(provider.id, "group-provider");
         assert_eq!(provider.token, "group-token");
+    }
+
+    #[test]
+    /// Resolves providers referenced only by routing_table from the global provider catalog.
+    fn resolve_provider_for_test_reads_routing_table_provider_from_global_catalog() {
+        let config = sample_config();
+
+        let provider = resolve_provider_for_test(&config, Some("group-a"), "global-provider")
+            .expect("routing table provider should resolve from global catalog");
+
+        assert_eq!(provider.id, "global-provider");
+        assert_eq!(provider.token, "global-token");
     }
 
     #[test]

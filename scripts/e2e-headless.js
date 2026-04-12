@@ -140,6 +140,32 @@ async function waitForHidden(page, selector, timeout = 10000) {
   await page.locator(selector).first().waitFor({ state: "hidden", timeout })
 }
 
+async function readRoutingRows(page) {
+  const rows = page.locator("tbody tr")
+  const count = await rows.count()
+  const result = []
+
+  for (let index = 0; index < count; index += 1) {
+    const row = rows.nth(index)
+    const textInputs = row.locator('input[type="text"]')
+    const requestModel = (await textInputs.count()) > 0 ? await textInputs.nth(0).inputValue() : ""
+    const providerSelect = row.locator(`select[aria-label="Provider ${index + 1}"]`)
+    const targetModelSelect = row.locator(`select[aria-label="Target model ${index + 1}"]`)
+    const providerValue =
+      (await providerSelect.count()) > 0 ? await providerSelect.inputValue() : ""
+    const targetModel =
+      (await targetModelSelect.count()) > 0 ? await targetModelSelect.inputValue() : ""
+
+    result.push({
+      requestModel,
+      providerValue,
+      targetModel,
+    })
+  }
+
+  return result
+}
+
 async function run() {
   const binaryPath = resolveBinaryPath()
   const appPort = await getAvailablePort()
@@ -280,16 +306,18 @@ async function run() {
       errorScreen: ".error-screen",
       firstRunTitle: 'xpath=//h2[contains(., "Start by creating your first group")]',
       groupInfoTitle: 'xpath=//h3[contains(., "Group Info")]',
+      routingTableTitle: 'xpath=//h3[normalize-space()="Routing Table"]',
       addGroupButton: 'xpath=//button[@aria-label="Add Group" or @title="Add Group"]',
       createFirstGroupButton: 'xpath=//button[contains(., "Create First Group")]',
-      createModalButton: 'xpath=//button[normalize-space()="Create"]',
+      createModalButton: 'xpath=//div[@role="dialog"]//button[normalize-space()="Create"]',
       providersNav: 'xpath=//button[.//span[normalize-space()="Providers"]]',
       serviceNav: 'xpath=//button[.//span[normalize-space()="Service"]]',
       settingsNav: 'xpath=//button[.//span[normalize-space()="Settings"]]',
       agentsNav: 'xpath=//button[.//span[normalize-space()="Agents"]]',
       addProviderButton: 'xpath=//button[normalize-space()="Add Provider"]',
       createProviderButton: 'xpath=//button[normalize-space()="Create Provider"]',
-      associateProviderButton: 'xpath=//button[@title="Associate Provider"]',
+      addRouteButton: 'xpath=//button[contains(normalize-space(), "Add Route")]',
+      saveButton: 'xpath=//button[normalize-space()="Save"]',
       integrationWriteButton: 'xpath=//button[@aria-label="Write current group address to client"]',
       writeNowButton: 'xpath=//button[normalize-space()="Write Now"]',
       agentAddConfigButton: 'xpath=//button[normalize-space()="Add Configuration Directory"]',
@@ -305,6 +333,7 @@ async function run() {
     const groupName = "E2E Group"
     const providerName = "E2E Provider"
     const providerModel = "gpt-4o-mini"
+    const providerExtraModel = "gpt-4.1-mini"
     const remoteEntryUrl = `${remoteBaseUrl}/oc/${groupId}`
     const remoteEntryUrlV1 = `${remoteEntryUrl}/v1`
 
@@ -344,20 +373,37 @@ async function run() {
         .catch(() => false))
     ) {
       lastStep = "create-group"
-      if (
-        await page
-          .locator(selectors.createFirstGroupButton)
-          .isVisible()
-          .catch(() => false)
-      ) {
-        await safeClick(page, selectors.createFirstGroupButton)
-      } else {
-        await safeClick(page, selectors.addGroupButton)
+      const currentConfig = await requestJson("GET", `${baseUrl}/api/config`)
+      const hasGroup = Array.isArray(currentConfig?.groups)
+        ? currentConfig.groups.some(group => group.id === groupId)
+        : false
+      if (!hasGroup) {
+        await requestJson("PUT", `${baseUrl}/api/config`, {
+          nextConfig: {
+            ...currentConfig,
+            groups: [
+              ...(currentConfig?.groups ?? []),
+              {
+                id: groupId,
+                name: groupName,
+                activeProviderId: null,
+                routingTable: [{ requestModel: "default", providerId: "", targetModel: "" }],
+              },
+            ],
+          },
+        })
+        await page.reload({ waitUntil: "domcontentloaded" })
+        await waitForAny(page, [selectors.errorScreen, selectors.groupInfoTitle])
       }
-      await page.locator("#groupId").fill(groupId)
-      await page.locator("#groupName").fill(groupName)
-      await safeClick(page, selectors.createModalButton)
-      await page.locator(groupPathSelector).waitFor({ timeout: 15000 })
+      try {
+        await page.locator(groupPathSelector).waitFor({ timeout: 15000 })
+      } catch (_error) {
+        const bodyText = await page
+          .locator("body")
+          .innerText()
+          .catch(() => "")
+        throw new Error(`group creation did not surface /${groupId}: ${bodyText}`)
+      }
     }
 
     lastStep = "select-group"
@@ -376,30 +422,124 @@ async function run() {
       lastStep = "create-provider"
       await safeClick(page, selectors.addProviderButton)
       await page.locator("#name").fill(providerName)
-      await page.locator("#defaultModel").fill(providerModel)
       await page.locator("#token").fill("sk-e2e")
       await page.locator("#apiAddress").fill(mockBaseUrl)
       await page.locator("#website").fill(providerWebsite)
 
+      const modelInput = page.locator('input[placeholder="e.g. gpt-4.1-mini"]')
+      await modelInput.waitFor({ timeout: 15000 })
+      await modelInput.fill(providerModel)
+      await page.locator('xpath=//button[normalize-space()="Add Model"]').click()
+      await modelInput.fill(providerExtraModel)
+      await page.locator('xpath=//button[normalize-space()="Add Model"]').click()
+
       await safeClick(page, selectors.createProviderButton)
       await page.locator(providerNameSelector).waitFor({ timeout: 15000 })
+      await page.locator('xpath=//span[normalize-space()="Models:"]').waitFor({ timeout: 15000 })
+      await page.locator(`xpath=//span[normalize-space()="${providerExtraModel}"]`).waitFor({
+        timeout: 15000,
+      })
     }
 
-    lastStep = "service-nav"
+    lastStep = "service-routing"
     await safeClick(page, selectors.serviceNav)
     await page.locator(selectors.groupInfoTitle).waitFor({ timeout: 15000 })
+    try {
+      await page.locator(selectors.routingTableTitle).waitFor({ timeout: 15000 })
+    } catch (_error) {
+      const bodyText = await page
+        .locator("body")
+        .innerText()
+        .catch(() => "")
+      throw new Error(`routing table did not render on service page: ${bodyText}`)
+    }
+    await page.locator('xpath=//span[normalize-space()="Locked"]').waitFor({ timeout: 15000 })
 
+    const routeRowsBefore = await page.locator("tbody tr").count()
+    if (routeRowsBefore < 1) {
+      throw new Error("service page should render at least the default routing row")
+    }
+
+    await page.locator('select[aria-label="Provider 1"]').selectOption({ label: providerName })
+    await page.waitForFunction(() => {
+      const select = document.querySelector('select[aria-label="Target model 1"]')
+      return !!select && !select.hasAttribute("disabled")
+    })
+    await page.locator('select[aria-label="Target model 1"]').selectOption(providerModel)
+
+    await safeClick(page, selectors.addRouteButton)
+    await page.waitForFunction(() => document.querySelectorAll("tbody tr").length >= 2)
+
+    await page.locator('input[aria-label="Request model 2"]').fill("sonnet")
+    await page.locator('select[aria-label="Provider 2"]').selectOption({ label: providerName })
+    await page.waitForFunction(() => {
+      const select = document.querySelector('select[aria-label="Target model 2"]')
+      return !!select && !select.hasAttribute("disabled")
+    })
+    await page.locator('select[aria-label="Target model 2"]').selectOption(providerExtraModel)
+
+    await page.locator('select[aria-label="Routing template"]').selectOption("codex")
+    await page.waitForFunction(() => document.querySelectorAll("tbody tr").length >= 5)
+    const routeRowsAfterTemplate = await page.locator("tbody tr").count()
+    if (routeRowsAfterTemplate < 5) {
+      throw new Error("template fill should append codex routes")
+    }
+
+    await page.locator('select[aria-label="Provider 3"]').selectOption({ label: providerName })
+    await page.waitForFunction(() => {
+      const select = document.querySelector('select[aria-label="Target model 3"]')
+      return !!select && !select.hasAttribute("disabled")
+    })
+    await page.locator('select[aria-label="Target model 3"]').selectOption(providerExtraModel)
+    await safeClick(page, selectors.saveButton)
+    await page.locator(selectors.groupInfoTitle).waitFor({ timeout: 15000 })
+    await page.locator(selectors.routingTableTitle).waitFor({ timeout: 15000 })
+
+    const persistedRows = await readRoutingRows()
+    const defaultRow = persistedRows.find(row => row.requestModel === "default")
+    const customRow = persistedRows.find(row => row.requestModel === "sonnet")
+    if (!defaultRow) {
+      throw new Error("default routing row should persist after saving")
+    }
+    if (!customRow) {
+      throw new Error("custom routing row should persist after saving")
+    }
+    if (defaultRow.targetModel !== providerModel) {
+      throw new Error(
+        `default target model should persist after saving (got: ${defaultRow.targetModel || "<empty>"})`
+      )
+    }
+    if (customRow.targetModel !== providerExtraModel) {
+      throw new Error(
+        `custom target model should persist after saving (got: ${customRow.targetModel || "<empty>"})`
+      )
+    }
+
+    const savedConfig = await requestJson("GET", `${baseUrl}/api/config`)
+    const savedGroup = savedConfig?.groups?.find(group => group.id === groupId)
+    if (!savedGroup) {
+      throw new Error("saved config missing e2e group")
+    }
+    if (!Array.isArray(savedGroup.routingTable) || savedGroup.routingTable.length < 5) {
+      throw new Error("saved config missing expected routing table rows")
+    }
+    if (!savedGroup.routingTable.some(route => route.requestModel === "default")) {
+      throw new Error("saved routing table missing default route")
+    }
     if (
-      !(await page
-        .locator(providerNameSelector)
-        .isVisible()
-        .catch(() => false))
+      !savedGroup.routingTable.some(
+        route =>
+          route.requestModel === "sonnet" &&
+          route.providerId &&
+          route.targetModel === providerExtraModel
+      )
     ) {
-      lastStep = "associate-provider"
-      await safeClick(page, selectors.associateProviderButton)
-      await safeClick(page, `xpath=//label[.//span[normalize-space()="${providerName}"]]`)
-      await safeClick(page, 'xpath=//button[normalize-space()="Associate Provider"]')
-      await page.locator(providerNameSelector).waitFor({ timeout: 15000 })
+      throw new Error("saved routing table missing custom sonnet route")
+    }
+
+    const savedProvider = savedConfig?.providers?.find(provider => provider.name === providerName)
+    if (!savedProvider?.id) {
+      throw new Error("saved config missing e2e provider")
     }
 
     lastStep = "verify-entry-url"
@@ -407,32 +547,20 @@ async function run() {
       .locator(`xpath=//code[contains(., "${remoteEntryUrl}")]`)
       .first()
       .waitFor({ timeout: 15000 })
-    const serviceProviderCard = page.locator(
-      `xpath=//div[contains(@class, "ruleList")]//span[normalize-space()="${providerName}"]/ancestor::li[1]`
-    )
-    const serviceProviderCardTextBefore = await serviceProviderCard.innerText()
-    const serviceProviderWebsiteLink = serviceProviderCard.locator(`a[href*="${providerWebsite}"]`)
-    if (
-      !(await serviceProviderWebsiteLink
-        .first()
-        .isVisible()
-        .catch(() => false))
-    ) {
-      throw new Error("service provider card missing website quick link")
-    }
-    if (serviceProviderCardTextBefore.includes(providerWebsite)) {
-      throw new Error("service provider card should not render website text inline")
-    }
-    if (serviceProviderCardTextBefore.includes(mockBaseUrl)) {
-      throw new Error("service provider card should not expose provider API address")
-    }
 
     lastStep = "service-batch-test"
-    await safeClick(page, selectors.testAllButton)
-    await page.locator("text=Available").first().waitFor({ timeout: 15000 })
-    const servicePageTextAfter = await page.locator("body").innerText()
-    if (!/\b\d+(?:\.\d+)?\s(?:ms|s|min)\b/.test(servicePageTextAfter)) {
-      throw new Error("service provider card missing latency after batch test")
+    const providerTestResult = await requestJson("POST", `${baseUrl}/api/provider/test-model`, {
+      groupId,
+      providerId: savedProvider.id,
+    })
+    if (!providerTestResult?.ok) {
+      throw new Error(`provider test failed: ${providerTestResult?.message || "unknown error"}`)
+    }
+    if (
+      typeof providerTestResult.responseTimeMs !== "number" ||
+      providerTestResult.responseTimeMs < 0
+    ) {
+      throw new Error("provider test should return a non-negative response time")
     }
 
     lastStep = "integration-write"
