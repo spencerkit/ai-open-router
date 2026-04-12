@@ -15,7 +15,6 @@ use tauri::AppHandle;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-mod failover;
 mod net;
 mod observability;
 mod pipeline;
@@ -38,7 +37,6 @@ struct ProxyRuntimeInner {
     config_revision: Arc<AtomicU64>,
     route_index: Arc<RwLock<routing::RouteIndex>>,
     route_index_revision: Arc<AtomicU64>,
-    failover_state: Arc<RwLock<failover::FailoverStateMap>>,
     log_store: LogStore,
     stats_store: StatsStore,
     metrics: Arc<observability::MetricsState>,
@@ -61,7 +59,6 @@ pub(crate) struct ServiceState {
     config_revision: Arc<AtomicU64>,
     route_index: Arc<RwLock<routing::RouteIndex>>,
     route_index_revision: Arc<AtomicU64>,
-    failover_state: Arc<RwLock<failover::FailoverStateMap>>,
     log_store: LogStore,
     stats_store: StatsStore,
     metrics: Arc<observability::MetricsState>,
@@ -97,7 +94,6 @@ impl ProxyRuntime {
                 route_index_revision: Arc::new(AtomicU64::new(
                     config_revision.load(Ordering::Acquire),
                 )),
-                failover_state: Arc::new(RwLock::new(failover::FailoverStateMap::default())),
                 log_store,
                 stats_store,
                 metrics: Arc::new(observability::MetricsState::new()),
@@ -157,7 +153,6 @@ impl ProxyRuntime {
             config_revision: self.inner.config_revision.clone(),
             route_index: self.inner.route_index.clone(),
             route_index_revision: self.inner.route_index_revision.clone(),
-            failover_state: self.inner.failover_state.clone(),
             log_store: self.inner.log_store.clone(),
             stats_store: self.inner.stats_store.clone(),
             metrics: self.inner.metrics.clone(),
@@ -250,59 +245,21 @@ impl ProxyRuntime {
         };
 
         let metrics = self.inner.metrics.snapshot();
-        let group_runtime = match (self.inner.config.read(), self.inner.failover_state.read()) {
-            (Ok(config), Ok(failover_state)) => config
+        let group_runtime = match self.inner.config.read() {
+            Ok(config) => config
                 .groups
                 .iter()
                 .map(|group| {
-                    let preferred_provider_id = group.active_provider_id.clone();
-                    let provider_ids = if group.provider_ids.as_ref().is_some_and(|p| !p.is_empty()) {
-                        group.provider_ids.clone().unwrap()
-                    } else {
-                        group
-                            .providers
-                            .iter()
-                            .flatten()
-                            .map(|provider| provider.id.clone())
-                            .collect::<Vec<_>>()
-                    };
-                    let failover_config = failover::FailoverConfigSnapshot {
-                        enabled: group.failover.as_ref().map_or(false, |f| f.enabled),
-                        failure_threshold: group.failover.as_ref().map_or(3, |f| f.failure_threshold),
-                        cooldown_seconds: group.failover.as_ref().map_or(300, |f| f.cooldown_seconds),
-                    };
-                    let current_provider_id =
-                        preferred_provider_id
-                            .as_ref()
-                            .and_then(|preferred_provider_id| {
-                                failover::runtime_current_provider_id(
-                                    &failover_state,
-                                    &group.id,
-                                    preferred_provider_id,
-                                    &provider_ids,
-                                    &failover_config,
-                                    chrono::Utc::now(),
-                                )
-                            });
-                    let failover_active_provider_id =
-                        failover::active_failover_provider_id(&failover_state, &group.id);
-                    let failover_active = failover_active_provider_id
-                        .as_ref()
-                        .zip(current_provider_id.as_ref())
-                        .map(|(failover_provider_id, current_provider_id)| {
-                            failover_provider_id == current_provider_id
-                        })
-                        .unwrap_or(false);
-
+                    let current_provider_id = group.active_provider_id.clone();
                     GroupRuntimeStatus {
                         group_id: group.id.clone(),
                         current_provider_id,
-                        failover_active_provider_id,
-                        failover_active,
+                        failover_active_provider_id: None,
+                        failover_active: false,
                     }
                 })
                 .collect(),
-            _ => Vec::new(),
+            Err(_) => Vec::new(),
         };
 
         ProxyStatus {
@@ -436,7 +393,6 @@ pub(crate) fn headless_service_state_for_tests() -> ServiceState {
         config_revision,
         route_index,
         route_index_revision,
-        failover_state: runtime.inner.failover_state.clone(),
         log_store,
         stats_store,
         metrics: Arc::new(observability::MetricsState::new()),
@@ -450,15 +406,15 @@ pub(crate) fn headless_service_state_for_tests() -> ServiceState {
 mod tests {
     use super::observability::{extract_token_usage, StreamTokenAccumulator};
     use super::pipeline::resolve_request_timeout_ms;
-    use super::routing::{detect_entry_protocol, resolve_target_model, resolve_upstream_path};
+    use crate::proxy::routing::{detect_entry_protocol, resolve_target_model, resolve_upstream_path};
     use super::{
         headless_service_state_for_tests, MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS,
         NON_STREAM_REQUEST_TIMEOUT_MS,
     };
+    use crate::domain::entities::RouteEntry;
     use crate::models::{
-        default_rule_cost_config, default_rule_quota_config, Group, Rule, RuleProtocol,
+        default_rule_cost_config, default_rule_quota_config, RuleProtocol,
     };
-    use chrono::Utc;
     use serde_json::{json, Value};
     use std::collections::HashMap;
 
@@ -575,195 +531,6 @@ mod tests {
     }
 
     #[test]
-    fn get_status_marks_failover_inactive_when_runtime_has_returned_to_preferred_provider() {
-        let service_state = headless_service_state_for_tests();
-        let shared = service_state
-            .shared_state
-            .clone()
-            .expect("headless service state should include shared state");
-
-        let mut next_config = shared.config_store.get();
-        let primary = Rule {
-            id: "p1".to_string(),
-            name: "Primary".to_string(),
-            protocol: RuleProtocol::Anthropic,
-            token: "primary-token".to_string(),
-            api_address: "https://primary.example.com".to_string(),
-            website: String::new(),
-            default_model: "claude-primary".to_string(),
-            model_mappings: HashMap::new(),
-            header_passthrough_allow: Vec::new(),
-            header_passthrough_deny: Vec::new(),
-            quota: default_rule_quota_config(),
-            cost: default_rule_cost_config(),
-        };
-        let secondary = Rule {
-            id: "p2".to_string(),
-            name: "Secondary".to_string(),
-            protocol: RuleProtocol::Anthropic,
-            token: "secondary-token".to_string(),
-            api_address: "https://secondary.example.com".to_string(),
-            website: String::new(),
-            default_model: "claude-secondary".to_string(),
-            model_mappings: HashMap::new(),
-            header_passthrough_allow: Vec::new(),
-            header_passthrough_deny: Vec::new(),
-            quota: default_rule_quota_config(),
-            cost: default_rule_cost_config(),
-        };
-        next_config.groups = vec![Group {
-            id: "dev".to_string(),
-            name: "Dev".to_string(),
-            models: vec!["claude-test".to_string()],
-            provider_ids: vec!["p1".to_string(), "p2".to_string()],
-            active_provider_id: Some("p1".to_string()),
-            providers: vec![primary.clone(), secondary.clone()],
-            failover: crate::models::GroupFailoverConfig {
-                enabled: true,
-                failure_threshold: 1,
-                cooldown_seconds: 1,
-            },
-        }];
-        next_config.providers = vec![primary, secondary];
-        shared
-            .config_store
-            .save_config(next_config)
-            .expect("test config should save");
-
-        {
-            let mut runtime = service_state
-                .failover_state
-                .write()
-                .expect("failover state lock should be writable");
-            crate::proxy::failover::record_provider_failure(
-                &mut runtime,
-                "dev",
-                "p1",
-                &["p1".to_string(), "p2".to_string()],
-                &crate::proxy::failover::FailoverConfigSnapshot {
-                    enabled: true,
-                    failure_threshold: 1,
-                    cooldown_seconds: 1,
-                },
-                Utc::now() - chrono::Duration::seconds(2),
-            );
-        }
-
-        let status = shared.runtime.get_status();
-        let runtime_group = status
-            .group_runtime
-            .into_iter()
-            .find(|group| group.group_id == "dev")
-            .expect("runtime group status should exist");
-
-        assert_eq!(runtime_group.current_provider_id.as_deref(), Some("p1"));
-        assert_eq!(
-            runtime_group.failover_active_provider_id.as_deref(),
-            Some("p2")
-        );
-        assert!(!runtime_group.failover_active);
-    }
-
-    #[test]
-    fn get_status_reports_runtime_failover_provider_without_mutating_config_active_provider() {
-        let service_state = headless_service_state_for_tests();
-        let shared = service_state
-            .shared_state
-            .clone()
-            .expect("headless service state should include shared state");
-
-        let mut next_config = shared.config_store.get();
-        let primary = Rule {
-            id: "p1".to_string(),
-            name: "Primary".to_string(),
-            protocol: RuleProtocol::Anthropic,
-            token: "primary-token".to_string(),
-            api_address: "https://primary.example.com".to_string(),
-            website: String::new(),
-            default_model: "claude-primary".to_string(),
-            model_mappings: HashMap::new(),
-            header_passthrough_allow: Vec::new(),
-            header_passthrough_deny: Vec::new(),
-            quota: default_rule_quota_config(),
-            cost: default_rule_cost_config(),
-        };
-        let secondary = Rule {
-            id: "p2".to_string(),
-            name: "Secondary".to_string(),
-            protocol: RuleProtocol::Anthropic,
-            token: "secondary-token".to_string(),
-            api_address: "https://secondary.example.com".to_string(),
-            website: String::new(),
-            default_model: "claude-secondary".to_string(),
-            model_mappings: HashMap::new(),
-            header_passthrough_allow: Vec::new(),
-            header_passthrough_deny: Vec::new(),
-            quota: default_rule_quota_config(),
-            cost: default_rule_cost_config(),
-        };
-        next_config.groups = vec![Group {
-            id: "dev".to_string(),
-            name: "Dev".to_string(),
-            models: vec!["claude-test".to_string()],
-            provider_ids: vec!["p1".to_string(), "p2".to_string()],
-            active_provider_id: Some("p1".to_string()),
-            providers: vec![primary.clone(), secondary.clone()],
-            failover: crate::models::GroupFailoverConfig {
-                enabled: true,
-                failure_threshold: 1,
-                cooldown_seconds: 60,
-            },
-        }];
-        next_config.providers = vec![primary, secondary];
-        shared
-            .config_store
-            .save_config(next_config)
-            .expect("test config should save");
-
-        {
-            let mut runtime = service_state
-                .failover_state
-                .write()
-                .expect("failover state lock should be writable");
-            crate::proxy::failover::record_provider_failure(
-                &mut runtime,
-                "dev",
-                "p1",
-                &["p1".to_string(), "p2".to_string()],
-                &crate::proxy::failover::FailoverConfigSnapshot {
-                    enabled: true,
-                    failure_threshold: 1,
-                    cooldown_seconds: 60,
-                },
-                Utc::now(),
-            );
-        }
-
-        let status = shared.runtime.get_status();
-        let group = shared
-            .config_store
-            .get()
-            .groups
-            .into_iter()
-            .find(|group| group.id == "dev")
-            .expect("group should exist");
-
-        let runtime_group = status
-            .group_runtime
-            .into_iter()
-            .find(|group| group.group_id == "dev")
-            .expect("runtime group status should exist");
-
-        assert_eq!(group.active_provider_id.as_deref(), Some("p1"));
-        assert_eq!(runtime_group.current_provider_id.as_deref(), Some("p2"));
-        assert_eq!(
-            runtime_group.failover_active_provider_id.as_deref(),
-            Some("p2")
-        );
-        assert!(runtime_group.failover_active);
-    }
-
-    #[test]
     /// Performs stream token accumulator aggregates usage from chunked SSE.
     fn stream_token_accumulator_aggregates_usage_from_chunked_sse() {
         let mut acc = StreamTokenAccumulator::default();
@@ -795,108 +562,27 @@ mod tests {
     }
 
     #[test]
-    /// Resolves target model uses group and rule mapping for this module's workflow.
-    fn resolve_target_model_uses_group_and_rule_mapping() {
-        let mut mappings = HashMap::new();
-        mappings.insert("sonnet".to_string(), "claude-sonnet-4-5".to_string());
-        let rule = Rule {
-            id: "r1".to_string(),
-            name: "rule".to_string(),
-            protocol: RuleProtocol::Openai,
-            token: "t".to_string(),
-            api_address: "https://api.example.com".to_string(),
-            website: String::new(),
-            default_model: "fallback".to_string(),
-            model_mappings: mappings,
-            header_passthrough_allow: Vec::new(),
-            header_passthrough_deny: Vec::new(),
-            quota: default_rule_quota_config(),
-            cost: default_rule_cost_config(),
+    /// Resolves target model returns the route entry target model.
+    fn resolve_target_model_returns_route_entry_target_model() {
+        let entry = RouteEntry {
+            request_model: "claude-sonnet-4-5".to_string(),
+            provider_id: "p1".to_string(),
+            target_model: "claude-sonnet-4-5".to_string(),
         };
-        let group = Group {
-            id: "g1".to_string(),
-            name: "Group".to_string(),
-            models: vec!["sonnet".to_string()],
-            provider_ids: vec!["r1".to_string()],
-            active_provider_id: Some("r1".to_string()),
-            providers: vec![rule.clone()],
-            failover: crate::models::default_group_failover_config(),
-        };
-
-        let model = resolve_target_model(
-            &rule,
-            &group.models,
-            &json!({ "model": "claude-3-7-sonnet-20250219" }),
-        );
+        let model = resolve_target_model(&entry);
         assert_eq!(model, "claude-sonnet-4-5");
     }
 
     #[test]
-    /// Resolves target model uses case-insensitive fuzzy group matching.
-    fn resolve_target_model_matches_group_model_fuzzily_case_insensitive() {
-        let mut mappings = HashMap::new();
-        mappings.insert("codex-mini".to_string(), "gpt-5-codex-mini".to_string());
-        let rule = Rule {
-            id: "r1".to_string(),
-            name: "rule".to_string(),
-            protocol: RuleProtocol::Openai,
-            token: "t".to_string(),
-            api_address: "https://api.example.com".to_string(),
-            website: String::new(),
-            default_model: "fallback".to_string(),
-            model_mappings: mappings,
-            header_passthrough_allow: Vec::new(),
-            header_passthrough_deny: Vec::new(),
-            quota: default_rule_quota_config(),
-            cost: default_rule_cost_config(),
+    /// Resolves target model returns the default entry target model.
+    fn resolve_target_model_returns_default_entry_target_model() {
+        let entry = RouteEntry {
+            request_model: "default".to_string(),
+            provider_id: "p1".to_string(),
+            target_model: "claude-3-5-sonnet".to_string(),
         };
-        let group = Group {
-            id: "g1".to_string(),
-            name: "Group".to_string(),
-            models: vec!["codex-mini".to_string()],
-            provider_ids: vec!["r1".to_string()],
-            active_provider_id: Some("r1".to_string()),
-            providers: vec![rule.clone()],
-            failover: crate::models::default_group_failover_config(),
-        };
-
-        let model = resolve_target_model(
-            &rule,
-            &group.models,
-            &json!({ "model": "GPT-5-CODEX-MINI" }),
-        );
-        assert_eq!(model, "gpt-5-codex-mini");
-    }
-
-    #[test]
-    /// Resolves target model falls back to default model when unmatched for this module's workflow.
-    fn resolve_target_model_falls_back_to_default_model_when_unmatched() {
-        let rule = Rule {
-            id: "r1".to_string(),
-            name: "rule".to_string(),
-            protocol: RuleProtocol::Openai,
-            token: "t".to_string(),
-            api_address: "https://api.example.com".to_string(),
-            website: String::new(),
-            default_model: "fallback".to_string(),
-            model_mappings: HashMap::new(),
-            header_passthrough_allow: Vec::new(),
-            header_passthrough_deny: Vec::new(),
-            quota: default_rule_quota_config(),
-            cost: default_rule_cost_config(),
-        };
-        let group = Group {
-            id: "g1".to_string(),
-            name: "Group".to_string(),
-            models: vec!["m1".to_string()],
-            provider_ids: vec!["r1".to_string()],
-            active_provider_id: Some("r1".to_string()),
-            providers: vec![rule.clone()],
-            failover: crate::models::default_group_failover_config(),
-        };
-
-        let model = resolve_target_model(&rule, &group.models, &json!({ "model": "unknown" }));
-        assert_eq!(model, "fallback");
+        let model = resolve_target_model(&entry);
+        assert_eq!(model, "claude-3-5-sonnet");
     }
 
     #[test]

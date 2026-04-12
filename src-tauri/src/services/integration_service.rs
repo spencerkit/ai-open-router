@@ -1612,11 +1612,30 @@ mod tests {
         config.groups = vec![crate::models::Group {
             id: "dev".to_string(),
             name: "Dev".to_string(),
-            models: vec!["claude-test".to_string()],
-            provider_ids: Vec::new(),
+            routing_table: vec![crate::domain::entities::RouteEntry {
+                request_model: "default".to_string(),
+                provider_id: "p1".to_string(),
+                target_model: "claude-test".to_string(),
+            }],
+            models: Some(vec!["claude-test".to_string()]),
+            provider_ids: Some(vec!["p1".to_string()]),
             active_provider_id: None,
-            providers: Vec::new(),
-            failover: crate::models::default_group_failover_config(),
+            providers: Some(vec![crate::models::Rule {
+                id: "p1".to_string(),
+                name: "p1".to_string(),
+                protocol: crate::models::RuleProtocol::Openai,
+                token: "token".to_string(),
+                api_address: "https://example.com".to_string(),
+                website: String::new(),
+                models: Vec::new(),
+                default_model: Some("claude-test".to_string()),
+                model_mappings: Some(std::collections::HashMap::new()),
+                header_passthrough_allow: Vec::new(),
+                header_passthrough_deny: Vec::new(),
+                quota: crate::models::default_rule_quota_config(),
+                cost: crate::models::default_rule_cost_config(),
+            }]),
+            failover: Some(crate::models::default_group_failover_config()),
         }];
         state
             .config_store

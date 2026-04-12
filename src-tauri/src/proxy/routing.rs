@@ -2,10 +2,9 @@
 //! Path and rule resolution helpers for proxy routing.
 //! Normalizes entry endpoints, selects upstream protocol paths, and computes final upstream URL.
 
-use super::failover::{self, FailoverConfigSnapshot, FailoverRouteDecision};
 use super::ServiceState;
-use crate::models::{default_group_failover_config, GroupFailoverConfig, ProxyConfig, Rule, RuleProtocol};
-use serde_json::Value;
+use crate::domain::entities::{RouteEntry, ProxyConfig};
+use crate::models::{default_rule_cost_config, default_rule_quota_config, Rule, RuleProtocol};
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use url::Url;
@@ -37,24 +36,16 @@ pub(super) struct PathEntry {
 pub(super) struct ActiveRoute {
     pub group_id: String,
     pub group_name: String,
-    pub group_models: Vec<String>,
-    pub provider_ids: Vec<String>,
-    pub preferred_provider_id: String,
-    pub providers_by_id: HashMap<String, Rule>,
-    pub failover: GroupFailoverConfig,
+    pub routing_table: Vec<RouteEntry>,
+    /// The resolved Rule (provider) for this route, populated by resolve_runtime_active_route.
     pub rule: Rule,
 }
 
 #[derive(Clone)]
 pub(super) enum RouteResolution {
     Ready(ActiveRoute),
-    NoActiveRule {
-        group_name: String,
-    },
-    MissingActiveRule {
-        group_name: String,
-        active_rule_id: String,
-    },
+    NoRoutingTable { group_name: String },
+    NoDefaultRoute { group_name: String },
 }
 
 pub(super) type RouteIndex = HashMap<String, RouteResolution>;
@@ -320,150 +311,90 @@ pub(super) fn refresh_route_index_if_needed(state: &ServiceState) -> Result<(), 
     Ok(())
 }
 
-/// Select the current route provider for a group using runtime failover state.
-pub(super) fn select_route_provider(
+/// Resolve the runtime active route by looking up the request model in the routing table.
+///
+/// Returns the resolved ActiveRoute (with the matched RouteEntry isolated) and a reference
+/// to the selected Rule (provider).
+pub(super) fn resolve_runtime_active_route<'a>(
     state: &ServiceState,
-    group_id: &str,
-    preferred_provider_id: &str,
-    provider_ids: &[String],
-    config: &FailoverConfigSnapshot,
-) -> Result<FailoverRouteDecision, String> {
-    state
-        .failover_state
-        .write()
-        .map_err(|_| "failover state lock poisoned".to_string())
-        .map(|mut runtime| {
-            failover::select_provider(
-                &mut runtime,
-                group_id,
-                preferred_provider_id,
-                provider_ids,
-                config,
-            )
-        })
-}
-
-/// Record a provider-side failure for one group/provider pair.
-pub(super) fn record_route_provider_failure(
-    state: &ServiceState,
-    group_id: &str,
-    provider_id: &str,
-    provider_ids: &[String],
-    config: &FailoverConfigSnapshot,
-) -> Result<(), String> {
-    state
-        .failover_state
-        .write()
-        .map_err(|_| "failover state lock poisoned".to_string())
-        .map(|mut runtime| {
-            failover::record_provider_failure(
-                &mut runtime,
-                group_id,
-                provider_id,
-                provider_ids,
-                config,
-                chrono::Utc::now(),
-            )
-        })
-}
-
-/// Record a successful provider request and reset that provider's consecutive failures.
-pub(super) fn record_route_provider_success(
-    state: &ServiceState,
-    group_id: &str,
-    provider_id: &str,
-) -> Result<(), String> {
-    state
-        .failover_state
-        .write()
-        .map_err(|_| "failover state lock poisoned".to_string())
-        .map(|mut runtime| failover::record_provider_success(&mut runtime, group_id, provider_id))
-}
-
-/// Check whether the active failover cooldown has expired for a group.
-pub(super) fn failover_cooldown_expired(
-    state: &ServiceState,
-    group_id: &str,
-) -> Result<bool, String> {
-    state
-        .failover_state
-        .read()
-        .map_err(|_| "failover state lock poisoned".to_string())
-        .map(|runtime| {
-            failover::is_failover_cooldown_expired(&runtime, group_id, chrono::Utc::now())
-        })
-}
-
-pub(super) fn resolve_runtime_active_route(
-    state: &ServiceState,
-    route: &ActiveRoute,
+    route: &'a ActiveRoute,
+    request_model: &str,
 ) -> Result<ActiveRoute, String> {
-    let failover_config = FailoverConfigSnapshot {
-        enabled: route.failover.enabled,
-        failure_threshold: route.failover.failure_threshold,
-        cooldown_seconds: route.failover.cooldown_seconds,
-    };
-    let decision = select_route_provider(
-        state,
-        &route.group_id,
-        &route.preferred_provider_id,
-        &route.provider_ids,
-        &failover_config,
-    )?;
-    let rule = route
-        .providers_by_id
-        .get(&decision.provider_id)
-        .cloned()
-        .ok_or_else(|| format!("Failover provider {} is missing", decision.provider_id))?;
+    // 1. In routing_table, find request_model exact match, or fall back to "default"
+    let entry = route
+        .routing_table
+        .iter()
+        .find(|e| e.request_model == request_model)
+        .or_else(|| route.routing_table.iter().find(|e| e.request_model == "default"))
+        .ok_or("No default route found in routing table")?;
 
+    // 2. Look up the provider by provider_id
+    let config = state
+        .config
+        .read()
+        .map_err(|_| "config lock poisoned")?;
+    let provider = config
+        .providers
+        .iter()
+        .find(|p| p.id == entry.provider_id)
+        .ok_or_else(|| format!("Provider {} not found", entry.provider_id))?
+        .clone();
+
+    // 3. Return resolved route with the matched entry isolated
     let mut resolved = route.clone();
-    resolved.rule = rule;
+    resolved.routing_table = vec![entry.clone()];
+    resolved.rule = provider;
     Ok(resolved)
 }
 
 /// Build a fast lookup table `group_id -> active route resolution`.
 ///
 /// The index carries three states so request handling can distinguish:
-/// - group exists with ready active provider,
-/// - group exists but no active provider configured,
-/// - group exists but active_provider_id points to a missing provider.
+/// - group exists with routing table and a "default" entry (ready),
+/// - group exists but routing table is empty,
+/// - group exists but routing table has no "default" entry.
 pub(super) fn build_route_index(config: &ProxyConfig) -> RouteIndex {
     let mut index = HashMap::with_capacity(config.groups.len());
     for group in &config.groups {
-        let resolution = match group.active_provider_id.as_ref() {
-            Some(active_rule_id) => {
-                match group
-                    .providers
-                    .iter()
-                    .flatten()
-                    .find(|rule| rule.id == *active_rule_id)
-                {
-                    Some(rule) => RouteResolution::Ready(ActiveRoute {
-                        group_id: group.id.clone(),
-                        group_name: group.name.clone(),
-                        group_models: group.models.clone().unwrap_or_default(),
-                        provider_ids: group.provider_ids.clone().unwrap_or_default(),
-                        preferred_provider_id: active_rule_id.clone(),
-                        providers_by_id: group
-                            .providers
-                            .iter()
-                            .flatten()
-                            .cloned()
-                            .map(|provider| (provider.id.clone(), provider))
-                            .collect(),
-                        failover: group.failover.clone().unwrap_or_else(default_group_failover_config),
-                        rule: rule.clone(),
-                    }),
-                    None => RouteResolution::MissingActiveRule {
-                        group_name: group.name.clone(),
-                        active_rule_id: active_rule_id.clone(),
-                    },
-                }
-            }
-            None => RouteResolution::NoActiveRule {
-                group_name: group.name.clone(),
+        if group.routing_table.is_empty() {
+            index.insert(
+                group.id.clone(),
+                RouteResolution::NoRoutingTable {
+                    group_name: group.name.clone(),
+                },
+            );
+            continue;
+        }
+        let has_default = group.routing_table.iter().any(|e| e.request_model == "default");
+        if !has_default {
+            index.insert(
+                group.id.clone(),
+                RouteResolution::NoDefaultRoute {
+                    group_name: group.name.clone(),
+                },
+            );
+            continue;
+        }
+        let resolution = RouteResolution::Ready(ActiveRoute {
+            group_id: group.id.clone(),
+            group_name: group.name.clone(),
+            routing_table: group.routing_table.clone(),
+            rule: Rule {
+                id: String::new(),
+                name: String::new(),
+                protocol: RuleProtocol::Anthropic,
+                token: String::new(),
+                api_address: String::new(),
+                website: String::new(),
+                models: Vec::new(),
+                default_model: None,
+                model_mappings: None,
+                header_passthrough_allow: Vec::new(),
+                header_passthrough_deny: Vec::new(),
+                quota: default_rule_quota_config(),
+                cost: default_rule_cost_config(),
             },
-        };
+        });
         index.insert(group.id.clone(), resolution);
     }
     index
@@ -474,84 +405,13 @@ pub(super) fn assert_rule_ready(rule: &Rule) -> Result<(), (u16, String)> {
     if rule.name.trim().is_empty() {
         return Err((409, "Active rule name is empty".into()));
     }
-    if rule.default_model.as_ref().map_or(true, |m| m.trim().is_empty()) {
-        return Err((409, "Active rule defaultModel is empty".into()));
-    }
-    if rule.token.trim().is_empty() {
-        return Err((409, "Active rule token is empty".into()));
-    }
     if rule.api_address.trim().is_empty() {
         return Err((409, "Active rule apiAddress is empty".into()));
     }
     Ok(())
 }
 
-/// Resolve forwarded model name using request model, group allow-list, and rule mappings.
-///
-/// Resolution order:
-/// 1. requested model if present and allowed by group model list,
-/// 2. exact/normalized rule model mapping,
-/// 3. rule default model.
-pub(super) fn resolve_target_model(
-    rule: &Rule,
-    group_models: &[String],
-    request_body: &Value,
-) -> String {
-    let requested = request_body
-        .get("model")
-        .and_then(|v| v.as_str())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-
-    if let Some(model) = requested {
-        if let Some(matched_model) = find_group_model_match(group_models, &model) {
-            return rule
-                .model_mappings
-                .as_ref()
-                .and_then(|m| m.get(&model).cloned())
-                .or_else(|| rule.model_mappings.as_ref().and_then(|m| m.get(matched_model).cloned()))
-                .unwrap_or(model);
-        }
-    }
-
-    rule.default_model.clone().unwrap_or_default()
-}
-
-/// Finds the best matching group model pattern for a requested model string.
-fn find_group_model_match<'a>(group_models: &'a [String], requested: &str) -> Option<&'a str> {
-    let mut best: Option<&str> = None;
-    for model in group_models {
-        let candidate = model.trim();
-        if candidate.is_empty() {
-            continue;
-        }
-        if !is_model_match(candidate, requested) {
-            continue;
-        }
-        if best
-            .map(|curr| candidate.len() > curr.len())
-            .unwrap_or(true)
-        {
-            best = Some(candidate);
-        }
-    }
-    best
-}
-
-/// Returns true when `candidate` fuzzily matches `requested` (case-insensitive).
-fn is_model_match(candidate: &str, requested: &str) -> bool {
-    let candidate = candidate.trim();
-    let requested = requested.trim();
-    if candidate.is_empty() || requested.is_empty() {
-        return false;
-    }
-
-    if candidate == requested {
-        return true;
-    }
-
-    let candidate_lower = candidate.to_ascii_lowercase();
-    let requested_lower = requested.to_ascii_lowercase();
-
-    requested_lower.contains(&candidate_lower)
+/// Resolve target model from a route entry.
+pub(super) fn resolve_target_model(entry: &RouteEntry) -> String {
+    entry.target_model.clone()
 }

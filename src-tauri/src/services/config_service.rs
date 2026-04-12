@@ -324,8 +324,9 @@ mod tests {
             token: "token".to_string(),
             api_address: "https://example.com".to_string(),
             website: String::new(),
-            default_model: model.to_string(),
-            model_mappings: HashMap::new(),
+            models: Vec::new(),
+            default_model: Some(model.to_string()),
+            model_mappings: Some(HashMap::new()),
             header_passthrough_allow: Vec::new(),
             header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
@@ -338,14 +339,15 @@ mod tests {
         Group {
             id: id.to_string(),
             name: name.to_string(),
-            models: vec!["model-a".to_string()],
-            provider_ids: providers
+            routing_table: vec![],
+            models: Some(vec!["model-a".to_string()]),
+            provider_ids: Some(providers
                 .iter()
                 .map(|provider| provider.id.clone())
-                .collect(),
+                .collect()),
             active_provider_id: active.map(|v| v.to_string()),
-            providers,
-            failover: default_group_failover_config(),
+            providers: Some(providers),
+            failover: Some(default_group_failover_config()),
         }
     }
 
@@ -425,20 +427,26 @@ mod tests {
         assert_eq!(merged.len(), 1);
         let merged_group = &merged[0];
         assert_eq!(merged_group.name, "Imported");
-        assert_eq!(merged_group.providers.len(), 3);
+        assert_eq!(merged_group.providers.as_ref().unwrap().len(), 3);
         let alpha = merged_group
             .providers
+            .as_ref()
+            .unwrap()
             .iter()
             .find(|provider| provider.name == "alpha")
             .expect("alpha provider exists");
         assert_eq!(alpha.id, "p-local");
-        assert_eq!(alpha.default_model, "new-model");
+        assert_eq!(alpha.default_model.as_deref(), Some("new-model"));
         assert!(merged_group
             .providers
+            .as_ref()
+            .unwrap()
             .iter()
             .any(|provider| provider.name == "keep"));
         assert!(merged_group
             .providers
+            .as_ref()
+            .unwrap()
             .iter()
             .any(|provider| provider.name == "beta"));
         assert_eq!(merged_group.active_provider_id, Some("p-local".to_string()));
@@ -448,11 +456,11 @@ mod tests {
     /// Performs import merge preserves current failover config.
     fn import_merge_preserves_current_failover_config() {
         let current = vec![Group {
-            failover: crate::domain::entities::GroupFailoverConfig {
+            failover: Some(crate::domain::entities::GroupFailoverConfig {
                 enabled: true,
                 failure_threshold: 4,
                 cooldown_seconds: 90,
-            },
+            }),
             ..group(
                 "group-a",
                 "Local",
@@ -469,9 +477,9 @@ mod tests {
 
         let merged = merge_imported_groups(&current, &imported);
         assert_eq!(merged.len(), 1);
-        assert!(merged[0].failover.enabled);
-        assert_eq!(merged[0].failover.failure_threshold, 4);
-        assert_eq!(merged[0].failover.cooldown_seconds, 90);
+        assert!(merged[0].failover.as_ref().unwrap().enabled);
+        assert_eq!(merged[0].failover.as_ref().unwrap().failure_threshold, 4);
+        assert_eq!(merged[0].failover.as_ref().unwrap().cooldown_seconds, 90);
     }
 
     #[test]
@@ -520,7 +528,7 @@ mod tests {
             Some("p-local"),
             vec![provider("p-local", "alpha", "old-model")],
         )];
-        initial.providers = initial.groups[0].providers.clone();
+        initial.providers = initial.groups[0].providers.as_ref().unwrap().clone();
         state
             .config_store
             .save_config(initial)
@@ -556,9 +564,9 @@ mod tests {
         assert_eq!(saved.ui.theme, "dark");
         assert_eq!(saved.groups.len(), 1);
         assert_eq!(saved.groups[0].id, "group-local");
-        assert_eq!(saved.groups[0].providers.len(), 1);
-        assert_eq!(saved.groups[0].providers[0].name, "alpha");
-        assert_eq!(saved.groups[0].providers[0].default_model, "new-model");
+        assert_eq!(saved.groups[0].providers.as_ref().unwrap().len(), 1);
+        assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].name, "alpha");
+        assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].default_model.as_deref(), Some("new-model"));
     }
 
     #[tokio::test]
@@ -571,7 +579,7 @@ mod tests {
             Some("p-local"),
             vec![provider("p-local", "alpha", "old-model")],
         )];
-        initial.providers = initial.groups[0].providers.clone();
+        initial.providers = initial.groups[0].providers.as_ref().unwrap().clone();
         state
             .config_store
             .save_config(initial)
@@ -604,9 +612,9 @@ mod tests {
 
         assert_eq!(saved.groups.len(), 1);
         assert_eq!(saved.groups[0].name, "Imported");
-        assert_eq!(saved.groups[0].providers.len(), 1);
-        assert_eq!(saved.groups[0].providers[0].name, "alpha");
-        assert_eq!(saved.groups[0].providers[0].default_model, "new-model");
+        assert_eq!(saved.groups[0].providers.as_ref().unwrap().len(), 1);
+        assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].name, "alpha");
+        assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].default_model.as_deref(), Some("new-model"));
     }
 
     #[tokio::test]
@@ -662,8 +670,8 @@ mod tests {
         assert_eq!(saved.ui.theme, "dark");
         assert_eq!(saved.groups.len(), 1);
         assert_eq!(saved.groups[0].id, "group-imported");
-        assert_eq!(saved.groups[0].providers.len(), 1);
-        assert_eq!(saved.groups[0].providers[0].name, "beta");
+        assert_eq!(saved.groups[0].providers.as_ref().unwrap().len(), 1);
+        assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].name, "beta");
         assert_eq!(saved.providers.len(), 1);
         assert_eq!(saved.providers[0].name, "beta");
         assert!(!saved

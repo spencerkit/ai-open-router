@@ -61,24 +61,26 @@ mod tests {
         Group {
             id: id.to_string(),
             name: name.to_string(),
-            models: vec![],
-            provider_ids: vec!["r1".to_string()],
+            routing_table: Vec::new(),
+            models: Some(vec![]),
+            provider_ids: Some(vec!["r1".to_string()]),
             active_provider_id: None,
-            providers: vec![Rule {
+            providers: Some(vec![Rule {
                 id: "r1".to_string(),
                 name: "rule-1".to_string(),
                 protocol: RuleProtocol::Anthropic,
                 token: "t1".to_string(),
                 api_address: "https://api.example.com".to_string(),
                 website: String::new(),
-                default_model: "claude-3-7-sonnet".to_string(),
-                model_mappings: HashMap::new(),
+                models: Vec::new(),
+                default_model: Some("claude-3-7-sonnet".to_string()),
+                model_mappings: Some(HashMap::new()),
                 header_passthrough_allow: Vec::new(),
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
-            }],
-            failover: crate::models::default_group_failover_config(),
+            }]),
+            failover: Some(crate::models::default_group_failover_config()),
         }
     }
 

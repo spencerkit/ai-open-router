@@ -420,15 +420,21 @@ fn normalize_config_for_storage(config: ProxyConfig) -> Result<ProxyConfig, Stri
         .into_iter()
         .filter(|g| {
             !g.routing_table.is_empty()
-                || g.provider_ids.is_some()
+                || g.provider_ids.as_ref().map_or(false, |ids| !ids.is_empty())
                 || g.providers.as_ref().map_or(false, |p| !p.is_empty())
         })
         .collect();
 
     // Filter out providers that have no models defined.
+    // A provider is valid if it has models in its models list, or if it has a
+    // default_model/model_mappings (legacy providers may only have these fields).
     let valid_providers: Vec<Rule> = providers
         .into_iter()
-        .filter(|p| !p.models.is_empty())
+        .filter(|p| {
+            !p.models.is_empty()
+                || p.default_model.is_some()
+                || p.model_mappings.as_ref().is_some_and(|m| !m.is_empty())
+        })
         .collect();
 
     Ok(ProxyConfig {
@@ -803,7 +809,7 @@ mod tests {
 
         let in_memory = store.get();
         assert_eq!(in_memory.groups.len(), 1);
-        assert_eq!(in_memory.groups[0].providers.len(), 1);
+        assert_eq!(in_memory.groups[0].providers.as_ref().unwrap().len(), 1);
 
         let config_raw = std::fs::read_to_string(&config_path).expect("read config");
         let config_json: serde_json::Value =
@@ -847,9 +853,11 @@ mod tests {
 
         let mut cfg = default_config();
         let mut group = sample_group();
-        group.failover.enabled = true;
-        group.failover.failure_threshold = 5;
-        group.failover.cooldown_seconds = 90;
+        let mut failover_cfg = default_group_failover_config();
+        failover_cfg.enabled = true;
+        failover_cfg.failure_threshold = 5;
+        failover_cfg.cooldown_seconds = 90;
+        group.failover = Some(failover_cfg);
         cfg.groups = vec![group];
         let raw = serde_json::to_string_pretty(&cfg).expect("serialize config");
         std::fs::write(&config_path, raw).expect("write config");
@@ -861,9 +869,9 @@ mod tests {
         second_store.initialize().expect("second initialize");
         let loaded = second_store.get();
         assert_eq!(loaded.groups.len(), 1);
-        assert!(loaded.groups[0].failover.enabled);
-        assert_eq!(loaded.groups[0].failover.failure_threshold, 5);
-        assert_eq!(loaded.groups[0].failover.cooldown_seconds, 90);
+        assert_eq!(loaded.groups[0].failover.as_ref().unwrap().enabled, true);
+        assert_eq!(loaded.groups[0].failover.as_ref().unwrap().failure_threshold, 5);
+        assert_eq!(loaded.groups[0].failover.as_ref().unwrap().cooldown_seconds, 90);
     }
 
     #[test]
@@ -886,7 +894,7 @@ mod tests {
         let loaded = second_store.get();
         assert_eq!(loaded.groups.len(), 1);
         assert_eq!(loaded.groups[0].id, "group-1");
-        assert_eq!(loaded.groups[0].providers[0].id, "provider-1");
+        assert_eq!(loaded.groups[0].providers.as_ref().unwrap()[0].id, "provider-1");
     }
 
     #[test]
@@ -1006,7 +1014,7 @@ mod tests {
         let provider_ids_json =
             serde_json::to_string(&vec!["provider-1".to_string()]).expect("serialize provider ids");
         let provider_json =
-            serde_json::to_string(&sample_group().providers[0]).expect("serialize provider json");
+            serde_json::to_string(sample_group().providers.as_ref().unwrap().first().expect("provider should exist")).expect("serialize provider json");
 
         conn.execute(
             "INSERT INTO group_records(group_id, group_name, models_json, active_provider_id, provider_ids_json, is_deleted)
@@ -1049,8 +1057,8 @@ mod tests {
         let loaded = load_groups_from_legacy_relational_tables(&conn).expect("load groups");
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].id, "group-active");
-        assert_eq!(loaded[0].providers.len(), 1);
-        assert_eq!(loaded[0].providers[0].id, "provider-1");
+        assert_eq!(loaded[0].providers.as_ref().unwrap().len(), 1);
+        assert_eq!(loaded[0].providers.as_ref().unwrap()[0].id, "provider-1");
     }
 
     #[test]
@@ -1088,7 +1096,7 @@ mod tests {
         let provider_ids_json =
             serde_json::to_string(&vec!["provider-1".to_string()]).expect("serialize provider ids");
         let provider_json =
-            serde_json::to_string(&sample_group().providers[0]).expect("serialize provider json");
+            serde_json::to_string(sample_group().providers.as_ref().unwrap().first().expect("provider should exist")).expect("serialize provider json");
 
         conn.execute(
             "INSERT INTO group_records(group_id, group_name, models_json, active_provider_id, provider_ids_json, updated_at)
@@ -1117,8 +1125,8 @@ mod tests {
         assert_eq!(loaded.groups.len(), 1);
         assert_eq!(loaded.providers.len(), 1);
         assert_eq!(
-            loaded.groups[0].provider_ids,
-            vec!["provider-1".to_string()]
+            loaded.groups[0].provider_ids.as_ref(),
+            Some(&vec!["provider-1".to_string()])
         );
 
         let conn = Connection::open(&db_path).expect("reopen sqlite");
@@ -1149,8 +1157,8 @@ mod tests {
     fn normalize_config_for_storage_filters_groups_without_routing_or_legacy_fields() {
         let p = sample_provider("p1");
         let mut cfg = default_config();
-        cfg.providers = vec![p];
-        // Group with empty routing_table and no legacy provider_ids/providers — should be filtered out.
+        cfg.providers = vec![p.clone()];
+        // Replace default groups with only our test groups.
         cfg.groups = vec![
             Group {
                 id: "group-empty".to_string(),
@@ -1173,7 +1181,7 @@ mod tests {
                 models: Some(vec!["gpt-4o-mini".to_string()]),
                 provider_ids: Some(vec!["p1".to_string()]),
                 active_provider_id: Some("p1".to_string()),
-                providers: Some(vec![p]),
+                providers: Some(vec![p.clone()]),
                 failover: Some(default_group_failover_config()),
             },
         ];

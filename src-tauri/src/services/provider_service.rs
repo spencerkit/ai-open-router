@@ -578,8 +578,9 @@ mod tests {
             token: token.to_string(),
             api_address: "https://example.com".to_string(),
             website: String::new(),
-            default_model: "gpt-5-mini".to_string(),
-            model_mappings: Default::default(),
+            models: Vec::new(),
+            default_model: Some("gpt-5-mini".to_string()),
+            model_mappings: Some(Default::default()),
             header_passthrough_allow: Vec::new(),
             header_passthrough_deny: Vec::new(),
             quota: crate::domain::entities::default_rule_quota_config(),
@@ -624,11 +625,12 @@ mod tests {
             groups: vec![Group {
                 id: "group-a".to_string(),
                 name: "Group A".to_string(),
-                models: vec![],
-                provider_ids: vec!["group-provider".to_string()],
+                routing_table: vec![],
+                models: Some(vec![]),
+                provider_ids: Some(vec!["group-provider".to_string()]),
                 active_provider_id: Some("group-provider".to_string()),
-                providers: vec![sample_provider("group-provider", "group-token")],
-                failover: crate::models::default_group_failover_config(),
+                providers: Some(vec![sample_provider("group-provider", "group-token")]),
+                failover: Some(crate::models::default_group_failover_config()),
             }],
         }
     }

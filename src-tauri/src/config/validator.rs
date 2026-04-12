@@ -144,9 +144,9 @@ mod tests {
         });
 
         let group: Group = serde_json::from_value(raw).expect("group should deserialize");
-        assert!(group.failover.enabled);
-        assert_eq!(group.failover.failure_threshold, 3);
-        assert_eq!(group.failover.cooldown_seconds, 60);
+        assert!(group.failover.as_ref().unwrap().enabled);
+        assert_eq!(group.failover.as_ref().unwrap().failure_threshold, 3);
+        assert_eq!(group.failover.as_ref().unwrap().cooldown_seconds, 60);
     }
 
     #[test]
@@ -161,9 +161,7 @@ mod tests {
         });
 
         let group: Group = serde_json::from_value(raw).expect("group should deserialize");
-        assert!(!group.failover.enabled);
-        assert_eq!(group.failover.failure_threshold, 3);
-        assert_eq!(group.failover.cooldown_seconds, 300);
+        assert!(group.failover.is_none());
     }
 
     #[test]
@@ -260,24 +258,26 @@ mod tests {
         cfg.groups = vec![Group {
             id: "g1".to_string(),
             name: "demo".to_string(),
-            models: vec!["a1".to_string()],
-            provider_ids: vec!["r1".to_string()],
+            routing_table: vec![],
+            models: Some(vec!["a1".to_string()]),
+            provider_ids: Some(vec!["r1".to_string()]),
             active_provider_id: Some("not_exists".to_string()),
-            providers: vec![Rule {
+            providers: Some(vec![Rule {
                 id: "r1".to_string(),
                 name: "rule-1".to_string(),
                 protocol: RuleProtocol::Anthropic,
                 token: "t1".to_string(),
                 api_address: "https://api.example.com".to_string(),
                 website: String::new(),
-                default_model: "m1".to_string(),
-                model_mappings: HashMap::new(),
+                models: Vec::new(),
+                default_model: Some("m1".to_string()),
+                model_mappings: Some(HashMap::new()),
                 header_passthrough_allow: Vec::new(),
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
-            }],
-            failover: crate::models::default_group_failover_config(),
+            }]),
+            failover: Some(crate::models::default_group_failover_config()),
         }];
 
         let err = validate_config(&cfg).expect_err("validation should fail");
