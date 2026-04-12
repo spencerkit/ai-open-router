@@ -58,3 +58,20 @@ export function applyTemplateToRoutes(
 
   return [...existingRoutes, ...newRoutes]
 }
+
+/**
+ * Find the best matching route for an incoming model using fuzzy (contains) matching.
+ * If multiple routes match, the one with the longest requestModel wins (most specific).
+ * Falls back to the "default" route if no match is found.
+ */
+export function findRoute(routes: RouteEntry[], incomingModel: string): RouteEntry | null {
+  const matches = routes.filter(route => incomingModel.includes(route.requestModel))
+
+  if (matches.length === 0) {
+    return routes.find(route => route.requestModel === "default") ?? null
+  }
+
+  return matches.reduce((best, current) =>
+    current.requestModel.length > best.requestModel.length ? current : best
+  )
+}
