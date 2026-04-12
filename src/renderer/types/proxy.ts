@@ -103,6 +103,16 @@ export interface BillingTemplateAttribution {
 }
 
 /**
+ * Route entry for routing table
+ * Maps a request model to a specific provider and target model
+ */
+export interface RouteEntry {
+  requestModel: string
+  providerId: string
+  targetModel: string
+}
+
+/**
  * Proxy rule interface
  * Defines a single translation rule between API formats
  */
@@ -113,12 +123,14 @@ export interface Rule {
   token: string
   apiAddress: string
   website?: string
-  defaultModel: string
-  modelMappings: Record<string, string>
+  models: string[]
   headerPassthroughAllow?: string[]
   headerPassthroughDeny?: string[]
   quota: RuleQuotaConfig
   cost?: RuleCostConfig
+  // Legacy fields (kept for backward compatibility)
+  defaultModel?: string
+  modelMappings?: Record<string, string>
 }
 
 export type Provider = Rule
@@ -130,11 +142,13 @@ export type Provider = Rule
 export interface Group {
   id: string
   name: string
-  models: string[]
+  routingTable: RouteEntry[]
+  // Legacy fields (kept for backward compatibility)
+  models?: string[]
   providerIds?: string[]
   activeProviderId: string | null
-  providers: Provider[]
-  failover: GroupFailoverConfig
+  providers?: Provider[]
+  failover?: GroupFailoverConfig
   activeRuleId?: string | null
   rules?: Provider[]
 }
