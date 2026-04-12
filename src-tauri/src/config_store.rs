@@ -285,26 +285,27 @@ fn normalize_groups_and_providers(
 
     let mut normalized_groups = Vec::new();
     for group in groups {
-        let scoped_provider_ids: HashSet<String> = if has_global_providers {
+        // Determine which provider IDs are scoped to this group.
+        // If we have global providers AND the group has explicit provider_ids → use those.
+        // Otherwise, fall back to the group's built-in providers.
+        let scoped_provider_ids: HashSet<String> = if has_global_providers
+            && group.provider_ids.is_some()
+        {
             group
                 .provider_ids
                 .as_ref()
-                .map(|ids| {
-                    ids.iter()
-                        .map(|provider_id| provider_id.trim())
-                        .filter(|provider_id| !provider_id.is_empty())
-                        .map(|provider_id| provider_id.to_string())
-                        .collect()
-                })
-                .unwrap_or_default()
+                .unwrap()
+                .iter()
+                .map(|provider_id| provider_id.trim().to_string())
+                .filter(|provider_id| !provider_id.is_empty())
+                .collect()
         } else {
             group
                 .providers
                 .iter()
                 .flatten()
-                .map(|provider| provider.id.trim())
+                .map(|provider| provider.id.trim().to_string())
                 .filter(|provider_id| !provider_id.is_empty())
-                .map(|provider_id| provider_id.to_string())
                 .collect()
         };
         let mut group_provider_id_remap: HashMap<String, String> = HashMap::new();
@@ -335,8 +336,11 @@ fn normalize_groups_and_providers(
         }
         }
 
-        let raw_provider_ids = if has_global_providers {
-            group.provider_ids.clone().unwrap_or_default()
+        // Determine which provider IDs to include in the group.
+        // If scoped_provider_ids came from explicit group.provider_ids → use those.
+        // Otherwise, derive from the group's built-in providers.
+        let raw_provider_ids: Vec<String> = if has_global_providers && group.provider_ids.is_some() {
+            group.provider_ids.clone().unwrap()
         } else {
             group
                 .providers
