@@ -320,13 +320,28 @@ pub(super) fn resolve_runtime_active_route<'a>(
     route: &'a ActiveRoute,
     request_model: &str,
 ) -> Result<ActiveRoute, String> {
-    // 1. In routing_table, find request_model exact match, or fall back to "default"
-    let entry = route
+    // 1. Find all routes where the incoming model contains the route's request_model (fuzzy match)
+    let matches: Vec<&RouteEntry> = route
         .routing_table
         .iter()
-        .find(|e| e.request_model == request_model)
-        .or_else(|| route.routing_table.iter().find(|e| e.request_model == "default"))
-        .ok_or("No default route found in routing table")?;
+        .filter(|e| request_model.contains(&e.request_model))
+        .collect();
+
+    // 2. If matches exist, pick the longest request_model (most specific match)
+    let entry: &RouteEntry = if matches.is_empty() {
+        // No fuzzy match — fall back to "default"
+        route
+            .routing_table
+            .iter()
+            .find(|e| e.request_model == "default")
+            .ok_or("No default route found in routing table")?
+    } else {
+        // Pick the match with the longest request_model
+        matches
+            .into_iter()
+            .max_by_key(|e| e.request_model.len())
+            .unwrap()
+    };
 
     // 2. Look up the provider by provider_id
     let config = state
