@@ -372,7 +372,7 @@ fn normalize_groups_and_providers(
         normalized_groups.push(Group {
             id: group.id,
             name: group.name,
-            routing_table: Vec::new(),
+            routing_table: group.routing_table,
             models: group.models,
             provider_ids: Some(provider_ids),
             active_provider_id,
@@ -411,9 +411,29 @@ fn alloc_unique_provider_id(provider_id: &str, provider_map: &HashMap<String, Ru
 /// Normalizes full config structure for this module's workflow.
 fn normalize_config_for_storage(config: ProxyConfig) -> Result<ProxyConfig, String> {
     let (groups, providers) = normalize_groups_and_providers(config.groups, config.providers);
+
+    // Filter out groups that have no routing_table and no legacy provider data.
+    // A group is considered valid if it has a non-empty routing_table, or if it
+    // has legacy fields (provider_ids or providers) which would indicate it was
+    // converted from the old structure.
+    let valid_groups: Vec<Group> = groups
+        .into_iter()
+        .filter(|g| {
+            !g.routing_table.is_empty()
+                || g.provider_ids.is_some()
+                || g.providers.as_ref().map_or(false, |p| !p.is_empty())
+        })
+        .collect();
+
+    // Filter out providers that have no models defined.
+    let valid_providers: Vec<Rule> = providers
+        .into_iter()
+        .filter(|p| !p.models.is_empty())
+        .collect();
+
     Ok(ProxyConfig {
-        groups,
-        providers,
+        groups: valid_groups,
+        providers: valid_providers,
         ..config
     })
 }
@@ -710,7 +730,7 @@ fn select_records_with_soft_delete_filter(
 mod tests {
     use super::*;
     use crate::domain::entities::{
-        default_rule_cost_config, default_rule_quota_config, Rule, RuleProtocol,
+        default_rule_cost_config, default_rule_quota_config, RouteEntry, Rule, RuleProtocol,
     };
     use std::collections::HashMap;
     use uuid::Uuid;
@@ -720,7 +740,11 @@ mod tests {
         Group {
             id: "group-1".to_string(),
             name: "group-1".to_string(),
-            routing_table: Vec::new(),
+            routing_table: vec![RouteEntry {
+                request_model: "gpt-4o-mini".to_string(),
+                provider_id: "provider-1".to_string(),
+                target_model: "gpt-4o-mini".to_string(),
+            }],
             models: Some(vec!["gpt-4o-mini".to_string()]),
             provider_ids: Some(vec!["provider-1".to_string()]),
             active_provider_id: Some("provider-1".to_string()),
@@ -731,7 +755,7 @@ mod tests {
                 token: "test-token".to_string(),
                 api_address: "https://api.openai.com".to_string(),
                 website: String::new(),
-                models: Vec::new(),
+                models: vec!["gpt-4o-mini".to_string()],
                 default_model: Some("gpt-4o-mini".to_string()),
                 model_mappings: Some(HashMap::new()),
                 header_passthrough_allow: Vec::new(),
@@ -751,7 +775,7 @@ mod tests {
             token: "test-token".to_string(),
             api_address: "https://api.openai.com".to_string(),
             website: String::new(),
-            models: Vec::new(),
+            models: vec!["gpt-4o-mini".to_string()],
             default_model: Some("gpt-4o-mini".to_string()),
             model_mappings: Some(HashMap::new()),
             header_passthrough_allow: Vec::new(),
@@ -907,7 +931,11 @@ mod tests {
         cfg.groups = vec![Group {
             id: "group-1".to_string(),
             name: "group-1".to_string(),
-            routing_table: Vec::new(),
+            routing_table: vec![RouteEntry {
+                request_model: "gpt-4o-mini".to_string(),
+                provider_id: "provider-1".to_string(),
+                target_model: "gpt-4o-mini".to_string(),
+            }],
             models: Some(vec!["gpt-4o-mini".to_string()]),
             provider_ids: Some(vec!["provider-1".to_string()]),
             active_provider_id: Some("provider-1".to_string()),
@@ -1115,5 +1143,95 @@ mod tests {
             )
             .expect("query legacy table count");
         assert_eq!(legacy_table_count, 0);
+    }
+
+    #[test]
+    fn normalize_config_for_storage_filters_groups_without_routing_or_legacy_fields() {
+        let p = sample_provider("p1");
+        let mut cfg = default_config();
+        cfg.providers = vec![p];
+        // Group with empty routing_table and no legacy provider_ids/providers — should be filtered out.
+        cfg.groups = vec![
+            Group {
+                id: "group-empty".to_string(),
+                name: "group-empty".to_string(),
+                routing_table: Vec::new(),
+                models: None,
+                provider_ids: None,
+                active_provider_id: None,
+                providers: None,
+                failover: Some(default_group_failover_config()),
+            },
+            Group {
+                id: "group-valid".to_string(),
+                name: "group-valid".to_string(),
+                routing_table: vec![RouteEntry {
+                    request_model: "gpt-4o-mini".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-4o-mini".to_string(),
+                }],
+                models: Some(vec!["gpt-4o-mini".to_string()]),
+                provider_ids: Some(vec!["p1".to_string()]),
+                active_provider_id: Some("p1".to_string()),
+                providers: Some(vec![p]),
+                failover: Some(default_group_failover_config()),
+            },
+        ];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.groups.len(), 1);
+        assert_eq!(normalized.groups[0].id, "group-valid");
+    }
+
+    #[test]
+    fn normalize_config_for_storage_keeps_group_with_routing_table_even_without_legacy_fields() {
+        let mut cfg = default_config();
+        cfg.providers = vec![];
+        // Group with routing_table entries but no legacy fields — should be kept.
+        cfg.groups = vec![Group {
+            id: "group-routing".to_string(),
+            name: "group-routing".to_string(),
+            routing_table: vec![RouteEntry {
+                request_model: "gpt-4o-mini".to_string(),
+                provider_id: "p1".to_string(),
+                target_model: "gpt-4o-mini".to_string(),
+            }],
+            models: Some(vec!["gpt-4o-mini".to_string()]),
+            provider_ids: None,
+            active_provider_id: None,
+            providers: None,
+            failover: Some(default_group_failover_config()),
+        }];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.groups.len(), 1);
+        assert_eq!(normalized.groups[0].id, "group-routing");
+    }
+
+    #[test]
+    fn normalize_config_for_storage_filters_providers_without_models() {
+        let mut cfg = default_config();
+        cfg.providers = vec![
+            Rule {
+                id: "p-no-models".to_string(),
+                name: "p-no-models".to_string(),
+                protocol: RuleProtocol::Openai,
+                token: "test-token".to_string(),
+                api_address: "https://api.openai.com".to_string(),
+                website: String::new(),
+                models: Vec::new(),
+                default_model: None,
+                model_mappings: None,
+                header_passthrough_allow: Vec::new(),
+                header_passthrough_deny: Vec::new(),
+                quota: default_rule_quota_config(),
+                cost: default_rule_cost_config(),
+            },
+            sample_provider("p-with-models"),
+        ];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].id, "p-with-models");
     }
 }
