@@ -304,6 +304,8 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const [website, setWebsite] = useState("")
   const [defaultModel, setDefaultModel] = useState("")
   const [modelMappings, setModelMappings] = useState<Record<string, string>>({})
+  const [models, setModels] = useState<string[]>([])
+  const [newModelName, setNewModelName] = useState("")
   const [headerPassthroughAllowText, setHeaderPassthroughAllowText] = useState("")
   const [headerPassthroughDenyText, setHeaderPassthroughDenyText] = useState("")
   const [importFormat, setImportFormat] = useState<ProviderImportInputFormat>("auto")
@@ -360,7 +362,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const group = groupId ? config?.groups.find(g => g.id === groupId) : null
   const provider = isGlobalMode
     ? ((config?.providers ?? []).find(item => item.id === providerId) ?? null)
-    : (group?.providers.find(item => item.id === providerId) ?? null)
+    : (group?.providers?.find(item => item.id === providerId) ?? null)
   const quotaDraftFingerprint = JSON.stringify({
     token,
     name,
@@ -442,8 +444,9 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setToken(provider.token)
     setApiAddress(provider.apiAddress)
     setWebsite(provider.website || "")
-    setDefaultModel(provider.defaultModel)
+    setDefaultModel(provider.defaultModel ?? "")
     setModelMappings(provider.modelMappings || {})
+    setModels(provider.models ?? [])
     setHeaderPassthroughAllowText(formatHeaderPassthroughList(provider.headerPassthroughAllow))
     setHeaderPassthroughDenyText(formatHeaderPassthroughList(provider.headerPassthroughDeny))
 
@@ -638,6 +641,14 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const handleClearBillingTemplateAttribution = () => {
     setCostTemplate(null)
     setCostTemplateBaseline(null)
+  }
+
+  const handleAddModel = () => {
+    const trimmed = newModelName.trim()
+    if (trimmed && !models.includes(trimmed)) {
+      setModels([...models, trimmed])
+      setNewModelName("")
+    }
   }
 
   const focusField = (id: string) => {
@@ -863,6 +874,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       token,
       apiAddress,
       website: website.trim(),
+      models,
       defaultModel: defaultModel.trim(),
       modelMappings: Object.fromEntries(
         Object.entries(modelMappings)
@@ -905,7 +917,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       }
 
       const currentProviderIds =
-        currentGroup.providerIds ?? currentGroup.providers.map(rule => rule.id)
+        currentGroup.providerIds ?? currentGroup.providers?.map(rule => rule.id) ?? []
       const providerIds = currentProviderIds.includes(providerDraft.id)
         ? currentProviderIds
         : [...currentProviderIds, providerDraft.id]
@@ -1603,6 +1615,52 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
                   </div>
                 </>
               )}
+            </section>
+
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionTitle}>{t("providersPage.models")}</span>
+              </div>
+              {models.length > 0 && (
+                <div className={styles.modelsTags}>
+                  {models.map((model, index) => (
+                    <span key={model} className={styles.modelTag}>
+                      {model}
+                      <button
+                        type="button"
+                        onClick={() => setModels(models.filter((_, i) => i !== index))}
+                        className={styles.modelTagRemove}
+                        aria-label={`Remove ${model}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className={styles.modelInputRow}>
+                <Input
+                  type="text"
+                  value={newModelName}
+                  onChange={e => setNewModelName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      handleAddModel()
+                    }
+                  }}
+                  placeholder={t("ruleForm.addModelPlaceholder")}
+                  className={styles.input}
+                />
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={handleAddModel}
+                  disabled={!newModelName.trim()}
+                >
+                  {t("ruleForm.add")}
+                </Button>
+              </div>
             </section>
 
             <div className={styles.formActions}>

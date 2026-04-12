@@ -169,7 +169,7 @@ export const ProvidersPage: React.FC = () => {
     if (!config) return {}
     const result: Record<string, string[]> = {}
     for (const group of config.groups) {
-      const providerIds = group.providerIds ?? group.providers.map(provider => provider.id)
+      const providerIds = group.providerIds ?? group.providers?.map(provider => provider.id) ?? []
       for (const providerId of providerIds) {
         if (!providerId) continue
         if (!result[providerId]) {
@@ -264,7 +264,7 @@ export const ProvidersPage: React.FC = () => {
   const affectedGroups = useMemo(() => {
     if (!pendingDeleteProviderId || !config) return []
     return config.groups.filter(group => {
-      const providerIds = group.providerIds ?? group.providers.map(provider => provider.id)
+      const providerIds = group.providerIds ?? group.providers?.map(provider => provider.id) ?? []
       return providerIds.includes(pendingDeleteProviderId)
     })
   }, [config, pendingDeleteProviderId])
@@ -311,9 +311,13 @@ export const ProvidersPage: React.FC = () => {
 
     const nextGroups = config.groups.map(group => {
       const providerIds = (
-        group.providerIds ?? group.providers.map(provider => provider.id)
+        group.providerIds ??
+        group.providers?.map(provider => provider.id) ??
+        []
       ).filter(providerId => providerId !== pendingDeleteProviderId)
-      const providers = group.providers.filter(provider => provider.id !== pendingDeleteProviderId)
+      const providers = (group.providers ?? []).filter(
+        provider => provider.id !== pendingDeleteProviderId
+      )
       const activeProviderId =
         group.activeProviderId && providerIds.includes(group.activeProviderId)
           ? group.activeProviderId
@@ -396,8 +400,8 @@ export const ProvidersPage: React.FC = () => {
     }
 
     const targetGroup = config.groups.find(group => {
-      if (group.providers.some(item => item.id === providerId)) return true
-      const providerIds = group.providerIds ?? group.providers.map(item => item.id)
+      if ((group.providers ?? []).some(item => item.id === providerId)) return true
+      const providerIds = group.providerIds ?? group.providers?.map(item => item.id) ?? []
       return providerIds.includes(providerId)
     })
 
@@ -419,7 +423,7 @@ export const ProvidersPage: React.FC = () => {
       const modelName =
         result.resolvedModel?.trim() ||
         result.rawText?.trim() ||
-        provider.defaultModel.trim() ||
+        provider.defaultModel?.trim() ||
         provider.name
       const latencyLabel = formatProviderLatency(result.responseTimeMs)
 

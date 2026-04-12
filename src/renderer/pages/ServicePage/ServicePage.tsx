@@ -22,7 +22,6 @@ import {
   writeGroupEntryAction,
 } from "@/store"
 import type { Group, IntegrationClientKind, IntegrationTarget, ProxyConfig } from "@/types"
-import { normalizeGroupFailoverConfig } from "@/utils/groupFailover"
 import { createProviderTestKey, formatProviderLatency } from "@/utils/providerTesting"
 import { useActions, useRelaxValue } from "@/utils/relax"
 import { isHeadlessHttpRuntime } from "@/utils/runtime"
@@ -122,7 +121,7 @@ export const ServicePage: React.FC = () => {
   const activeGroup = groups.find(group => group.id === activeGroupId) ?? null
   const activeGroupProviderIds = useMemo(() => {
     if (!activeGroup) return []
-    return activeGroup.providerIds ?? activeGroup.providers.map(provider => provider.id)
+    return activeGroup.providerIds ?? activeGroup.providers?.map(provider => provider.id) ?? []
   }, [activeGroup])
   const activeGroupProviderIdSet = useMemo(() => {
     return new Set(activeGroupProviderIds)
@@ -130,7 +129,7 @@ export const ServicePage: React.FC = () => {
   const providerHealthByProviderId = useMemo(() => {
     if (!activeGroup) return {}
     return Object.fromEntries(
-      activeGroup.providers.map(provider => {
+      (activeGroup.providers ?? []).map(provider => {
         const key = createProviderTestKey(activeGroup.id, provider.id)
         return [provider.id, providerModelHealthByProviderKey[key]]
       })
@@ -162,7 +161,7 @@ export const ServicePage: React.FC = () => {
       .map(([providerId]) => providerId)
   }, [associateProviderChecks])
   const pendingDeleteProvider =
-    activeGroup?.providers.find(item => item.id === pendingDeleteProviderId) ?? null
+    activeGroup?.providers?.find(item => item.id === pendingDeleteProviderId) ?? null
   const integrationSections = useMemo(
     () => [
       {
@@ -253,11 +252,8 @@ export const ServicePage: React.FC = () => {
     const newGroup: Group = {
       id: normalizedId,
       name: newGroupName.trim(),
-      models: [],
-      providerIds: [],
+      routingTable: [{ requestModel: "default", providerId: "", targetModel: "" }],
       activeProviderId: null,
-      providers: [],
-      failover: normalizeGroupFailoverConfig(),
     }
 
     const newConfig: ProxyConfig = {
@@ -320,7 +316,8 @@ export const ServicePage: React.FC = () => {
 
     const nextGroups = config.groups.map(group => {
       if (group.id !== activeGroupId) return group
-      const currentProviderIds = group.providerIds ?? group.providers.map(provider => provider.id)
+      const currentProviderIds =
+        group.providerIds ?? group.providers?.map(provider => provider.id) ?? []
       const mergedProviderIds = [...currentProviderIds]
       for (const providerId of selectedAssociateProviderIds) {
         if (!mergedProviderIds.includes(providerId)) {
@@ -378,7 +375,7 @@ export const ServicePage: React.FC = () => {
     if (!activeGroup) return
     if (testingProviderIds[providerId]) return
 
-    const provider = activeGroup.providers.find(item => item.id === providerId)
+    const provider = activeGroup.providers?.find(item => item.id === providerId)
     if (!provider) {
       showToast(t("toast.ruleNotFound"), "error")
       return
@@ -402,7 +399,7 @@ export const ServicePage: React.FC = () => {
       const modelName =
         result.resolvedModel?.trim() ||
         result.rawText?.trim() ||
-        provider.defaultModel.trim() ||
+        provider.defaultModel?.trim() ||
         provider.name
       const latencyLabel = formatProviderLatency(result.responseTimeMs)
 
@@ -432,17 +429,16 @@ export const ServicePage: React.FC = () => {
   }
 
   const handleTestAllProviders = async () => {
-    if (!activeGroup || testingAllProviders || activeGroup.providers.length === 0) return
+    if (!activeGroup || testingAllProviders || (activeGroup.providers?.length ?? 0) === 0) return
 
     setTestingAllProviders(true)
-    setTestingProviderIds(
-      Object.fromEntries(activeGroup.providers.map(provider => [provider.id, true]))
-    )
+    const groupProviders = activeGroup.providers ?? []
+    setTestingProviderIds(Object.fromEntries(groupProviders.map(provider => [provider.id, true])))
 
     let available = 0
     let unavailable = 0
 
-    for (const provider of activeGroup.providers) {
+    for (const provider of groupProviders) {
       try {
         const result = await testProviderModel({
           groupId: activeGroup.id,
@@ -480,11 +476,12 @@ export const ServicePage: React.FC = () => {
 
     const newGroups = config.groups.map(group => {
       if (group.id === activeGroupId) {
-        const currentProviderIds = group.providerIds ?? group.providers.map(provider => provider.id)
+        const currentProviderIds =
+          group.providerIds ?? group.providers?.map(provider => provider.id) ?? []
         const nextProviderIds = currentProviderIds.filter(
           providerId => providerId !== pendingDeleteProviderId
         )
-        const nextProviders = group.providers.filter(
+        const nextProviders = (group.providers ?? []).filter(
           provider => provider.id !== pendingDeleteProviderId
         )
         const newActiveId =
@@ -830,7 +827,10 @@ export const ServicePage: React.FC = () => {
                       <span className={styles.groupName}>{group.name}</span>
                       <span className={styles.groupPath}>/{group.id}</span>
                       <span className={styles.groupRuleCount}>
-                        {(group.providerIds ?? group.providers.map(provider => provider.id)).length}
+                        {
+                          (group.providerIds ?? group.providers?.map(provider => provider.id) ?? [])
+                            .length
+                        }
                       </span>
                     </button>
                   </li>

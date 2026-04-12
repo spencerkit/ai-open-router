@@ -14,6 +14,7 @@ import { Button } from "@/components"
 import { useTranslation } from "@/hooks"
 import type {
   Group,
+  Provider,
   ProviderModelHealthSnapshot,
   RuleCardStatsItem,
   RuleQuotaSnapshot,
@@ -31,7 +32,7 @@ type RuleQuotaBadge = {
 }
 
 type CatalogProviderCardProps = {
-  provider: Group["providers"][number]
+  provider: Provider
   testing: boolean
   quotaLoading: boolean
   healthSnapshot?: ProviderModelHealthSnapshot | null
@@ -328,6 +329,16 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
             </div>
           </div>
         </div>
+        {provider.models && provider.models.length > 0 && (
+          <div className={sharedStyles.modelTagsRow}>
+            <span className={sharedStyles.modelTagsLabel}>{t("providersPage.models")}:</span>
+            {provider.models.map((model: string) => (
+              <span key={model} className={sharedStyles.modelTag}>
+                {model}
+              </span>
+            ))}
+          </div>
+        )}
       </li>
     )
   },
@@ -337,6 +348,7 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
       prev.provider.name === next.provider.name &&
       prev.provider.protocol === next.provider.protocol &&
       prev.provider.defaultModel === next.provider.defaultModel &&
+      prev.provider.models?.length === next.provider.models?.length &&
       prev.provider.website === next.provider.website &&
       Boolean(prev.provider.quota?.enabled) === Boolean(next.provider.quota?.enabled) &&
       (prev.provider.cost?.currency || "USD") === (next.provider.cost?.currency || "USD") &&
@@ -455,7 +467,7 @@ export const ProviderList: React.FC<{
     return `${yy}-${MM}-${dd} ${HH}:${mm}`
   }
 
-  const resolveQuotaBadge = (provider: Group["providers"][number]): RuleQuotaBadge => {
+  const resolveQuotaBadge = (provider: Provider): RuleQuotaBadge => {
     if (!provider.quota?.enabled) {
       return {
         className: sharedStyles.quotaBadgeUnsupported,
@@ -583,7 +595,7 @@ export const ProviderList: React.FC<{
       <div className={`${sharedStyles.ruleListHeader} ${sharedStyles.ruleListHeaderCatalog}`}>
         <div className={sharedStyles.ruleHeaderTitle}>
           <h3>{t("servicePage.ruleName")}</h3>
-          <span className={sharedStyles.countBadge}>{providers.length}</span>
+          <span className={sharedStyles.countBadge}>{providers?.length ?? 0}</span>
         </div>
         <div className={sharedStyles.ruleHeaderActions}>
           {onTestAll ? (
@@ -601,7 +613,7 @@ export const ProviderList: React.FC<{
                   ? t("servicePage.testingAllProviders")
                   : t("servicePage.testAllProviders")
               }
-              disabled={providers.length === 0 || testingAll}
+              disabled={!providers || providers.length === 0 || testingAll}
             >
               {testingAll ? (
                 <Loader2 size={14} className={sharedStyles.spinner} />
@@ -620,7 +632,7 @@ export const ProviderList: React.FC<{
         </div>
       </div>
       <div className={`${sharedStyles.ruleListContent} ${sharedStyles.ruleListContentCatalog}`}>
-        {providers.length === 0 ? (
+        {!providers || providers.length === 0 ? (
           <p className={sharedStyles.emptyHint}>{emptyMessage || t("providersPage.empty")}</p>
         ) : (
           <ul
