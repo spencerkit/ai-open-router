@@ -348,7 +348,7 @@ pub(super) async fn handle_proxy_request(
     let requested_model = request_body
         .get("model")
         .and_then(|v| v.as_str())
-        .unwrap_or(&active_route.rule.default_model)
+        .unwrap_or_else(|| active_route.rule.default_model.as_deref().unwrap_or(""))
         .to_string();
     let target_protocol = active_route.rule.protocol.clone();
     let declared_tool_names = extract_declared_tool_names(&request_body);

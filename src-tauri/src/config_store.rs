@@ -288,22 +288,28 @@ fn normalize_groups_and_providers(
         let scoped_provider_ids: HashSet<String> = if has_global_providers {
             group
                 .provider_ids
-                .iter()
-                .map(|provider_id| provider_id.trim())
-                .filter(|provider_id| !provider_id.is_empty())
-                .map(|provider_id| provider_id.to_string())
-                .collect()
+                .as_ref()
+                .map(|ids| {
+                    ids.iter()
+                        .map(|provider_id| provider_id.trim())
+                        .filter(|provider_id| !provider_id.is_empty())
+                        .map(|provider_id| provider_id.to_string())
+                        .collect()
+                })
+                .unwrap_or_default()
         } else {
             group
                 .providers
                 .iter()
+                .flatten()
                 .map(|provider| provider.id.trim())
                 .filter(|provider_id| !provider_id.is_empty())
                 .map(|provider_id| provider_id.to_string())
                 .collect()
         };
         let mut group_provider_id_remap: HashMap<String, String> = HashMap::new();
-        for provider in &group.providers {
+        if let Some(providers) = &group.providers {
+            for provider in providers {
             let provider_id = provider.id.trim().to_string();
             if provider_id.is_empty() {
                 continue;
@@ -327,13 +333,15 @@ fn normalize_groups_and_providers(
             provider_order.push(provider_id.clone());
             provider_map.insert(provider_id, provider.clone());
         }
+        }
 
         let raw_provider_ids = if has_global_providers {
-            group.provider_ids.clone()
+            group.provider_ids.clone().unwrap_or_default()
         } else {
             group
                 .providers
                 .iter()
+                .flatten()
                 .map(|provider| provider.id.clone())
                 .collect()
         };
@@ -364,10 +372,11 @@ fn normalize_groups_and_providers(
         normalized_groups.push(Group {
             id: group.id,
             name: group.name,
+            routing_table: Vec::new(),
             models: group.models,
-            provider_ids,
+            provider_ids: Some(provider_ids),
             active_provider_id,
-            providers: providers_for_group,
+            providers: Some(providers_for_group),
             failover: group.failover,
         });
     }
@@ -517,11 +526,16 @@ fn load_groups_and_providers_from_relational_tables(
             let raw_group_json = row.map_err(|e| format!("read group_records row failed: {e}"))?;
             let mut group = serde_json::from_str::<Group>(&raw_group_json)
                 .map_err(|e| format!("parse group_json failed: {e}"))?;
-            group.providers = group
-                .provider_ids
-                .iter()
-                .filter_map(|provider_id| provider_map.get(provider_id).cloned())
-                .collect();
+            group.providers = Some(
+                group
+                    .provider_ids
+                    .as_ref()
+                    .map(|ids| ids.iter())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|provider_id| provider_map.get(provider_id).cloned())
+                    .collect(),
+            );
             groups.push(group);
         }
     } else {
@@ -550,11 +564,12 @@ fn load_groups_and_providers_from_relational_tables(
             groups.push(Group {
                 id: group_id,
                 name: group_name,
-                models,
-                provider_ids,
+                routing_table: Vec::new(),
+                models: Some(models),
+                provider_ids: Some(provider_ids),
                 active_provider_id,
-                providers: providers_for_group,
-                failover: default_group_failover_config(),
+                providers: Some(providers_for_group),
+                failover: Some(default_group_failover_config()),
             });
         }
     }
@@ -628,11 +643,12 @@ fn load_groups_from_legacy_relational_tables(conn: &Connection) -> Result<Vec<Gr
         groups.push(Group {
             id: group_id,
             name: group_name,
-            models,
-            provider_ids,
+            routing_table: Vec::new(),
+            models: Some(models),
+            provider_ids: Some(provider_ids),
             active_provider_id,
-            providers,
-            failover: default_group_failover_config(),
+            providers: Some(providers),
+            failover: Some(default_group_failover_config()),
         });
     }
     Ok(groups)
@@ -704,24 +720,26 @@ mod tests {
         Group {
             id: "group-1".to_string(),
             name: "group-1".to_string(),
-            models: vec!["gpt-4o-mini".to_string()],
-            provider_ids: vec!["provider-1".to_string()],
+            routing_table: Vec::new(),
+            models: Some(vec!["gpt-4o-mini".to_string()]),
+            provider_ids: Some(vec!["provider-1".to_string()]),
             active_provider_id: Some("provider-1".to_string()),
-            providers: vec![Rule {
+            providers: Some(vec![Rule {
                 id: "provider-1".to_string(),
                 name: "provider-1".to_string(),
                 protocol: RuleProtocol::Openai,
                 token: "test-token".to_string(),
                 api_address: "https://api.openai.com".to_string(),
                 website: String::new(),
-                default_model: "gpt-4o-mini".to_string(),
-                model_mappings: HashMap::new(),
+                models: Vec::new(),
+                default_model: Some("gpt-4o-mini".to_string()),
+                model_mappings: Some(HashMap::new()),
                 header_passthrough_allow: Vec::new(),
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
-            }],
-            failover: default_group_failover_config(),
+            }]),
+            failover: Some(default_group_failover_config()),
         }
     }
 
@@ -733,8 +751,9 @@ mod tests {
             token: "test-token".to_string(),
             api_address: "https://api.openai.com".to_string(),
             website: String::new(),
-            default_model: "gpt-4o-mini".to_string(),
-            model_mappings: HashMap::new(),
+            models: Vec::new(),
+            default_model: Some("gpt-4o-mini".to_string()),
+            model_mappings: Some(HashMap::new()),
             header_passthrough_allow: Vec::new(),
             header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
@@ -888,22 +907,23 @@ mod tests {
         cfg.groups = vec![Group {
             id: "group-1".to_string(),
             name: "group-1".to_string(),
-            models: vec!["gpt-4o-mini".to_string()],
-            provider_ids: vec!["provider-1".to_string()],
+            routing_table: Vec::new(),
+            models: Some(vec!["gpt-4o-mini".to_string()]),
+            provider_ids: Some(vec!["provider-1".to_string()]),
             active_provider_id: Some("provider-1".to_string()),
-            providers: vec![linked_provider.clone(), stale_provider],
-            failover: default_group_failover_config(),
+            providers: Some(vec![linked_provider.clone(), stale_provider]),
+            failover: Some(default_group_failover_config()),
         }];
 
         let normalized = normalize_config_for_storage(cfg).expect("normalize config");
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].id, "provider-1");
         assert_eq!(
-            normalized.groups[0].provider_ids,
-            vec!["provider-1".to_string()]
+            normalized.groups[0].provider_ids.as_ref(),
+            Some(&vec!["provider-1".to_string()])
         );
-        assert_eq!(normalized.groups[0].providers.len(), 1);
-        assert_eq!(normalized.groups[0].providers[0].id, "provider-1");
+        assert_eq!(normalized.groups[0].providers.as_ref().map(|p| p.len()), Some(1));
+        assert_eq!(normalized.groups[0].providers.as_ref().unwrap()[0].id, "provider-1");
     }
 
     #[test]
@@ -913,22 +933,23 @@ mod tests {
         cfg.groups = vec![Group {
             id: "group-1".to_string(),
             name: "group-1".to_string(),
-            models: vec!["gpt-4o-mini".to_string()],
-            provider_ids: vec![],
+            routing_table: Vec::new(),
+            models: Some(vec!["gpt-4o-mini".to_string()]),
+            provider_ids: Some(vec![]),
             active_provider_id: Some("provider-1".to_string()),
-            providers: vec![linked_provider],
-            failover: default_group_failover_config(),
+            providers: Some(vec![linked_provider]),
+            failover: Some(default_group_failover_config()),
         }];
 
         let normalized = normalize_config_for_storage(cfg).expect("normalize config");
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].id, "provider-1");
         assert_eq!(
-            normalized.groups[0].provider_ids,
-            vec!["provider-1".to_string()]
+            normalized.groups[0].provider_ids.as_ref(),
+            Some(&vec!["provider-1".to_string()])
         );
-        assert_eq!(normalized.groups[0].providers.len(), 1);
-        assert_eq!(normalized.groups[0].providers[0].id, "provider-1");
+        assert_eq!(normalized.groups[0].providers.as_ref().map(|p| p.len()), Some(1));
+        assert_eq!(normalized.groups[0].providers.as_ref().unwrap()[0].id, "provider-1");
     }
 
     #[test]

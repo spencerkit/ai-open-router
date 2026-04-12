@@ -131,6 +131,7 @@ fn resolve_provider_for_test(
         return group
             .providers
             .iter()
+            .flatten()
             .find(|provider| provider.id == normalized_provider_id)
             .cloned()
             .ok_or_else(|| {
@@ -156,7 +157,7 @@ fn validate_provider(provider: &Rule) -> AppResult<()> {
     if provider.api_address.trim().is_empty() {
         return Err(AppError::validation("provider apiAddress is empty"));
     }
-    if provider.default_model.trim().is_empty() {
+    if provider.default_model.as_ref().map_or(true, |m| m.trim().is_empty()) {
         return Err(AppError::validation("provider defaultModel is empty"));
     }
     Ok(())
@@ -184,7 +185,7 @@ fn build_request_headers(provider: &Rule) -> AppResult<HeaderMap> {
 fn build_request_payload(provider: &Rule) -> Value {
     match provider.protocol {
         RuleProtocol::Openai => json!({
-            "model": provider.default_model.as_str(),
+            "model": provider.default_model.as_deref().unwrap_or(""),
             "instructions": MODEL_TEST_SYSTEM_PROMPT,
             "input": [
                 {
@@ -202,7 +203,7 @@ fn build_request_payload(provider: &Rule) -> Value {
             "max_output_tokens": MODEL_TEST_MAX_OUTPUT_TOKENS
         }),
         RuleProtocol::OpenaiCompletion => json!({
-            "model": provider.default_model.as_str(),
+            "model": provider.default_model.as_deref().unwrap_or(""),
             "messages": [
                 {
                     "role": "system",
@@ -217,7 +218,7 @@ fn build_request_payload(provider: &Rule) -> Value {
             "max_tokens": MODEL_TEST_MAX_OUTPUT_TOKENS
         }),
         RuleProtocol::Anthropic => json!({
-            "model": provider.default_model.as_str(),
+            "model": provider.default_model.as_deref().unwrap_or(""),
             "system": MODEL_TEST_SYSTEM_PROMPT,
             "messages": [
                 {

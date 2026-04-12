@@ -234,9 +234,12 @@ pub struct Rule {
     pub api_address: String,
     #[serde(default)]
     pub website: String,
-    pub default_model: String,
     #[serde(default)]
-    pub model_mappings: HashMap<String, String>,
+    pub models: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_mappings: Option<HashMap<String, String>>,
     #[serde(default)]
     pub header_passthrough_allow: Vec<String>,
     #[serde(default)]
@@ -245,6 +248,14 @@ pub struct Rule {
     pub quota: RuleQuotaConfig,
     #[serde(default = "default_rule_cost_config")]
     pub cost: RuleCostConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteEntry {
+    pub request_model: String,
+    pub provider_id: String,
+    pub target_model: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -280,15 +291,17 @@ pub struct Group {
     pub id: String,
     pub name: String,
     #[serde(default)]
-    pub models: Vec<String>,
-    #[serde(default)]
-    pub provider_ids: Vec<String>,
-    #[serde(rename = "activeProviderId", alias = "activeRuleId")]
+    pub routing_table: Vec<RouteEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub models: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_ids: Option<Vec<String>>,
+    #[serde(rename = "activeProviderId", alias = "activeRuleId", skip_serializing_if = "Option::is_none")]
     pub active_provider_id: Option<String>,
-    #[serde(default, rename = "providers", alias = "rules")]
-    pub providers: Vec<Rule>,
-    #[serde(default = "default_group_failover_config")]
-    pub failover: GroupFailoverConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub providers: Option<Vec<Rule>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failover: Option<GroupFailoverConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

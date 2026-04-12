@@ -4,7 +4,7 @@
 
 use super::failover::{self, FailoverConfigSnapshot, FailoverRouteDecision};
 use super::ServiceState;
-use crate::models::{GroupFailoverConfig, ProxyConfig, Rule, RuleProtocol};
+use crate::models::{default_group_failover_config, GroupFailoverConfig, ProxyConfig, Rule, RuleProtocol};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -435,21 +435,23 @@ pub(super) fn build_route_index(config: &ProxyConfig) -> RouteIndex {
                 match group
                     .providers
                     .iter()
+                    .flatten()
                     .find(|rule| rule.id == *active_rule_id)
                 {
                     Some(rule) => RouteResolution::Ready(ActiveRoute {
                         group_id: group.id.clone(),
                         group_name: group.name.clone(),
-                        group_models: group.models.clone(),
-                        provider_ids: group.provider_ids.clone(),
+                        group_models: group.models.clone().unwrap_or_default(),
+                        provider_ids: group.provider_ids.clone().unwrap_or_default(),
                         preferred_provider_id: active_rule_id.clone(),
                         providers_by_id: group
                             .providers
                             .iter()
+                            .flatten()
                             .cloned()
                             .map(|provider| (provider.id.clone(), provider))
                             .collect(),
-                        failover: group.failover.clone(),
+                        failover: group.failover.clone().unwrap_or_else(default_group_failover_config),
                         rule: rule.clone(),
                     }),
                     None => RouteResolution::MissingActiveRule {
@@ -472,7 +474,7 @@ pub(super) fn assert_rule_ready(rule: &Rule) -> Result<(), (u16, String)> {
     if rule.name.trim().is_empty() {
         return Err((409, "Active rule name is empty".into()));
     }
-    if rule.default_model.trim().is_empty() {
+    if rule.default_model.as_ref().map_or(true, |m| m.trim().is_empty()) {
         return Err((409, "Active rule defaultModel is empty".into()));
     }
     if rule.token.trim().is_empty() {
@@ -505,14 +507,14 @@ pub(super) fn resolve_target_model(
         if let Some(matched_model) = find_group_model_match(group_models, &model) {
             return rule
                 .model_mappings
-                .get(&model)
-                .cloned()
-                .or_else(|| rule.model_mappings.get(matched_model).cloned())
+                .as_ref()
+                .and_then(|m| m.get(&model).cloned())
+                .or_else(|| rule.model_mappings.as_ref().and_then(|m| m.get(matched_model).cloned()))
                 .unwrap_or(model);
         }
     }
 
-    rule.default_model.clone()
+    rule.default_model.clone().unwrap_or_default()
 }
 
 /// Finds the best matching group model pattern for a requested model string.

@@ -155,7 +155,7 @@ fn merge_imported_groups(current: &[Group], imported: &[Group]) -> Vec<Group> {
 
 /// Merges group by provider name for this module's workflow.
 fn merge_group_by_provider_name(current: &Group, imported: &Group) -> Group {
-    let mut providers = current.providers.clone();
+    let mut providers = current.providers.clone().unwrap_or_default();
     let mut current_index_by_name: HashMap<String, usize> = HashMap::new();
     for (index, provider) in providers.iter().enumerate() {
         current_index_by_name
@@ -175,18 +175,18 @@ fn merge_group_by_provider_name(current: &Group, imported: &Group) -> Group {
         })
         .collect();
 
+    let imported_providers = imported.providers.clone().unwrap_or_default();
     let imported_active_name = imported
         .active_provider_id
         .as_ref()
         .and_then(|active_id| {
-            imported
-                .providers
+            imported_providers
                 .iter()
                 .find(|provider| provider.id == *active_id)
         })
         .map(|provider| provider.name.clone());
 
-    for imported_provider in &imported.providers {
+    for imported_provider in &imported_providers {
         let name_key = provider_name_key(&imported_provider.name);
         if let Some(index) = current_index_by_name.get(&name_key).copied() {
             let mut next_provider = imported_provider.clone();
@@ -220,13 +220,16 @@ fn merge_group_by_provider_name(current: &Group, imported: &Group) -> Group {
     Group {
         id: current.id.clone(),
         name: imported.name.clone(),
+        routing_table: Vec::new(),
         models: imported.models.clone(),
-        provider_ids: providers
-            .iter()
-            .map(|provider| provider.id.clone())
-            .collect(),
+        provider_ids: Some(
+            providers
+                .iter()
+                .map(|provider| provider.id.clone())
+                .collect(),
+        ),
         active_provider_id: next_active_provider_id,
-        providers,
+        providers: Some(providers),
         failover: current.failover.clone(),
     }
 }
@@ -235,12 +238,14 @@ fn merge_group_by_provider_name(current: &Group, imported: &Group) -> Group {
 fn normalize_group_provider_ids(mut group: Group) -> Group {
     let mut used_ids = HashSet::new();
     let mut old_to_new_id: HashMap<String, String> = HashMap::new();
-    for provider in &mut group.providers {
-        let old_id = provider.id.clone();
-        let new_id = alloc_provider_id(&provider.id, &mut used_ids);
-        provider.id = new_id.clone();
-        if !old_id.trim().is_empty() {
-            old_to_new_id.insert(old_id, new_id);
+    if let Some(ref mut providers) = group.providers {
+        for provider in providers.iter_mut() {
+            let old_id = provider.id.clone();
+            let new_id = alloc_provider_id(&provider.id, &mut used_ids);
+            provider.id = new_id.clone();
+            if !old_id.trim().is_empty() {
+                old_to_new_id.insert(old_id, new_id);
+            }
         }
     }
 
@@ -251,6 +256,7 @@ fn normalize_group_provider_ids(mut group: Group) -> Group {
             let exists = group
                 .providers
                 .iter()
+                .flatten()
                 .any(|provider| provider.id == active_id);
             if !exists {
                 group.active_provider_id = None;
@@ -258,11 +264,14 @@ fn normalize_group_provider_ids(mut group: Group) -> Group {
         }
     }
 
-    group.provider_ids = group
-        .providers
-        .iter()
-        .map(|provider| provider.id.clone())
-        .collect();
+    group.provider_ids = Some(
+        group
+            .providers
+            .iter()
+            .flatten()
+            .map(|provider| provider.id.clone())
+            .collect(),
+    );
     group
 }
 

@@ -41,7 +41,7 @@ pub fn validate_config(config: &ProxyConfig) -> Result<(), String> {
         if provider.id.trim().is_empty() {
             return Err("provider.id is required".into());
         }
-        if provider.default_model.trim().is_empty() {
+        if provider.default_model.as_ref().map_or(true, |m| m.trim().is_empty()) {
             return Err(format!(
                 "provider.defaultModel required for {}",
                 provider.id
@@ -66,12 +66,13 @@ pub fn validate_config(config: &ProxyConfig) -> Result<(), String> {
         if group.name.trim().is_empty() {
             return Err(format!("group.name is required for {}", group.id));
         }
-        let effective_provider_ids: Vec<String> = if !group.provider_ids.is_empty() {
-            group.provider_ids.clone()
+        let effective_provider_ids: Vec<String> = if group.provider_ids.as_ref().is_some_and(|p| !p.is_empty()) {
+            group.provider_ids.clone().unwrap()
         } else {
             group
                 .providers
                 .iter()
+                .flatten()
                 .map(|provider| provider.id.clone())
                 .collect()
         };
@@ -90,6 +91,7 @@ pub fn validate_config(config: &ProxyConfig) -> Result<(), String> {
             let exists_in_group = group
                 .providers
                 .iter()
+                .flatten()
                 .any(|provider| provider.id == *provider_id);
             if !exists_in_global && !exists_in_group {
                 return Err(format!(

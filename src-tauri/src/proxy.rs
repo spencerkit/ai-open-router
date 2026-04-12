@@ -256,19 +256,20 @@ impl ProxyRuntime {
                 .iter()
                 .map(|group| {
                     let preferred_provider_id = group.active_provider_id.clone();
-                    let provider_ids = if group.provider_ids.is_empty() {
+                    let provider_ids = if group.provider_ids.as_ref().is_some_and(|p| !p.is_empty()) {
+                        group.provider_ids.clone().unwrap()
+                    } else {
                         group
                             .providers
                             .iter()
+                            .flatten()
                             .map(|provider| provider.id.clone())
                             .collect::<Vec<_>>()
-                    } else {
-                        group.provider_ids.clone()
                     };
                     let failover_config = failover::FailoverConfigSnapshot {
-                        enabled: group.failover.enabled,
-                        failure_threshold: group.failover.failure_threshold,
-                        cooldown_seconds: group.failover.cooldown_seconds,
+                        enabled: group.failover.as_ref().map_or(false, |f| f.enabled),
+                        failure_threshold: group.failover.as_ref().map_or(3, |f| f.failure_threshold),
+                        cooldown_seconds: group.failover.as_ref().map_or(300, |f| f.cooldown_seconds),
                     };
                     let current_provider_id =
                         preferred_provider_id
