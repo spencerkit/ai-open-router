@@ -14,9 +14,9 @@ export const ROUTING_TEMPLATES: RoutingTemplate[] = [
     id: "claude-code",
     name: "Claude Code",
     routes: [
-      { requestModel: "opus", targetModel: "claude-opus-3-5" },
-      { requestModel: "sonnet", targetModel: "claude-sonnet-4" },
-      { requestModel: "haiku", targetModel: "claude-haiku-4" },
+      { requestModel: "claude-opus-4-6", targetModel: "claude-opus-3-5" },
+      { requestModel: "claude-sonnet-4-6", targetModel: "claude-sonnet-4" },
+      { requestModel: "claude-haiku-4-5-20251001", targetModel: "claude-haiku-4" },
     ],
   },
   {
