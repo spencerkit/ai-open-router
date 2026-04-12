@@ -1,5 +1,6 @@
 import type React from "react"
 import { useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Button, Input, Select } from "@/components"
 import type { Provider, RouteEntry } from "@/types"
 import { applyTemplateToRoutes, ROUTING_TEMPLATES } from "@/utils/routingTemplates"
@@ -46,6 +47,7 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
   routes,
   onSave,
 }) => {
+  const { t } = useTranslation()
   const [draftRoutes, setDraftRoutes] = useState<RouteEntry[]>(() => createDraftRoutes(routes))
   const [templateId, setTemplateId] = useState("")
   const [saveError, setSaveError] = useState("")
@@ -115,7 +117,7 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
     )
 
     if (!hasDefaultRoute) {
-      setSaveError("A default route is required before saving.")
+      setSaveError(t("servicePage.routingTableMustHaveDefault"))
       return
     }
 
@@ -127,10 +129,8 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
     <section className={styles.routingEditor}>
       <div className={styles.routingEditorHeader}>
         <div className={styles.routingEditorTitleWrap}>
-          <h3 className={styles.routingEditorTitle}>Routing Table</h3>
-          <p className={styles.routingEditorHint}>
-            Configure request model routes and save the draft back to ServicePage.
-          </p>
+          <h3 className={styles.routingEditorTitle}>{t("servicePage.routingTable")}</h3>
+          <p className={styles.routingEditorHint}>{t("servicePage.routingTableHint")}</p>
         </div>
         <div className={styles.routingEditorToolbar}>
           <Select
@@ -140,12 +140,12 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
               label: template.name,
               value: template.id,
             }))}
-            placeholder="Fill from template"
+            placeholder={t("servicePage.fillFromTemplate")}
             value={templateId}
             onChange={handleTemplateFill}
           />
           <Button type="button" variant="default" size="small" onClick={handleAddRoute}>
-            Add Route
+            {t("servicePage.addRoute")}
           </Button>
         </div>
       </div>
@@ -154,9 +154,9 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
         <table className={styles.routingEditorTable}>
           <thead>
             <tr>
-              <th>Request Model</th>
-              <th>Provider</th>
-              <th>Target Model</th>
+              <th>{t("servicePage.requestModel")}</th>
+              <th>{t("servicePage.provider")}</th>
+              <th>{t("servicePage.targetModel")}</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -171,14 +171,17 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
 
               return (
                 <tr
-                  key={`${route.requestModel || "route"}-${route.providerId || "provider"}-${route.targetModel || "target"}`}
+                  // biome-ignore lint/suspicious/noArrayIndexKey: index is stable — rows are only ever appended/removed at the end, never reordered; using dynamic field-based keys caused focus loss on every keystroke
+                  key={`route-row-${index}`}
                   className={isDefaultRoute ? styles.routingEditorDefaultRow : undefined}
                 >
                   <td>
                     <Input
                       aria-label={`Request model ${index + 1}`}
                       className={isDefaultRoute ? styles.routingEditorReadonlyInput : undefined}
-                      placeholder={isDefaultRoute ? DEFAULT_ROUTE_REQUEST_MODEL : "Request model"}
+                      placeholder={
+                        isDefaultRoute ? DEFAULT_ROUTE_REQUEST_MODEL : t("servicePage.requestModel")
+                      }
                       readOnly={isDefaultRoute}
                       value={route.requestModel}
                       onChange={event => {
@@ -197,7 +200,7 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
                         label: providerOption.name,
                         value: providerOption.id,
                       }))}
-                      placeholder="Select provider"
+                      placeholder={t("servicePage.selectProvider")}
                       value={route.providerId}
                       onChange={value => handleProviderChange(index, value)}
                     />
@@ -208,7 +211,7 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
                       disabled={!route.providerId || targetModelOptions.length === 0}
                       fullWidth
                       options={targetModelOptions}
-                      placeholder="Select target model"
+                      placeholder={t("servicePage.targetModel")}
                       value={route.targetModel}
                       onChange={value => {
                         updateRoute(index, currentRoute => ({
@@ -220,11 +223,13 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
                   </td>
                   <td className={styles.routingEditorActionCell}>
                     {isDefaultRoute ? (
-                      <span className={styles.routingEditorLockedLabel}>Locked</span>
+                      <span className={styles.routingEditorLockedLabel}>
+                        {t("servicePage.locked")}
+                      </span>
                     ) : (
                       <button
                         type="button"
-                        aria-label="Remove route"
+                        aria-label={t("servicePage.removeRoute")}
                         className={styles.routingEditorRemoveButton}
                         onClick={() => handleRemoveRoute(index)}
                       >
@@ -248,7 +253,7 @@ export const RoutingTableEditor: React.FC<RoutingTableEditorProps> = ({
           <span />
         )}
         <Button type="button" variant="primary" onClick={handleSave}>
-          Save
+          {t("common.save")}
         </Button>
       </div>
     </section>
