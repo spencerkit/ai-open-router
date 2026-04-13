@@ -57,7 +57,7 @@ export interface ProxyConfig {
   logging: LoggingConfig
   ui: UIConfig
   remoteGit: RemoteGitConfig
-  providers?: Group["providers"]
+  providers?: Provider[]
   groups: Group[]
 }
 
