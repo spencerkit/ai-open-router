@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.2 - 2026-04-13
+### Features
+- feat(backend): switch routing match to fuzzy contains + longest-match (eb9c097)
+- feat(frontend): add findRoute with fuzzy contains + longest-match (312e521)
+- feat(templates): add routing templates for Claude Code, Codex, Gemini (e7ec30b)
+- feat(proxy): add Claude thinking passthrough (7770c80)
+- feat(proxy): add safe header passthrough controls (6b0540e)
+- feat(rule-form): add billing template picker (20596c7)
+- feat(billing): add pricing template catalog (c4ab077)
+- feat(types): persist billing template attribution (7409b6c)
+### Fixes
+- fix(frontend): use stable index-based key for routing table rows (c1faffb)
+- fix(templates): use correct Claude model IDs in Claude Code template (e28ef36)
+- fix(proxy): raise request body size limit (a4e9973)
+- fix(billing): default missing template prices to zero (ab402d0)
+- fix(rule-form): stabilize billing template modified state (ed234fb)
+- fix(rule-form): preserve blank partial template fields (b97fc5c)
+- fix(billing): harden template catalog usage (33adca1)
+### Maintenance
+- refactor(providers): streamline provider catalog card layout (91781f5)
+- docs: add routing table fixes implementation plan (db162e3)
+- docs: add routing table fixes design (c2b9d1e)
+- refactor(frontend): move routing edits into service page (c55e704)
+- docs: add service page routing table design (e6af62f)
+- refactor(frontend): update Provider list and form for multi-model support (7dfe734)
+- refactor(types): add RouteEntry and routingTable types (712f367)
+- refactor(config_service): simplify provider merge and fix group normalization (8484cf1)
+- refactor: remove failover routing state and dead code (b855731)
+- refactor(config_store): filter invalid groups and providers on load (96c5244)
+- refactor(config): normalize routing_table and models defaults in schema (ba3f102)
+- refactor(config): add v4->v5 migration for group/provider validation (a05f5ad)
+- refactor: update entities.rs type definitions for routing table (a5c0b69)
+- docs: add routing table implementation plans (67ebb39)
+- docs: add routing table redesign spec (9da9ab6)
+- refactor: make agent editor source-only (9a8dd91)
+- chore(release): bump version to v0.3.1 (9d71e7e)
+- chore(release): bump version to 0.3.0 (f8bdc90)
+- style(rust): align proxy files with rustfmt (5abdccd)
+- chore(docs): remove superpowers planning artifacts (0584bfc)
+- test(billing): strengthen template snapshot regression (059fb65)
+- test(billing): add template regression coverage (ad20fb0)
+- test(rust): cover billing template nested default (1e1f066)
+- docs(spec): add billing template design (b5f8d74)
+- chore(deps): upgrade npm dependencies (9ac5e42)
+
 ## v0.3.1 - 2026-04-04
 ### Features
 - add safe upstream header passthrough controls to proxy configuration, routing, and rule form management flows (182a296)
