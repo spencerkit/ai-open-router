@@ -142,7 +142,8 @@ pub async fn pull_with_dir(
     }
 
     let (groups_len, saved, restarted, status) =
-        config_service::import_groups_payload(state, parsed, Some(GroupImportMode::Overwrite)).await?;
+        config_service::import_groups_payload(state, parsed, Some(GroupImportMode::Overwrite))
+            .await?;
 
     Ok(RemoteRulesPullResult {
         ok: true,

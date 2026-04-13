@@ -129,7 +129,10 @@ mod tests {
     use super::*;
     use crate::app_state::AppState;
     use crate::config::schema::default_config;
-    use crate::domain::entities::{default_group_failover_config, default_rule_cost_config, default_rule_quota_config, Group, RouteEntry, Rule};
+    use crate::domain::entities::{
+        default_group_failover_config, default_rule_cost_config, default_rule_quota_config, Group,
+        RouteEntry, Rule,
+    };
     use crate::integration_store::IntegrationStore;
     use crate::log_store::LogStore;
     use crate::models::{AppInfo, GroupImportMode};
