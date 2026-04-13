@@ -86,22 +86,17 @@ pub async fn save_config(
 pub async fn import_groups_payload(
     state: &SharedState,
     parsed: Value,
-    mode: Option<GroupImportMode>,
+    _mode: Option<GroupImportMode>,
 ) -> AppResult<(usize, ProxyConfig, bool, ProxyStatus)> {
     let imported_groups =
         extract_groups_from_import_payload(&parsed).map_err(AppError::validation)?;
     let imported_group_count = imported_groups.len();
     let prev = state.config_store.get();
     let mut next = prev.clone();
-    match mode.unwrap_or(GroupImportMode::Incremental) {
-        GroupImportMode::Incremental => {
-            next.groups = merge_imported_groups(&prev.groups, &imported_groups);
-        }
-        GroupImportMode::Overwrite => {
-            next.groups = imported_groups;
-            next.providers = vec![];
-        }
-    }
+
+    // 覆盖模式：直接替换 groups，清空 providers
+    next.groups = imported_groups;
+    next.providers = vec![];
 
     let saved = state.config_store.save_config(next)?;
     let (restarted, status) = sync_runtime_config(state, prev, saved.clone()).await?;
