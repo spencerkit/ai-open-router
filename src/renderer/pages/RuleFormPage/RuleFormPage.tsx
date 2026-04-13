@@ -360,7 +360,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const group = groupId ? config?.groups.find(g => g.id === groupId) : null
   const provider = isGlobalMode
     ? ((config?.providers ?? []).find(item => item.id === providerId) ?? null)
-    : (group?.providers?.find(item => item.id === providerId) ?? null)
+    : ((config?.providers ?? []).find(item => item.id === providerId) ?? null)
   const quotaDraftFingerprint = JSON.stringify({
     token,
     name,

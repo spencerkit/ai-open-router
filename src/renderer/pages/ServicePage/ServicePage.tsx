@@ -189,7 +189,6 @@ export const ServicePage: React.FC = () => {
       id: normalizedId,
       name: newGroupName.trim(),
       routingTable: [{ requestModel: "default", providerId: "", targetModel: "" }],
-      activeProviderId: null,
     }
 
     const newConfig: ProxyConfig = {

@@ -189,11 +189,15 @@ export const LogsPage: React.FC = () => {
 
   const ruleOptions = useMemo(() => {
     const options: Array<{ key: string; label: string }> = []
+    const globalProviderById = new Map((config?.providers ?? []).map(p => [p.id, p]))
     for (const group of config?.groups || []) {
-      for (const provider of group.providers || []) {
+      for (const route of group.routingTable ?? []) {
+        const providerId = route.providerId?.trim()
+        if (!providerId) continue
+        const provider = globalProviderById.get(providerId)
         options.push({
-          key: `${group.id}::${provider.id}`,
-          label: `${group.name || group.id}-${provider.name || provider.id}`,
+          key: `${group.id}::${providerId}`,
+          label: `${group.name || group.id}-${provider?.name || providerId}`,
         })
       }
     }
@@ -201,18 +205,14 @@ export const LogsPage: React.FC = () => {
   }, [config])
 
   const providerOptions = useMemo(() => {
-    const map = new Map<string, { id: string; label: string }>()
-    for (const group of config?.groups || []) {
-      for (const provider of group.providers || []) {
-        if (!provider.id) continue
-        if (!map.has(provider.id)) {
-          const name = provider.name?.trim()
-          const label = name || provider.id
-          map.set(provider.id, { id: provider.id, label })
-        }
-      }
+    const seen = new Set<string>()
+    const result: Array<{ id: string; label: string }> = []
+    for (const provider of config?.providers ?? []) {
+      if (!provider.id || seen.has(provider.id)) continue
+      seen.add(provider.id)
+      result.push({ id: provider.id, label: provider.name?.trim() || provider.id })
     }
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label))
+    return result.sort((a, b) => a.label.localeCompare(b.label))
   }, [config])
 
   const providerOptionsById = useMemo(() => {
@@ -224,27 +224,26 @@ export const LogsPage: React.FC = () => {
   }, [providerOptions])
 
   const groupOptions = useMemo(() => {
-    const options: Array<{ id: string; label: string }> = []
-    for (const group of config?.groups || []) {
-      if (selectedProviderId !== "all") {
-        const hasProvider = (group.providers || []).some(
-          provider => provider.id === selectedProviderId
-        )
-        if (!hasProvider) continue
-      }
-      options.push({ id: group.id, label: group.name || group.id })
-    }
-    return options
-  }, [config, selectedProviderId])
+    return (config?.groups ?? []).map(group => ({
+      id: group.id,
+      label: group.name || group.id,
+    }))
+  }, [config])
 
   const providerCostMetaByKey = useMemo(() => {
     const map = new Map<string, { enabled: boolean; currency: string }>()
+    const globalProviderById = new Map((config?.providers ?? []).map(p => [p.id, p]))
     for (const group of config?.groups || []) {
-      for (const provider of group.providers || []) {
-        map.set(`${group.id}::${provider.id}`, {
-          enabled: Boolean(provider.cost?.enabled),
-          currency: provider.cost?.currency || "USD",
-        })
+      for (const route of group.routingTable ?? []) {
+        const providerId = route.providerId?.trim()
+        if (!providerId) continue
+        const provider = globalProviderById.get(providerId)
+        if (provider) {
+          map.set(`${group.id}::${providerId}`, {
+            enabled: Boolean(provider.cost?.enabled),
+            currency: provider.cost?.currency || "USD",
+          })
+        }
       }
     }
     return map
@@ -276,11 +275,14 @@ export const LogsPage: React.FC = () => {
     if (!config) return keys
     if (selectedGroupIds.length === 0) return keys
     const groupSet = new Set(selectedGroupIds)
-    for (const group of config.groups || []) {
+    const _globalProviderById = new Map((config.providers ?? []).map(p => [p.id, p]))
+    for (const group of config.groups) {
       if (!groupSet.has(group.id)) continue
-      for (const provider of group.providers || []) {
-        if (selectedProviderId !== "all" && provider.id !== selectedProviderId) continue
-        keys.push(`${group.id}::${provider.id}`)
+      for (const route of group.routingTable ?? []) {
+        const providerId = route.providerId?.trim()
+        if (!providerId) continue
+        if (selectedProviderId !== "all" && providerId !== selectedProviderId) continue
+        keys.push(`${group.id}::${providerId}`)
       }
     }
     return keys
