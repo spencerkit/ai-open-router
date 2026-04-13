@@ -4,7 +4,7 @@ import path from "node:path"
 import { test } from "node:test"
 import React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-
+import { enUS } from "../../src/renderer/i18n/en-US"
 import type { Provider, RouteEntry } from "../../src/renderer/types"
 
 const Module = require("node:module") as {
@@ -70,7 +70,7 @@ function resolveCompiledAlias(request: string): string | null {
 }
 
 Module._resolveFilename = (request, parent, isMain, options) => {
-  if (request === "@/components") {
+  if (request === "@/components" || request === "react-i18next") {
     return request
   }
 
@@ -157,6 +157,33 @@ require.cache["@/components"] = {
   },
   filename: "@/components",
   id: "@/components",
+  loaded: true,
+} as NodeModule
+
+require.cache["react-i18next"] = {
+  exports: {
+    useTranslation: () => ({
+      t: (key: string) => {
+        // Resolve nested translation keys like "servicePage.routingTable"
+        const parts = key.split(".")
+        let value: unknown = enUS
+        for (const part of parts) {
+          if (value && typeof value === "object" && part in value) {
+            value = (value as Record<string, unknown>)[part]
+          } else {
+            return key // Return key if not found
+          }
+        }
+        return typeof value === "string" ? value : key
+      },
+      i18n: {
+        changeLanguage: () => Promise.resolve(),
+        language: "en",
+      },
+    }),
+  },
+  filename: "react-i18next",
+  id: "react-i18next",
   loaded: true,
 } as NodeModule
 
@@ -435,7 +462,7 @@ test("keeps target model disabled when selected provider has no models", () => {
   const markup = renderToStaticMarkup(tree as React.ReactElement)
 
   assert.equal(targetModelSelect.props.disabled, true)
-  assert.match(markup, /Select target model/)
+  assert.match(markup, />Target Model</)
   assert.doesNotMatch(markup, /model-a/)
 })
 
@@ -484,7 +511,7 @@ test("applies template routes, adds route, and removes non-default route", () =>
   addButton.props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
 
   tree = harness.renderReady()
-  findButtonByAriaLabel(tree, "Remove route").props.onClick?.(
+  findButtonByAriaLabel(tree, "Remove Route").props.onClick?.(
     {} as React.MouseEvent<HTMLButtonElement>
   )
 
@@ -507,7 +534,7 @@ test("prevents save when default route is missing and surfaces validation messag
   const markup = renderToStaticMarkup(updatedTree as React.ReactElement)
 
   assert.equal(onSaveCalls.length, 0)
-  assert.match(markup, /A default route is required before saving\./)
+  assert.match(markup, /Routing table must contain a default rule/)
 })
 
 test("saves current draft routes after edits", () => {

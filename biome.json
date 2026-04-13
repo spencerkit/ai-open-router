@@ -7,7 +7,15 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/node_modules", "!**/out", "!**/dist", "!**/.git"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/out",
+      "!**/dist",
+      "!**/.git",
+      "!**/.claude",
+      "!**/.superpowers"
+    ]
   },
   "formatter": {
     "enabled": true,

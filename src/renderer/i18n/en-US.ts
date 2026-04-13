@@ -132,6 +132,7 @@ export const enUS = {
     routingTable: "Routing Table",
     routingTableHint:
       "Configure request model to provider forwarding rules. The default row handles unmatched requests.",
+    routingTableMustHaveDefault: "Routing table must contain a default rule",
     fillFromTemplate: "Fill from Template",
     addRoute: "Add Route",
     requestModel: "Request Model",
