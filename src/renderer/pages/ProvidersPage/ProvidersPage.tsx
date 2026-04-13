@@ -169,8 +169,8 @@ export const ProvidersPage: React.FC = () => {
     if (!config) return {}
     const result: Record<string, string[]> = {}
     for (const group of config.groups) {
-      const providerIds = group.providerIds ?? group.providers?.map(provider => provider.id) ?? []
-      for (const providerId of providerIds) {
+      for (const route of group.routingTable ?? []) {
+        const providerId = route.providerId?.trim()
         if (!providerId) continue
         if (!result[providerId]) {
           result[providerId] = []
@@ -263,10 +263,9 @@ export const ProvidersPage: React.FC = () => {
 
   const affectedGroups = useMemo(() => {
     if (!pendingDeleteProviderId || !config) return []
-    return config.groups.filter(group => {
-      const providerIds = group.providerIds ?? group.providers?.map(provider => provider.id) ?? []
-      return providerIds.includes(pendingDeleteProviderId)
-    })
+    return config.groups.filter(group =>
+      (group.routingTable ?? []).some(route => route.providerId?.trim() === pendingDeleteProviderId)
+    )
   }, [config, pendingDeleteProviderId])
 
   useEffect(() => {
@@ -309,26 +308,12 @@ export const ProvidersPage: React.FC = () => {
       provider => provider.id !== pendingDeleteProviderId
     )
 
-    const nextGroups = config.groups.map(group => {
-      const providerIds = (
-        group.providerIds ??
-        group.providers?.map(provider => provider.id) ??
-        []
-      ).filter(providerId => providerId !== pendingDeleteProviderId)
-      const providers = (group.providers ?? []).filter(
-        provider => provider.id !== pendingDeleteProviderId
-      )
-      const activeProviderId =
-        group.activeProviderId && providerIds.includes(group.activeProviderId)
-          ? group.activeProviderId
-          : (providerIds[0] ?? null)
-      return {
-        ...group,
-        providerIds,
-        providers,
-        activeProviderId,
-      }
-    })
+    const nextGroups = config.groups.map(group => ({
+      ...group,
+      routingTable: (group.routingTable ?? []).filter(
+        route => route.providerId?.trim() !== pendingDeleteProviderId
+      ),
+    }))
 
     const nextConfig: ProxyConfig = {
       ...config,
@@ -399,11 +384,9 @@ export const ProvidersPage: React.FC = () => {
       return
     }
 
-    const targetGroup = config.groups.find(group => {
-      if ((group.providers ?? []).some(item => item.id === providerId)) return true
-      const providerIds = group.providerIds ?? group.providers?.map(item => item.id) ?? []
-      return providerIds.includes(providerId)
-    })
+    const targetGroup = config.groups.find(group =>
+      (group.routingTable ?? []).some(route => route.providerId?.trim() === providerId)
+    )
 
     setTestingProviderIds(prev => ({ ...prev, [providerId]: true }))
     try {
