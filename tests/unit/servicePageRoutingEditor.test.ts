@@ -310,8 +310,6 @@ function createConfig(): ProxyConfig {
         routingTable: [
           { requestModel: "default", providerId: "provider-1", targetModel: "model-a" },
         ],
-        providerIds: ["provider-1"],
-        activeProviderId: "provider-1",
       },
     ],
   }
@@ -352,8 +350,6 @@ test("saves routing table edits back into the active group only", async () => {
     id: "prod",
     name: "Production",
     routingTable: [{ requestModel: "default", providerId: "", targetModel: "" }],
-    providerIds: [],
-    activeProviderId: null,
   })
   configStateValue.current = sourceConfig
 

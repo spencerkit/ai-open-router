@@ -317,8 +317,7 @@ function createConfig(overrides?: Partial<ProxyConfig>): ProxyConfig {
       {
         id: "dev",
         name: "Dev",
-        activeProviderId: null,
-        models: ["claude-sonnet-4"],
+
         routingTable: [{ requestModel: "default", providerId: "", targetModel: "" }],
       },
     ],
@@ -616,8 +615,7 @@ test("rejects submission when routing table has no default route", async () => {
       {
         id: "dev",
         name: "Dev",
-        activeProviderId: null,
-        models: ["claude-sonnet-4"],
+
         routingTable: [
           { requestModel: "sonnet", providerId: "p2", targetModel: "claude-sonnet-4" },
         ],

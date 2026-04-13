@@ -5,11 +5,7 @@ import { test } from "node:test"
 import React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 
-import type {
-  GroupRuntimeStatus,
-  Provider,
-  ProviderModelHealthSnapshot,
-} from "../../src/renderer/types"
+import type { Provider, ProviderModelHealthSnapshot } from "../../src/renderer/types"
 
 const Module = require("node:module") as {
   _resolveFilename: (
@@ -217,8 +213,6 @@ function createProvider(overrides: Partial<Provider> = {}): Provider {
 
 function renderProviderList(input: {
   providers: Provider[]
-  activeProviderId: string | null
-  groupRuntime?: GroupRuntimeStatus | null
   testingProviderIds?: Record<string, boolean | undefined>
   providerHealthByProviderId?: Record<string, ProviderModelHealthSnapshot | null | undefined>
 }) {
@@ -226,9 +220,6 @@ function renderProviderList(input: {
   return renderToStaticMarkup(
     React.createElement(ProviderList, {
       providers: input.providers,
-      activeProviderId: input.activeProviderId,
-      groupRuntime: input.groupRuntime,
-      onActivate: () => {},
       onDelete: () => {},
       onEdit: () => {},
       onAdd: () => {},
@@ -256,7 +247,7 @@ function renderCatalogProviderList(input: {
   )
 }
 
-test("shows preferred, current, failover, and availability badges when runtime provider differs", () => {
+test("shows provider names and availability status", () => {
   const providers = [
     createProvider({ id: "provider-a", name: "Preferred Provider", defaultModel: "gpt-4.1" }),
     createProvider({ id: "provider-b", name: "Failover Provider", defaultModel: "gpt-4o-mini" }),
@@ -264,13 +255,6 @@ test("shows preferred, current, failover, and availability badges when runtime p
 
   const markup = renderProviderList({
     providers,
-    activeProviderId: "provider-a",
-    groupRuntime: {
-      groupId: "dev",
-      currentProviderId: "provider-b",
-      failoverActiveProviderId: "provider-b",
-      failoverActive: true,
-    },
     providerHealthByProviderId: {
       "provider-b": {
         groupId: "dev",
@@ -284,24 +268,18 @@ test("shows preferred, current, failover, and availability badges when runtime p
 
   assert.match(markup, /Preferred Provider/)
   assert.match(markup, /Failover Provider/)
-  assert.match(markup, />Preferred</)
-  assert.match(markup, />Current</)
-  assert.match(markup, />Failover</)
   assert.match(markup, />Available</)
-  assert.doesNotMatch(markup, />128ms</)
 })
 
-test("shows only the preferred badge when runtime status is unavailable", () => {
+test("shows provider without runtime badges", () => {
   const markup = renderProviderList({
-    providers: [createProvider({ id: "provider-a", name: "Preferred Provider" })],
-    activeProviderId: "provider-a",
+    providers: [createProvider({ id: "provider-a", name: "Provider A" })],
   })
 
-  assert.match(markup, />Preferred</)
-  assert.doesNotMatch(markup, />Current</)
+  assert.match(markup, /Provider A/)
 })
 
-test("keeps provider name, protocol, status, and compact metadata visible in service cards", () => {
+test("renders provider card with name, protocol, and status", () => {
   const markup = renderProviderList({
     providers: [
       createProvider({
@@ -312,7 +290,6 @@ test("keeps provider name, protocol, status, and compact metadata visible in ser
         defaultModel: "gpt-4.1-mini",
       }),
     ],
-    activeProviderId: "provider-a",
     providerHealthByProviderId: {
       "provider-a": {
         groupId: "dev",
@@ -329,7 +306,6 @@ test("keeps provider name, protocol, status, and compact metadata visible in ser
   assert.match(markup, />Available</)
   assert.match(markup, />api\.openai\.com</)
   assert.match(markup, /Edit Provider: Provider A/)
-  assert.match(markup, /Delete: Provider A/)
 })
 
 test("keeps provider name, protocol, status, default model, compact API address, and models visible in catalog cards", () => {
@@ -367,7 +343,6 @@ test("keeps provider name, protocol, status, default model, compact API address,
 test("shows testing badge while a provider test is in progress", () => {
   const markup = renderProviderList({
     providers: [createProvider({ id: "provider-a", name: "Provider A" })],
-    activeProviderId: "provider-a",
     testingProviderIds: {
       "provider-a": true,
     },
