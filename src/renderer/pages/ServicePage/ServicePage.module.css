@@ -2456,6 +2456,7 @@
 
 .routingEditorTable {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -2465,6 +2466,7 @@
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
+  overflow: hidden;
 }
 
 .routingEditorTable th {
@@ -2474,6 +2476,25 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   background: color-mix(in oklab, var(--surface) 70%, var(--bg-raised));
+}
+
+/* Column widths: fixed to prevent layout shift on provider change */
+.routingEditorTable > thead > tr > th:nth-child(1),
+.routingEditorTable > tbody > tr > td:nth-child(1) {
+  width: 28%;
+}
+
+.routingEditorTable > thead > tr > th:nth-child(2),
+.routingEditorTable > thead > tr > th:nth-child(3),
+.routingEditorTable > tbody > tr > td:nth-child(2),
+.routingEditorTable > tbody > tr > td:nth-child(3) {
+  width: 31%;
+}
+
+.routingEditorTable > thead > tr > th:nth-child(4),
+.routingEditorTable > tbody > tr > td:nth-child(4) {
+  width: 10%;
+  min-width: 48px;
 }
 
 .routingEditorTable tbody tr:last-child td {
