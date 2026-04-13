@@ -5,7 +5,6 @@ import type {
   Group,
   GroupBackupExportResult,
   GroupBackupImportResult,
-  GroupImportMode,
   Provider,
   ProviderModelHealthSnapshot,
   ProviderModelTestResult,
@@ -364,50 +363,48 @@ export const exportGroupsToClipboardAction = action<void, Promise<GroupBackupExp
   }
 )
 
-export const importGroupsBackupAction = action<
-  { mode?: GroupImportMode } | undefined,
-  Promise<GroupBackupImportResult>
->(async (store, payload) => {
-  try {
-    const _request = payload ?? {}
-    store.set(savingConfigState, true)
-    store.set(lastOperationErrorState, null)
-    const result = await bridge.importGroupsBackup("incremental")
+export const importGroupsBackupAction = action<undefined, Promise<GroupBackupImportResult>>(
+  async (store, _payload) => {
+    try {
+      store.set(savingConfigState, true)
+      store.set(lastOperationErrorState, null)
+      const result = await bridge.importGroupsBackup("overwrite")
 
-    if (!result.canceled && result.config && result.status) {
-      const normalizedConfig = normalizeConfig(result.config)
-      store.set(configState, normalizedConfig)
-      store.set(statusState, result.status)
-      store.set(
-        providerModelHealthByProviderKeyState,
-        pruneProviderModelHealthSnapshots(
-          store.get(providerModelHealthByProviderKeyState),
-          normalizedConfig
+      if (!result.canceled && result.config && result.status) {
+        const normalizedConfig = normalizeConfig(result.config)
+        store.set(configState, normalizedConfig)
+        store.set(statusState, result.status)
+        store.set(
+          providerModelHealthByProviderKeyState,
+          pruneProviderModelHealthSnapshots(
+            store.get(providerModelHealthByProviderKeyState),
+            normalizedConfig
+          )
         )
-      )
-      store.set(savingConfigState, false)
-    } else {
-      store.set(savingConfigState, false)
-    }
+        store.set(savingConfigState, false)
+      } else {
+        store.set(savingConfigState, false)
+      }
 
-    return result
-  } catch (error) {
-    const errorMessage = getErrorMessage(error, "Failed to import group backup")
-    store.set(savingConfigState, false)
-    store.set(lastOperationErrorState, errorMessage)
-    throw error
+      return result
+    } catch (error) {
+      const errorMessage = getErrorMessage(error, "Failed to import group backup")
+      store.set(savingConfigState, false)
+      store.set(lastOperationErrorState, errorMessage)
+      throw error
+    }
   }
-})
+)
 
 export const importGroupsFromJsonAction = action<
-  { jsonText: string; mode?: GroupImportMode },
+  { jsonText: string },
   Promise<GroupBackupImportResult>
 >(async (store, payload) => {
   try {
     const request = requirePayload(payload, "importGroupsFromJsonAction")
     store.set(savingConfigState, true)
     store.set(lastOperationErrorState, null)
-    const result = await bridge.importGroupsFromJson(request.jsonText, "incremental")
+    const result = await bridge.importGroupsFromJson(request.jsonText, "overwrite")
 
     if (!result.canceled && result.config && result.status) {
       const normalizedConfig = normalizeConfig(result.config)
