@@ -4,7 +4,7 @@
 
 use crate::app_state::SharedState;
 use crate::backup::create_groups_backup_payload;
-use crate::models::{RemoteRulesPullResult, RemoteRulesUploadResult};
+use crate::models::{GroupImportMode, RemoteRulesPullResult, RemoteRulesUploadResult};
 use crate::remote_sync::{
     has_remote_git_binary, pull_groups_json_from_remote, remote_rules_file_path,
     upload_groups_json_to_remote,
@@ -142,7 +142,7 @@ pub async fn pull_with_dir(
     }
 
     let (groups_len, saved, restarted, status) =
-        config_service::import_groups_payload(state, parsed, None).await?;
+        config_service::import_groups_payload(state, parsed, Some(GroupImportMode::Overwrite)).await?;
 
     Ok(RemoteRulesPullResult {
         ok: true,
