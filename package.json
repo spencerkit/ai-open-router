@@ -45,7 +45,7 @@
     "@relax-state/core": "0.0.10",
     "@relax-state/react": "0.0.10",
     "echarts": "^6.0.0",
-    "i18next": "^26.0.1",
+    "i18next": "^26.0.4",
     "lucide-react": "^1.7.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
