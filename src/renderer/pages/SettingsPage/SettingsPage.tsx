@@ -630,8 +630,8 @@ export const SettingsPage: React.FC = () => {
       })
       const result =
         request.source === "file"
-          ? await importGroupsBackup(request.payload)
-          : await importGroupsFromJson(request.payload)
+          ? await importGroupsBackup()
+          : await importGroupsFromJson({ jsonText: request.payload.jsonText })
 
       forceCloseImportModal()
       if (!result.canceled) {
