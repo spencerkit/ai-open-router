@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.3 - 2026-04-13
+### Features
+- feat(backend): switch routing match to fuzzy contains + longest-match (eb9c097)
+- feat(frontend): add findRoute with fuzzy contains + longest-match (312e521)
+- feat(templates): add routing templates for Claude Code, Codex, Gemini (e7ec30b)
+- feat(proxy): add Claude thinking passthrough (7770c80)
+- feat(proxy): add safe header passthrough controls (6b0540e)
+
+### Refactors
+- refactor(frontend): move routing edits into service page (c55e704)
+- refactor(frontend): update Provider list and form for multi-model support (7dfe734)
+- refactor(types): add RouteEntry and routingTable types (712f367)
+- refactor(config_service): simplify provider merge and fix group normalization (8484cf1)
+- refactor: remove failover routing state and dead code (b855731)
+- refactor(config_store): filter invalid groups and providers on load (96c5244)
+- refactor(config): normalize routing_table and models defaults in schema (ba3f102)
+- refactor(config): add v4->v5 migration for group/provider validation (a05f5ad)
+- refactor: update entities.rs type definitions for routing table (a5c0b69)
+- refactor: make agent editor source-only (9a8dd91)
+
+### Fixes
+- fix(frontend): use stable index-based key for routing table rows (c1faffb)
+- fix(templates): use correct Claude model IDs in Claude Code template (e28ef36)
+- fix(proxy): raise request body size limit (a4e9973)
+- fix(billing): default missing template prices to zero (ab402d0)
+
+### Testing
+- test(e2e): add tests for group provider list cleanup (da91ee6)
+- refactor: remove unused incremental merge functions (86fe03e)
+- refactor: unify import_groups_payload to overwrite mode only (5489491)
+- refactor: remove import mode selection UI (20ef07e)
+- refactor: remove legacy group provider normalization logic (ff031c2)
+- refactor: stop writing legacy provider fields when creating providers (1e512c4)
+- refactor: use routingTable as sole source for group-provider associations (8c78ad9)
+
 ## v0.3.2 - 2026-04-13
 ### Features
 - feat(backend): switch routing match to fuzzy contains + longest-match (eb9c097)
