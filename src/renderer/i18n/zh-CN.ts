@@ -437,15 +437,10 @@ export const zhCN = {
     exportConfirm: "确认导出",
     importModalTitle: "确认导入分组与 Provider",
     importModalWarning: "导入前先选择如何应用新的分组与 Provider 配置。",
-    importModeLabel: "导入模式",
     importModeHint:
       "增量导入会保留当前分组并合并导入内容；命中的分组/Provider 会按导入内容更新，但现有分组的 failover 设置仍保留本地值；全量覆盖会用导入快照整体替换当前分组与 Provider。",
-    importModeIncremental: "增量合并",
-    importModeIncrementalHint: "保留当前分组/Provider，并合并导入中命中的条目。",
     importModeIncrementalWarning:
       "增量导入会保留当前分组/Provider，更新导入中命中的条目，并继续保留现有分组的 failover 设置。",
-    importModeOverwrite: "全量覆盖",
-    importModeOverwriteHint: "只保留导入中的分组/Provider，并替换当前现有配置。",
     importModeOverwriteWarning:
       "全量覆盖只会替换当前分组/Provider 为导入快照；服务、兼容、日志、界面和远程同步设置保持不变。",
     importSourceLabel: "导入来源",
