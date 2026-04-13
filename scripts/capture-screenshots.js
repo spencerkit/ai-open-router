@@ -54,95 +54,117 @@ function isoHoursAgo(hours) {
 }
 
 function createMockDataset() {
+  const providers = [
+    {
+      id: "provider-openai-main",
+      name: "OpenAI Main",
+      protocol: "openai",
+      token: "sk-live-main",
+      apiAddress: "https://api.openai.com/v1",
+      defaultModel: "gpt-4o",
+      models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1-mini"],
+      modelMappings: {},
+      quota: {
+        enabled: true,
+        provider: "openai",
+        endpoint: "https://quota.example.com/openai",
+        method: "GET",
+        useRuleToken: true,
+        customToken: "",
+        authHeader: "Authorization",
+        authScheme: "Bearer",
+        customHeaders: {},
+        unitType: "tokens",
+        lowThresholdPercent: 10,
+        response: {
+          remaining: "$.data.remaining",
+        },
+      },
+    },
+    {
+      id: "provider-anthropic",
+      name: "Anthropic",
+      protocol: "anthropic",
+      token: "sk-ant-api01",
+      apiAddress: "https://api.anthropic.com",
+      defaultModel: "claude-sonnet-4-20250514",
+      models: ["claude-sonnet-4-20250514", "claude-opus-4-5-20251120", "claude-haiku-4-20250507"],
+      modelMappings: {},
+      quota: {
+        enabled: true,
+        provider: "anthropic",
+        endpoint: "https://quota.example.com/anthropic",
+        method: "GET",
+        useRuleToken: true,
+        customToken: "",
+        authHeader: "x-api-key",
+        authScheme: "Bearer",
+        customHeaders: {},
+        unitType: "tokens",
+        lowThresholdPercent: 15,
+        response: {
+          remaining: "$.data.remaining",
+        },
+      },
+    },
+    {
+      id: "provider-google",
+      name: "Google AI",
+      protocol: "google",
+      token: "sk-google-key",
+      apiAddress: "https://generativelanguage.googleapis.com",
+      defaultModel: "gemini-2.0-flash",
+      models: ["gemini-2.0-flash", "gemini-2.5-pro"],
+      modelMappings: {},
+      quota: {
+        enabled: false,
+        provider: "custom",
+        endpoint: "",
+        method: "GET",
+        useRuleToken: true,
+        customToken: "",
+        authHeader: "Authorization",
+        authScheme: "Bearer",
+        customHeaders: {},
+        unitType: "tokens",
+        lowThresholdPercent: 20,
+        response: {},
+      },
+    },
+  ]
+
   const groups = [
     {
       id: "alpha",
-      name: "Alpha Group",
-      models: ["gpt-4o", "gpt-4o-mini", "claude-3-7-sonnet"],
-      activeRuleId: "rule-openai-main",
-      rules: [
+      name: "Alpha",
+      routingTable: [
+        { requestModel: "default", providerId: "provider-openai-main", targetModel: "gpt-4o" },
         {
-          id: "rule-openai-main",
-          name: "OpenAI Main",
-          protocol: "openai",
-          token: "sk-live-main",
-          apiAddress: "https://api.openai.com/v1",
-          defaultModel: "gpt-4o",
-          modelMappings: {},
-          quota: {
-            enabled: true,
-            provider: "openai",
-            endpoint: "https://quota.example.com/openai",
-            method: "GET",
-            useRuleToken: true,
-            customToken: "",
-            authHeader: "Authorization",
-            authScheme: "Bearer",
-            customHeaders: {},
-            unitType: "tokens",
-            lowThresholdPercent: 10,
-            response: {
-              remaining: "$.data.remaining",
-            },
-          },
+          requestModel: "o1-preview",
+          providerId: "provider-openai-main",
+          targetModel: "o1-preview",
         },
         {
-          id: "rule-anthropic-fallback",
-          name: "Anthropic Fallback",
-          protocol: "anthropic",
-          token: "ak-live-fallback",
-          apiAddress: "https://api.anthropic.com",
-          defaultModel: "claude-3-7-sonnet",
-          modelMappings: {
-            "gpt-4o*": "claude-3-7-sonnet",
-          },
-          quota: {
-            enabled: true,
-            provider: "anthropic",
-            endpoint: "https://quota.example.com/anthropic",
-            method: "GET",
-            useRuleToken: true,
-            customToken: "",
-            authHeader: "Authorization",
-            authScheme: "Bearer",
-            customHeaders: {},
-            unitType: "tokens",
-            lowThresholdPercent: 15,
-            response: {
-              remaining: "$.data.remaining",
-            },
-          },
+          requestModel: "claude*",
+          providerId: "provider-anthropic",
+          targetModel: "claude-sonnet-4-20250514",
         },
+        { requestModel: "gemini*", providerId: "provider-google", targetModel: "gemini-2.0-flash" },
       ],
     },
     {
       id: "research",
-      name: "Research Group",
-      models: ["gpt-4.1-mini", "claude-3-5-haiku"],
-      activeRuleId: "rule-openai-r",
-      rules: [
+      name: "Research",
+      routingTable: [
         {
-          id: "rule-openai-r",
-          name: "Research OpenAI",
-          protocol: "openai_completion",
-          token: "sk-live-research",
-          apiAddress: "https://api.openai.com/v1",
-          defaultModel: "gpt-4.1-mini",
-          modelMappings: {},
-          quota: {
-            enabled: false,
-            provider: "custom",
-            endpoint: "",
-            method: "GET",
-            useRuleToken: true,
-            customToken: "",
-            authHeader: "Authorization",
-            authScheme: "Bearer",
-            customHeaders: {},
-            unitType: "tokens",
-            lowThresholdPercent: 20,
-            response: {},
-          },
+          requestModel: "default",
+          providerId: "provider-openai-main",
+          targetModel: "gpt-4.1-mini",
+        },
+        {
+          requestModel: "opus",
+          providerId: "provider-anthropic",
+          targetModel: "claude-opus-4-5-20251120",
         },
       ],
     },
@@ -174,11 +196,11 @@ function createMockDataset() {
   const activeMinutes = Math.max(activeHours * 60, 1)
 
   const options = groups.flatMap(group =>
-    group.rules.map(rule => ({
-      key: `${group.id}::${rule.id}`,
-      label: `${group.name}-${rule.name}`,
+    providers.map(provider => ({
+      key: `${group.id}::${provider.id}`,
+      label: `${group.name}-${provider.name}`,
       groupId: group.id,
-      ruleId: rule.id,
+      ruleId: provider.id,
     }))
   )
 
@@ -222,40 +244,40 @@ function createMockDataset() {
       ],
       requestsByRule: [
         {
-          key: "alpha::rule-openai-main",
-          label: "Alpha Group-OpenAI Main",
+          key: "alpha::provider-openai-main",
+          label: "Alpha-OpenAI Main",
           count: 680,
           ratio: 0.49,
         },
         {
-          key: "alpha::rule-anthropic-fallback",
-          label: "Alpha Group-Anthropic Fallback",
+          key: "alpha::provider-anthropic",
+          label: "Alpha-Anthropic",
           count: 460,
           ratio: 0.33,
         },
         {
-          key: "research::rule-openai-r",
-          label: "Research Group-Research OpenAI",
+          key: "research::provider-openai-main",
+          label: "Research-OpenAI Main",
           count: 250,
           ratio: 0.18,
         },
       ],
       tokensByRule: [
         {
-          key: "alpha::rule-openai-main",
-          label: "Alpha Group-OpenAI Main",
+          key: "alpha::provider-openai-main",
+          label: "Alpha-OpenAI Main",
           tokens: 302000,
           ratio: 0.46,
         },
         {
-          key: "alpha::rule-anthropic-fallback",
-          label: "Alpha Group-Anthropic Fallback",
+          key: "alpha::provider-anthropic",
+          label: "Alpha-Anthropic",
           tokens: 240000,
           ratio: 0.36,
         },
         {
-          key: "research::rule-openai-r",
-          label: "Research Group-Research OpenAI",
+          key: "research::provider-openai-main",
+          label: "Research-OpenAI Main",
           tokens: 120000,
           ratio: 0.18,
         },
@@ -279,7 +301,7 @@ function createMockDataset() {
       clientAddress: "127.0.0.1",
       groupPath: "alpha",
       groupName: "Alpha Group",
-      ruleId: "rule-openai-main",
+      ruleId: "provider-openai-main",
       direction: "oc",
       entryProtocol: "openai",
       downstreamProtocol: "openai",
@@ -313,7 +335,7 @@ function createMockDataset() {
   })
 
   const config = {
-    configVersion: 2,
+    configVersion: 5,
     server: {
       host: "0.0.0.0",
       port: 8899,
@@ -342,6 +364,7 @@ function createMockDataset() {
       token: "",
       branch: "main",
     },
+    providers,
     groups,
   }
 
@@ -362,11 +385,11 @@ function createMockDataset() {
     },
   }
 
-  const ruleCardStats = {
+  const _ruleCardStats = {
     alpha: [
       {
         groupId: "alpha",
-        ruleId: "rule-openai-main",
+        ruleId: "provider-openai-main",
         requests: 920,
         inputTokens: 236000,
         outputTokens: 126000,
@@ -381,7 +404,7 @@ function createMockDataset() {
       },
       {
         groupId: "alpha",
-        ruleId: "rule-anthropic-fallback",
+        ruleId: "provider-anthropic",
         requests: 540,
         inputTokens: 152000,
         outputTokens: 92000,
@@ -398,7 +421,7 @@ function createMockDataset() {
     research: [
       {
         groupId: "research",
-        ruleId: "rule-openai-r",
+        ruleId: "provider-openai-main",
         requests: 260,
         inputTokens: 68000,
         outputTokens: 41000,
@@ -414,11 +437,11 @@ function createMockDataset() {
     ],
   }
 
-  const quotasByGroup = {
+  const _quotasByGroup = {
     alpha: [
       {
         groupId: "alpha",
-        ruleId: "rule-openai-main",
+        ruleId: "provider-openai-main",
         provider: "openai",
         status: "ok",
         remaining: 182000,
@@ -431,7 +454,7 @@ function createMockDataset() {
       },
       {
         groupId: "alpha",
-        ruleId: "rule-anthropic-fallback",
+        ruleId: "provider-anthropic",
         provider: "anthropic",
         status: "low",
         remaining: 22000,
@@ -446,7 +469,7 @@ function createMockDataset() {
     research: [
       {
         groupId: "research",
-        ruleId: "rule-openai-r",
+        ruleId: "provider-openai-main",
         provider: "custom",
         status: "unsupported",
         remaining: null,
@@ -460,13 +483,101 @@ function createMockDataset() {
     ],
   }
 
+  // Build providerQuotas keyed by "groupId:providerId"
+  const providerQuotas = {}
+  for (const group of groups) {
+    for (const provider of providers) {
+      const key = `${group.id}:${provider.id}`
+      const isUsed = group.routingTable.some(rt => rt.providerId === provider.id)
+      if (isUsed) {
+        if (provider.id === "provider-openai-main") {
+          providerQuotas[key] = {
+            groupId: group.id,
+            providerId: provider.id,
+            provider: "openai",
+            status: "ok",
+            remaining: 182000,
+            total: 300000,
+            percent: 60.67,
+            unit: "tokens",
+            resetAt: isoHoursAgo(-6),
+            fetchedAt: new Date().toISOString(),
+            message: null,
+          }
+        } else if (provider.id === "provider-anthropic") {
+          providerQuotas[key] = {
+            groupId: group.id,
+            providerId: provider.id,
+            provider: "anthropic",
+            status: "low",
+            remaining: 22000,
+            total: 120000,
+            percent: 18.33,
+            unit: "tokens",
+            resetAt: isoHoursAgo(-4),
+            fetchedAt: new Date().toISOString(),
+            message: null,
+          }
+        }
+      }
+    }
+  }
+
+  // Build providerCardStats keyed by "groupId:providerId"
+  const providerCardStats = {}
+  for (const group of groups) {
+    for (const provider of providers) {
+      const key = `${group.id}:${provider.id}`
+      const isUsed = group.routingTable.some(rt => rt.providerId === provider.id)
+      if (isUsed) {
+        const ratio = provider.id === "provider-openai-main" ? 0.7 : 0.3
+        providerCardStats[key] = {
+          groupId: group.id,
+          providerId: provider.id,
+          requests: Math.round(920 * ratio),
+          inputTokens: Math.round(236000 * ratio),
+          outputTokens: Math.round(126000 * ratio),
+          cacheReadTokens: Math.round(62000 * ratio),
+          cacheWriteTokens: Math.round(28000 * ratio),
+          totalCost: Math.round(236000 * ratio * 0.0015 + 126000 * ratio * 0.006),
+          hourly: hourly.slice(-12).map(item => ({
+            hour: item.hour,
+            requests: Math.round(item.requests * ratio * 0.8),
+            inputTokens: Math.round(item.inputTokens * ratio * 0.8),
+            outputTokens: Math.round(item.outputTokens * ratio * 0.8),
+            tokens: Math.round((item.inputTokens + item.outputTokens) * ratio * 0.8),
+          })),
+        }
+      }
+    }
+  }
+
+  // Build providerModelHealth keyed by "groupId:providerId"
+  const providerModelHealth = {}
+  for (const group of groups) {
+    for (const provider of providers) {
+      const key = `${group.id}:${provider.id}`
+      const isUsed = group.routingTable.some(rt => rt.providerId === provider.id)
+      if (isUsed) {
+        providerModelHealth[key] = {
+          groupId: group.id,
+          providerId: provider.id,
+          status: "available",
+          latencyMs: 120 + Math.random() * 80,
+          testedAt: new Date().toISOString(),
+        }
+      }
+    }
+  }
+
   return {
     config,
     status,
     logs,
     stats,
-    quotasByGroup,
-    ruleCardStats,
+    providerQuotas,
+    providerCardStats,
+    providerModelHealth,
   }
 }
 
@@ -478,8 +589,9 @@ function createMockInitScript(_dataset) {
       status: clone(state.status),
       logs: clone(state.logs),
       stats: clone(state.stats),
-      quotasByGroup: clone(state.quotasByGroup),
-      ruleCardStats: clone(state.ruleCardStats),
+      providerQuotas: clone(state.providerQuotas),
+      providerCardStats: clone(state.providerCardStats),
+      providerModelHealth: clone(state.providerModelHealth),
     }
 
     const handlers = {
@@ -529,21 +641,32 @@ function createMockInitScript(_dataset) {
       },
       async logs_stats_rule_cards(args) {
         const groupId = args?.groupId || "alpha"
-        return clone(internalState.ruleCardStats[groupId] || [])
+        const result = []
+        for (const [key, stats] of Object.entries(internalState.providerCardStats)) {
+          if (key.startsWith(`${groupId}:`)) {
+            result.push(stats)
+          }
+        }
+        return clone(result)
       },
       async quota_get_group(args) {
         const groupId = args?.groupId || "alpha"
-        return clone(internalState.quotasByGroup[groupId] || [])
+        const result = []
+        for (const [key, quota] of Object.entries(internalState.providerQuotas)) {
+          if (key.startsWith(`${groupId}:`)) {
+            result.push(quota)
+          }
+        }
+        return clone(result)
       },
       async quota_get_rule(args) {
         const groupId = args?.groupId || "alpha"
-        const ruleId = args?.ruleId || ""
-        const groupQuotas = internalState.quotasByGroup[groupId] || []
-        const found = groupQuotas.find(item => item.ruleId === ruleId)
+        const providerId = args?.providerId || ""
+        const key = `${groupId}:${providerId}`
         return clone(
-          found || {
+          internalState.providerQuotas[key] || {
             groupId,
-            ruleId,
+            providerId,
             provider: "unknown",
             status: "unknown",
             remaining: null,
@@ -719,14 +842,9 @@ async function captureScreenshots({ outputDir, baseUrl, host, port, keepServer }
 
   const dataset = createMockDataset()
   const pages = [
-    { route: "/", file: "service-page.png", readyText: "分组信息" },
-    { route: "/groups/alpha/edit", file: "group-edit-page.png", readyText: "编辑分组" },
-    {
-      route: "/groups/alpha/providers/rule-openai-main/edit",
-      file: "rule-edit-page.png",
-      readyText: "编辑 Provider",
-    },
+    { route: "/", file: "service-page.png", readyText: "Alpha" },
     { route: "/settings", file: "settings-page.png", readyText: "服务设置" },
+    { route: "/providers", file: "providers-page.png", readyText: "Providers" },
     { route: "/logs", file: "logs-page.png", readyText: "日志" },
     { route: "/logs/trace-0001", file: "log-detail-page.png", readyText: "日志详情" },
   ]

@@ -1,26 +1,27 @@
 # AI Open Router
 
-A desktop local AI gateway for **protocol switching, token/quota stats, cloud backup, and auto updates**.
+A desktop local AI gateway for **protocol switching, fuzzy routing, quota monitoring, and cloud backup**.
 
 中文文档: [docs/zh/README.md](docs/zh/README.md)
 
 ## Why AI Open Router
 
 - Keep one stable local endpoint while switching upstream providers.
-- Route by group and toggle active provider instantly.
-- Track token usage and request quality in one place.
-- Back up and restore routing configs with Remote Git.
+- Route requests with fuzzy matching + longest-match algorithm.
+- Track token usage and quota status per provider.
+- Back up and restore configs with Remote Git.
 - Auto-update the desktop app from GitHub Releases.
 
 ## Core Features
 
-| Feature | Value | Where |
+| Feature | Description | Where |
 | --- | --- | --- |
-| Protocol switching | Bridge OpenAI-compatible and Anthropic request styles | Service page |
-| Quota stats | Show per-provider quota status (`ok` / `low` / `empty`) | Provider cards |
+| Fuzzy routing | Match requests using fuzzy contains + longest-match | Service page |
+| Protocol switching | Bridge OpenAI, Anthropic, Google request styles | Automatic |
+| Quota monitoring | Show per-provider quota status (`ok` / `low` / `empty`) | Provider cards |
 | Token stats | Inspect per-request usage and aggregated trends | Logs page |
-| Cloud backup (Git) | Upload/pull group+provider backups with conflict confirmation | Settings page |
-| Auto updates | Check GitHub Releases and install updates automatically | Settings page |
+| Cloud backup (Git) | Upload/pull configs with conflict confirmation | Settings page |
+| Auto updates | Check GitHub Releases and install automatically | Settings page |
 
 ## 3-Minute Quick Start
 
@@ -28,31 +29,43 @@ A desktop local AI gateway for **protocol switching, token/quota stats, cloud ba
 
 Open the desktop app from your system launcher.
 
-### 2) Create a group
+### 2) Add providers
 
-1. Open Service page and create a group (for example: `claude`).
-2. Set accepted model keys for the group.
-3. The group route prefix becomes `/oc/<groupId>`.
+1. Go to the **Providers** page.
+2. Add your API providers with protocol, token, and API endpoint.
+3. Test connectivity to ensure providers work.
 
-### 3) Add providers
+### 3) Create groups with routing rules
 
-1. Add one or more providers.
-2. Set `protocol`, `token`, upstream API base URL, and default model.
+1. Open the **Service** page and create a group (e.g., `alpha`).
+2. In the routing table, define rules:
+   - `default` → routes unmatched requests
+   - `claude*` → routes Claude model requests
+   - `gpt-4*` → routes GPT-4 requests
+3. The group route prefix becomes `/oc/<groupId>/...`.
 
-### 4) Associate providers to the group
+### 4) Write config to your agent
 
-1. In the group, associate the providers you want to use.
-2. Enable one provider as the active provider for that group.
+Use the integration panel to write the group config into your agent (Claude Code, Codex, or OpenCode).
 
-### 5) Write config to your agent
+### 5) Switch provider later
 
-Use the integration panel to write the group config into the agent you use (Claude, Codex, or OpenCode).
-
-### 6) Switch provider later
-
-Add a new provider, associate it to the group, then enable it as the active provider.
+Update the routing table in your group to point to a different provider.
 
 ## Feature Details
+
+### Fuzzy Routing
+
+Request matching uses a two-step algorithm:
+1. **Fuzzy contains**: Check if the request model contains any rule pattern (e.g., `claude*` matches `claude-3-5-sonnet`)
+2. **Longest match**: If multiple patterns match, use the longest one
+
+Example routing table:
+```
+default      → OpenAI Main (gpt-4o)
+claude*      → Anthropic (claude-sonnet-4)
+gemini*      → Google AI (gemini-2.0-flash)
+```
 
 ### Protocol Switching
 
@@ -64,11 +77,11 @@ Add a new provider, associate it to the group, then enable it as the active prov
 - `POST /oc/:groupId` falls back to chat-completions
 - Per request flow:
   1. Resolve `groupId` from path
-  2. Find group + `activeProviderId`
-  3. Forward with active provider
-  4. Translate payloads based on entry protocol and provider protocol
+  2. Find matching route using fuzzy + longest-match
+  3. Forward with target provider
+  4. Translate payloads based on entry and provider protocols
 
-### Quota Stats
+### Quota Monitoring
 
 Per-provider quota query supports:
 - `endpoint`, `method`, `authHeader`, `authScheme`
@@ -89,16 +102,7 @@ Mapping examples:
 }
 ```
 
-```json
-{
-  "response": {
-    "remaining": "$.data.remaining_balance/$.data.remaining_total",
-    "unit": "$.data.unit"
-  }
-}
-```
-
-Expressions support numeric literals, `+ - * /`, parentheses, and JSONPath-style references only.
+Expressions support numeric literals, `+ - * /`, parentheses, and JSONPath-style references.
 
 ### Token Stats
 
@@ -122,17 +126,13 @@ In Settings, enable auto updates to:
 
 ## Screenshots
 
-### Service (routing + active provider)
+### Service (group routing)
 
 ![Service Page](docs/assets/screenshots/service-page.png)
 
-### Group editor
+### Global Providers
 
-![Group Edit Page](docs/assets/screenshots/group-edit-page.png)
-
-### Provider editor (quota mapping)
-
-![Provider Edit Page](docs/assets/screenshots/rule-edit-page.png)
+![Providers Page](docs/assets/screenshots/providers-page.png)
 
 ### Settings (cloud backup + updates)
 
@@ -152,9 +152,11 @@ In Settings, enable auto updates to:
 
 Usually no. In most cases, only the base URL changes to `http://localhost:8899/oc/:groupId/...`.
 
-### Can one group have multiple providers?
+### How does fuzzy routing work?
 
-Yes. A group can keep multiple providers, but only one is active at a time.
+The router checks if your request model contains any rule pattern. For example:
+- Request model `claude-3-5-sonnet-20240620` matches pattern `claude*`
+- If multiple patterns match, the longest pattern wins
 
 ### Will remote pull overwrite local config?
 
@@ -200,7 +202,7 @@ npm run test
 npm run ci
 ```
 
-## Regenerate Screenshots (Playwright + Tauri Mock)
+## Regenerate Screenshots (Playwright + Mock)
 
 ```bash
 npm run screenshots:mock
@@ -208,8 +210,7 @@ npm run screenshots:mock
 
 Generated files:
 - `docs/assets/screenshots/service-page.png`
-- `docs/assets/screenshots/group-edit-page.png`
-- `docs/assets/screenshots/rule-edit-page.png`
+- `docs/assets/screenshots/providers-page.png`
 - `docs/assets/screenshots/settings-page.png`
 - `docs/assets/screenshots/logs-page.png`
 - `docs/assets/screenshots/log-detail-page.png`
