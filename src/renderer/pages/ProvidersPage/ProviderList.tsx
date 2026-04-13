@@ -171,14 +171,6 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
                   {t(`ruleProtocol.${provider.protocol}`)}
                 </span>
               </div>
-              <div className={sharedStyles.providerCatalogSignalRow}>
-                <span className={`${sharedStyles.providerHealthStatus} ${health.statusClassName}`}>
-                  {health.statusLabel}
-                </span>
-                {health.latencyLabel ? (
-                  <span className={sharedStyles.providerHealthMetric}>{health.latencyLabel}</span>
-                ) : null}
-              </div>
             </div>
             <div className={sharedStyles.ruleHeaderRight}>
               <div className={sharedStyles.ruleActionButtons}>
@@ -232,33 +224,18 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
               </div>
             </div>
           </div>
+          <div className={sharedStyles.providerCatalogSignalRow}>
+            <span className={`${sharedStyles.providerHealthStatus} ${health.statusClassName}`}>
+              {health.statusLabel}
+            </span>
+            <span className={sharedStyles.providerCompactApiValue} title={provider.apiAddress}>
+              {compactApiAddress}
+            </span>
+            {health.latencyLabel ? (
+              <span className={sharedStyles.providerHealthMetric}>{health.latencyLabel}</span>
+            ) : null}
+          </div>
           <div className={sharedStyles.providerCatalogSummaryRow}>
-            <div className={sharedStyles.providerCatalogModelPanel}>
-              <div className={sharedStyles.providerCatalogMetaRow}>
-                <span className={sharedStyles.providerInlineMetaItem}>
-                  <span className={sharedStyles.providerPanelEyebrow}>
-                    {t("servicePage.defaultModel")}
-                  </span>
-                  <span
-                    className={sharedStyles.providerCatalogModelValue}
-                    title={provider.defaultModel?.trim() || "-"}
-                  >
-                    {provider.defaultModel?.trim() || "-"}
-                  </span>
-                </span>
-                <span className={sharedStyles.providerInlineMetaItem}>
-                  <span className={sharedStyles.providerPanelEyebrow}>
-                    {t("servicePage.apiAddress")}
-                  </span>
-                  <span
-                    className={sharedStyles.providerCompactApiValue}
-                    title={provider.apiAddress}
-                  >
-                    {compactApiAddress}
-                  </span>
-                </span>
-              </div>
-            </div>
             <div className={sharedStyles.providerCatalogUsagePanel}>
               <div className={sharedStyles.providerCatalogUsageRow}>
                 <span className={sharedStyles.providerCatalogUsageItem}>
@@ -277,8 +254,6 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
                     {formatCompactRequest(cardStats?.requests ?? 0)}
                   </span>
                 </span>
-              </div>
-              <div className={sharedStyles.providerCatalogUsageRow}>
                 <span className={sharedStyles.providerCatalogUsageItem}>
                   <span className={sharedStyles.providerCatalogUsageLabel}>
                     {t("servicePage.miniInputTokens")}
