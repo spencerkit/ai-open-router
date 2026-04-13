@@ -898,21 +898,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
 
     const nextGroups = config.groups.map(currentGroup => {
       if (currentGroup.id !== groupId) return currentGroup
-
-      if (isEditMode) {
-        return currentGroup
-      }
-
-      const currentProviderIds =
-        currentGroup.providerIds ?? currentGroup.providers?.map(rule => rule.id) ?? []
-      const providerIds = currentProviderIds.includes(providerDraft.id)
-        ? currentProviderIds
-        : [...currentProviderIds, providerDraft.id]
-      return {
-        ...currentGroup,
-        providerIds,
-        activeProviderId: currentGroup.activeProviderId ?? providerDraft.id,
-      }
+      return currentGroup
     })
 
     const newConfig: ProxyConfig = {
