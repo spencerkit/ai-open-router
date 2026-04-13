@@ -4,14 +4,12 @@
 
 use crate::app_state::{apply_launch_on_startup_setting, sync_runtime_config, SharedState};
 use crate::backup::extract_groups_from_import_payload;
-use crate::domain::entities::Group;
 use crate::models::{
     AuthSessionStatus, GroupBackupImportResult, GroupImportMode, ProxyConfig, ProxyStatus,
-    RouteEntry, SaveConfigResult,
+    SaveConfigResult,
 };
 use crate::services::{AppError, AppResult};
 use serde_json::Value;
-use std::collections::HashMap;
 use tauri::AppHandle;
 
 /// Performs get config.
@@ -126,95 +124,12 @@ pub async fn import_groups_with_source(
     })
 }
 
-/// Merges imported groups for this module's workflow.
-fn merge_imported_groups(current: &[Group], imported: &[Group]) -> Vec<Group> {
-    let mut merged = current.to_vec();
-    let mut index_by_group_path: HashMap<String, usize> = HashMap::new();
-    for (index, group) in merged.iter().enumerate() {
-        index_by_group_path.insert(group.id.clone(), index);
-    }
-
-    for imported_group in imported {
-        if let Some(index) = index_by_group_path.get(&imported_group.id).copied() {
-            merged[index] = merge_group_by_provider_name(&merged[index], imported_group);
-            continue;
-        }
-        // New group — add it with a default routing_table entry
-        let mut normalized = imported_group.clone();
-        let default_route = RouteEntry {
-            request_model: "default".to_string(),
-            provider_id: String::new(),
-            target_model: String::new(),
-        };
-        normalized.routing_table = vec![default_route];
-        index_by_group_path.insert(normalized.id.clone(), merged.len());
-        merged.push(normalized);
-    }
-
-    merged
-}
-
-/// Merges group by provider name for this module's workflow.
-fn merge_group_by_provider_name(current: &Group, imported: &Group) -> Group {
-    let mut providers = current.providers.clone().unwrap_or_default();
-
-    let imported_providers = imported.providers.clone().unwrap_or_default();
-
-    // Build a name-keyed index of current providers for fast lookup
-    let mut current_index_by_name: HashMap<String, usize> = HashMap::new();
-    for (index, provider) in providers.iter().enumerate() {
-        current_index_by_name
-            .entry(provider.name.to_lowercase())
-            .or_insert(index);
-    }
-
-    for imported_provider in &imported_providers {
-        let name_key = imported_provider.name.to_lowercase();
-        if let Some(index) = current_index_by_name.get(&name_key).copied() {
-            // Provider with same name exists in current group — update it, keep existing id
-            let mut next_provider = imported_provider.clone();
-            next_provider.id = providers[index].id.clone();
-            providers[index] = next_provider;
-        } else {
-            // New provider — add it to the group
-            current_index_by_name.insert(name_key, providers.len());
-            providers.push(imported_provider.clone());
-        }
-    }
-
-    // Build default routing_table entry — preserve existing if not empty
-    let default_route = RouteEntry {
-        request_model: "default".to_string(),
-        provider_id: String::new(),
-        target_model: String::new(),
-    };
-    let routing_table = if !current.routing_table.is_empty() {
-        current.routing_table.clone()
-    } else {
-        vec![default_route]
-    };
-
-    Group {
-        id: current.id.clone(),
-        name: imported.name.clone(),
-        routing_table,
-        models: imported.models.clone(),
-        provider_ids: None,
-        active_provider_id: None,
-        providers: Some(providers),
-        failover: current.failover.clone(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::app_state::AppState;
     use crate::config::schema::default_config;
-    use crate::domain::entities::{
-        default_group_failover_config, default_rule_cost_config, default_rule_quota_config, Rule,
-        RuleProtocol,
-    };
+    use crate::domain::entities::{default_group_failover_config, default_rule_cost_config, default_rule_quota_config, Group, RouteEntry, Rule};
     use crate::integration_store::IntegrationStore;
     use crate::log_store::LogStore;
     use crate::models::{AppInfo, GroupImportMode};
@@ -231,7 +146,7 @@ mod tests {
         Rule {
             id: id.to_string(),
             name: name.to_string(),
-            protocol: RuleProtocol::Openai,
+            protocol: crate::domain::entities::RuleProtocol::Openai,
             token: "token".to_string(),
             api_address: "https://example.com".to_string(),
             website: String::new(),
@@ -312,100 +227,6 @@ mod tests {
             runtime,
             renderer_ready: AtomicBool::new(false),
         })
-    }
-
-    #[test]
-    /// Performs import merge updates by group ID and provider name.
-    fn import_merge_updates_by_group_id_and_provider_name() {
-        let current = vec![group(
-            "group-a",
-            "Local",
-            vec![
-                provider("p-local", "alpha", "old-model"),
-                provider("p-keep", "keep", "m2"),
-            ],
-        )];
-        let imported = vec![group(
-            "group-a",
-            "Imported",
-            vec![
-                provider("p-import", "alpha", "new-model"),
-                provider("p-new", "beta", "m3"),
-            ],
-        )];
-
-        let merged = merge_imported_groups(&current, &imported);
-        assert_eq!(merged.len(), 1);
-        let merged_group = &merged[0];
-        assert_eq!(merged_group.name, "Imported");
-        assert_eq!(merged_group.providers.as_ref().unwrap().len(), 3);
-        let alpha = merged_group
-            .providers
-            .as_ref()
-            .unwrap()
-            .iter()
-            .find(|provider| provider.name == "alpha")
-            .expect("alpha provider exists");
-        assert_eq!(alpha.id, "p-local");
-        assert_eq!(alpha.default_model.as_deref(), Some("new-model"));
-        assert!(merged_group
-            .providers
-            .as_ref()
-            .unwrap()
-            .iter()
-            .any(|provider| provider.name == "keep"));
-        assert!(merged_group
-            .providers
-            .as_ref()
-            .unwrap()
-            .iter()
-            .any(|provider| provider.name == "beta"));
-        // routing_table should have the default entry
-        assert_eq!(merged_group.routing_table.len(), 1);
-        assert_eq!(merged_group.routing_table[0].request_model, "default");
-    }
-
-    #[test]
-    /// Performs import merge preserves current failover config.
-    fn import_merge_preserves_current_failover_config() {
-        let current = vec![Group {
-            failover: Some(crate::domain::entities::GroupFailoverConfig {
-                enabled: true,
-                failure_threshold: 4,
-                cooldown_seconds: 90,
-            }),
-            ..group(
-                "group-a",
-                "Local",
-                vec![provider("p-local", "alpha", "old-model")],
-            )
-        }];
-        let imported = vec![group(
-            "group-a",
-            "Imported",
-            vec![provider("p-import", "alpha", "new-model")],
-        )];
-
-        let merged = merge_imported_groups(&current, &imported);
-        assert_eq!(merged.len(), 1);
-        assert!(merged[0].failover.as_ref().unwrap().enabled);
-        assert_eq!(merged[0].failover.as_ref().unwrap().failure_threshold, 4);
-        assert_eq!(merged[0].failover.as_ref().unwrap().cooldown_seconds, 90);
-    }
-
-    #[test]
-    /// Performs import merge keeps local groups missing in import.
-    fn import_merge_keeps_local_groups_missing_in_import() {
-        let current = vec![group(
-            "group-local",
-            "Local",
-            vec![provider("p1", "x", "m1")],
-        )];
-        let imported = vec![group("group-new", "New", vec![provider("p2", "y", "m2")])];
-        let merged = merge_imported_groups(&current, &imported);
-        assert_eq!(merged.len(), 2);
-        assert!(merged.iter().any(|group| group.id == "group-local"));
-        assert!(merged.iter().any(|group| group.id == "group-new"));
     }
 
     #[test]
