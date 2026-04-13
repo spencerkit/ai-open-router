@@ -369,10 +369,10 @@ export const importGroupsBackupAction = action<
   Promise<GroupBackupImportResult>
 >(async (store, payload) => {
   try {
-    const request = payload ?? {}
+    const _request = payload ?? {}
     store.set(savingConfigState, true)
     store.set(lastOperationErrorState, null)
-    const result = await bridge.importGroupsBackup(request.mode)
+    const result = await bridge.importGroupsBackup("incremental")
 
     if (!result.canceled && result.config && result.status) {
       const normalizedConfig = normalizeConfig(result.config)
@@ -407,7 +407,7 @@ export const importGroupsFromJsonAction = action<
     const request = requirePayload(payload, "importGroupsFromJsonAction")
     store.set(savingConfigState, true)
     store.set(lastOperationErrorState, null)
-    const result = await bridge.importGroupsFromJson(request.jsonText, request.mode)
+    const result = await bridge.importGroupsFromJson(request.jsonText, "incremental")
 
     if (!result.canceled && result.config && result.status) {
       const normalizedConfig = normalizeConfig(result.config)
