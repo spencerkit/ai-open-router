@@ -103,16 +103,6 @@ export const ServicePage: React.FC = () => {
     )
   }, [groupSearchValue, groups])
   const activeGroup = groups.find(group => group.id === activeGroupId) ?? null
-  const activeGroupProviderIds = useMemo(() => {
-    if (!activeGroup) return []
-    const routingProviderIds = (activeGroup.routingTable ?? [])
-      .map(route => route.providerId?.trim())
-      .filter((providerId): providerId is string => Boolean(providerId))
-    const legacyProviderIds =
-      activeGroup.providerIds ?? activeGroup.providers?.map(provider => provider.id) ?? []
-    return [...new Set([...legacyProviderIds, ...routingProviderIds])]
-  }, [activeGroup])
-  const activeGroupRuleCount = activeGroupProviderIds.length
   const integrationSections = useMemo(
     () => [
       {
@@ -572,20 +562,12 @@ export const ServicePage: React.FC = () => {
                       <span className={styles.groupName}>{group.name}</span>
                       <span className={styles.groupPath}>/{group.id}</span>
                       <span className={styles.groupRuleCount}>
-                        {group.id === activeGroupId
-                          ? activeGroupRuleCount
-                          : [
-                              ...new Set([
-                                ...(group.providerIds ??
-                                  group.providers?.map(provider => provider.id) ??
-                                  []),
-                                ...(group.routingTable ?? [])
-                                  .map(route => route.providerId?.trim())
-                                  .filter((providerId): providerId is string =>
-                                    Boolean(providerId)
-                                  ),
-                              ]),
-                            ].length}
+                        {
+                          (group.routingTable ?? [])
+                            .map(route => route.providerId?.trim())
+                            .filter((providerId): providerId is string => Boolean(providerId))
+                            .length
+                        }
                       </span>
                     </button>
                   </li>
