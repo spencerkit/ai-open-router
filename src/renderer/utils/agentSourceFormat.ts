@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSourceFile, IntegrationClientKind } from "@/types"
+import type { AgentSourceFile, IntegrationClientKind } from "@/types"
 
 export function formatAgentSourceDraft(kind: IntegrationClientKind, source: string): string {
   if (kind !== "openclaw") {
@@ -28,24 +28,21 @@ export function hasDirtySourceDrafts(
   return getDirtySourceIds(sourceFiles, sourceDrafts).length > 0
 }
 
-export function mergeReloadedFormDraftState(
-  current: {
-    formData: AgentConfig
-    timeoutText: string
-    fallbackModelsText: string
-  },
-  next: {
-    formData: AgentConfig
-    timeoutText: string
-    fallbackModelsText: string
-  },
-  preserveCurrent: boolean
-): {
-  formData: AgentConfig
-  timeoutText: string
-  fallbackModelsText: string
-} {
-  return preserveCurrent ? current : next
+export type SourceDraftStatus = "clean" | "active-dirty" | "inactive-dirty"
+
+export function getSourceDraftStatus(
+  sourceFiles: AgentSourceFile[],
+  sourceDrafts: Record<string, string>,
+  activeSourceId?: string
+): SourceDraftStatus {
+  const dirtySourceIds = getDirtySourceIds(sourceFiles, sourceDrafts)
+  if (dirtySourceIds.length === 0) {
+    return "clean"
+  }
+  if (activeSourceId && dirtySourceIds.includes(activeSourceId)) {
+    return "active-dirty"
+  }
+  return "inactive-dirty"
 }
 
 export function mergeReloadedSourceDrafts(

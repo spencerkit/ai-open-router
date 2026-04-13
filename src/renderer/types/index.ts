@@ -34,6 +34,7 @@ export type {
   ProxyStatus,
   QuotaStatus,
   QuotaUnitType,
+  RouteEntry,
   Rule,
   RuleDirection,
   RuleProtocol,

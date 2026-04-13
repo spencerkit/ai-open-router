@@ -3,33 +3,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/common/Button"
 import { useTranslation } from "@/hooks"
-import {
-  readAgentConfigAction,
-  writeAgentConfigAction,
-  writeAgentConfigSourceAction,
-} from "@/store"
-import type { AgentConfig, AgentConfigFile, AgentSourceFile, IntegrationClientKind } from "@/types"
+import { readAgentConfigAction, writeAgentConfigSourceAction } from "@/store"
+import type { AgentConfigFile, AgentSourceFile, IntegrationClientKind } from "@/types"
 import {
   formatAgentSourceDraft,
   getDirtySourceIds,
-  mergeReloadedFormDraftState,
+  getSourceDraftStatus,
   mergeReloadedSourceDrafts,
 } from "@/utils/agentSourceFormat"
 import { useActions } from "@/utils/relax"
-import { AgentEditContent } from "./AgentEditContent"
 import styles from "./AgentEditPage.module.css"
-import { buildAgentEditFormState } from "./agentEditPageSections"
+import { AgentSourceTabs } from "./AgentSourceTabs"
 
-const AGENT_EDIT_ACTIONS = [
-  readAgentConfigAction,
-  writeAgentConfigAction,
-  writeAgentConfigSourceAction,
-] as const
-
-const _DEFAULT_TIMEOUT_MS = "300000"
-const DEFAULT_OPENCLAW_AGENT_ID = "default"
-const DEFAULT_OPENCLAW_PROVIDER_ID = "aor_shared"
-const DEFAULT_OPENCLAW_API_FORMAT = "openai-responses"
+const AGENT_EDIT_ACTIONS = [readAgentConfigAction, writeAgentConfigSourceAction] as const
 
 const AGENT_META: Record<
   IntegrationClientKind,
@@ -54,46 +40,6 @@ const AGENT_META: Record<
     icon: Code2,
     format: "opencode.json(c)",
   },
-}
-
-function buildFormState(
-  kind: IntegrationClientKind,
-  parsed?: AgentConfig | null,
-  openclawEditor?: AgentConfigFile["openclawEditor"] | null
-): AgentConfig {
-  return buildAgentEditFormState(kind, parsed, openclawEditor)
-}
-
-function normalizeFormConfig(config: AgentConfig): AgentConfig {
-  return {
-    agentId: config.agentId?.trim() || undefined,
-    providerId: config.providerId?.trim() || undefined,
-    url: config.url?.trim() || undefined,
-    apiToken: config.apiToken?.trim() || undefined,
-    apiFormat: config.apiFormat?.trim() || undefined,
-    model: config.model?.trim() || undefined,
-    fallbackModels: (() => {
-      const items = config.fallbackModels?.map(item => item.trim()).filter(item => item.length > 0)
-      return items?.length ? items : undefined
-    })(),
-    timeout: config.timeout,
-    alwaysThinkingEnabled: config.alwaysThinkingEnabled ?? false,
-    includeCoAuthoredBy: config.includeCoAuthoredBy ?? false,
-    skipDangerousModePermissionPrompt: config.skipDangerousModePermissionPrompt ?? false,
-  }
-}
-
-function parseFallbackModels(text: string): string[] | undefined {
-  const items = text
-    .split(",")
-    .map(item => item.trim())
-    .filter(Boolean)
-
-  return items.length > 0 ? items : undefined
-}
-
-function serializeConfig(config: AgentConfig): string {
-  return JSON.stringify(normalizeFormConfig(config))
 }
 
 function formatUpdatedAt(raw: string): string {
@@ -133,8 +79,10 @@ function buildSourcePlaceholder(kind: IntegrationClientKind, sourceId: string): 
 function buildSourceFiles(configFile?: AgentConfigFile | null): AgentSourceFile[] {
   if (!configFile) return []
   if (configFile.sourceFiles?.length) return configFile.sourceFiles
+
   const filePathParts = configFile.filePath.split(/[\\/]/)
   const fileName = filePathParts[filePathParts.length - 1] || "config"
+
   return [
     {
       sourceId: "primary",
@@ -149,43 +97,25 @@ export const AgentEditPage: React.FC = () => {
   const { targetId } = useParams<{ targetId: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const [readAgentConfig, writeAgentConfig, writeAgentConfigSource] = useActions(AGENT_EDIT_ACTIONS)
+  const [readAgentConfig, writeAgentConfigSource] = useActions(AGENT_EDIT_ACTIONS)
 
   const [loading, setLoading] = useState(true)
   const [configFile, setConfigFile] = useState<AgentConfigFile | null>(null)
-  const [editMode, setEditMode] = useState<"form" | "source">("form")
-  const [saveMode, setSaveMode] = useState<"form" | "source" | null>(null)
+  const [saveMode, setSaveMode] = useState<"source" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [formData, setFormData] = useState<AgentConfig>(buildFormState("claude"))
-  const [timeoutText, setTimeoutText] = useState("")
-  const [fallbackModelsText, setFallbackModelsText] = useState("")
-  const [showApiToken, setShowApiToken] = useState(false)
   const [activeSourceId, setActiveSourceId] = useState("primary")
   const [sourceDrafts, setSourceDrafts] = useState<Record<string, string>>({})
 
   const sourceFiles = useMemo(() => buildSourceFiles(configFile), [configFile])
   const sourceFilesRef = useRef<AgentSourceFile[]>([])
-  const formDraftStateRef = useRef({
-    formData,
-    timeoutText,
-    fallbackModelsText,
-  })
 
   useEffect(() => {
     sourceFilesRef.current = sourceFiles
   }, [sourceFiles])
 
-  useEffect(() => {
-    formDraftStateRef.current = {
-      formData,
-      timeoutText,
-      fallbackModelsText,
-    }
-  }, [fallbackModelsText, formData, timeoutText])
-
   const loadConfig = useCallback(
-    async (options?: { savedSourceId?: string; preserveFormDrafts?: boolean }) => {
+    async (options?: { savedSourceId?: string }) => {
       if (!targetId) return
 
       setLoading(true)
@@ -194,24 +124,6 @@ export const AgentEditPage: React.FC = () => {
         const result = await readAgentConfig({ targetId })
         setConfigFile(result)
 
-        const nextFormState = buildFormState(
-          result.kind,
-          result.parsedConfig,
-          result.openclawEditor
-        )
-        const mergedFormState = mergeReloadedFormDraftState(
-          formDraftStateRef.current,
-          {
-            formData: nextFormState,
-            timeoutText:
-              result.parsedConfig?.timeout !== undefined ? String(result.parsedConfig.timeout) : "",
-            fallbackModelsText: nextFormState.fallbackModels?.join(", ") ?? "",
-          },
-          options?.preserveFormDrafts ?? false
-        )
-        setFormData(mergedFormState.formData)
-        setTimeoutText(mergedFormState.timeoutText)
-        setFallbackModelsText(mergedFormState.fallbackModelsText)
         const nextSourceFiles = buildSourceFiles(result)
         setActiveSourceId(current =>
           nextSourceFiles.some(file => file.sourceId === current)
@@ -239,70 +151,31 @@ export const AgentEditPage: React.FC = () => {
     void loadConfig()
   }, [loadConfig])
 
-  useEffect(() => {
-    if (configFile && !configFile.parsedConfig && configFile.content.trim()) {
-      setEditMode("source")
-    }
-  }, [configFile])
-
   const kind = configFile?.kind ?? "claude"
-  const supportsTimeout = kind === "claude" || kind === "opencode"
   const meta = AGENT_META[kind]
   const KindIcon = meta.icon
   const activeSourceFile = useMemo(
     () => sourceFiles.find(file => file.sourceId === activeSourceId) ?? sourceFiles[0],
     [activeSourceId, sourceFiles]
   )
-  const sourceContent = activeSourceFile ? (sourceDrafts[activeSourceFile.sourceId] ?? "") : ""
-  const initialSourceContent = activeSourceFile?.content ?? ""
-  const isActiveSourceDirty = sourceContent !== initialSourceContent
+  const sourceContent = activeSourceFile
+    ? (sourceDrafts[activeSourceFile.sourceId] ?? activeSourceFile.content)
+    : ""
   const sourcePlaceholder = buildSourcePlaceholder(kind, activeSourceFile?.sourceId ?? "primary")
-  const timeoutError =
-    timeoutText.trim().length > 0 && !/^\d+$/.test(timeoutText.trim())
-      ? t("agentManagement.timeoutInvalid")
-      : ""
-
-  const currentFormConfig = useMemo(
-    () =>
-      normalizeFormConfig({
-        ...formData,
-        fallbackModels: kind === "openclaw" ? parseFallbackModels(fallbackModelsText) : undefined,
-        timeout: supportsTimeout && timeoutText.trim() ? Number(timeoutText.trim()) : undefined,
-      }),
-    [fallbackModelsText, formData, kind, supportsTimeout, timeoutText]
-  )
-  const initialFormConfig = useMemo(
-    () => buildFormState(kind, configFile?.parsedConfig, configFile?.openclawEditor),
-    [configFile?.openclawEditor, configFile?.parsedConfig, kind]
-  )
-  const isFormDirty = serializeConfig(currentFormConfig) !== serializeConfig(initialFormConfig)
   const dirtySourceIds = getDirtySourceIds(sourceFiles, sourceDrafts)
-  const isSourceDirty = dirtySourceIds.length > 0
+  const sourceDraftStatus = getSourceDraftStatus(
+    sourceFiles,
+    sourceDrafts,
+    activeSourceFile?.sourceId
+  )
+  const isSourceDirty = sourceDraftStatus !== "clean"
+  const isActiveSourceDirty = sourceDraftStatus === "active-dirty"
   const statusMessage =
-    editMode === "form"
-      ? isFormDirty
-        ? t("agentManagement.unsavedChanges")
+    sourceDraftStatus === "active-dirty"
+      ? t("agentManagement.unsavedChanges")
+      : sourceDraftStatus === "inactive-dirty"
+        ? t("agentManagement.otherSourceChangesPending")
         : t("agentManagement.allChangesSaved")
-      : isSourceDirty
-        ? t("agentManagement.unsavedChanges")
-        : t("agentManagement.allChangesSaved")
-
-  const handleSaveForm = async () => {
-    if (!targetId || timeoutError || !isFormDirty) return
-
-    setSaveMode("form")
-    setError(null)
-    setSuccess(null)
-    try {
-      await writeAgentConfig({ targetId, config: currentFormConfig })
-      await loadConfig()
-      setSuccess(t("agentManagement.saveSuccess"))
-    } catch (err) {
-      setError(String(err))
-    } finally {
-      setSaveMode(null)
-    }
-  }
 
   const handleSaveSource = async () => {
     if (!targetId || !activeSourceFile || !isActiveSourceDirty) return
@@ -316,10 +189,7 @@ export const AgentEditPage: React.FC = () => {
         content: sourceContent,
         sourceId: activeSourceFile.sourceId,
       })
-      await loadConfig({
-        savedSourceId: activeSourceFile.sourceId,
-        preserveFormDrafts: true,
-      })
+      await loadConfig({ savedSourceId: activeSourceFile.sourceId })
       setSuccess(t("agentManagement.saveSuccess"))
     } catch (err) {
       setError(String(err))
@@ -383,25 +253,12 @@ export const AgentEditPage: React.FC = () => {
       <section className={styles.editorCard}>
         <div className={styles.editorHeader}>
           <div className={styles.tabs}>
-            <button
-              type="button"
-              className={`${styles.tab} ${editMode === "form" ? styles.tabActive : ""}`}
-              onClick={() => setEditMode("form")}
-            >
-              {t("agentManagement.formEditor")}
-            </button>
-            <button
-              type="button"
-              className={`${styles.tab} ${editMode === "source" ? styles.tabActive : ""}`}
-              onClick={() => setEditMode("source")}
-            >
+            <span className={`${styles.tab} ${styles.tabActive}`}>
               {t("agentManagement.sourceEditor")}
-            </button>
+            </span>
           </div>
 
-          <span
-            className={`${styles.statusBadge} ${editMode === "form" && isFormDirty ? styles.statusDirty : ""} ${editMode === "source" && isSourceDirty ? styles.statusDirty : ""}`}
-          >
+          <span className={`${styles.statusBadge} ${isSourceDirty ? styles.statusDirty : ""}`}>
             {statusMessage}
           </span>
         </div>
@@ -409,15 +266,8 @@ export const AgentEditPage: React.FC = () => {
         {error && <div className={styles.error}>{error}</div>}
         {success && <div className={styles.success}>{success}</div>}
 
-        <AgentEditContent
+        <AgentSourceTabs
           kind={kind}
-          editMode={editMode}
-          formData={formData}
-          fallbackModelsText={fallbackModelsText}
-          showApiToken={showApiToken}
-          supportsTimeout={supportsTimeout}
-          timeoutText={timeoutText}
-          timeoutError={timeoutError}
           sourceFiles={sourceFiles}
           activeSourceFile={activeSourceFile}
           sourceContent={sourceContent}
@@ -425,10 +275,6 @@ export const AgentEditPage: React.FC = () => {
           metaFormat={meta.format}
           dirtySourceIds={dirtySourceIds}
           t={t}
-          onFormDataChange={setFormData}
-          onFallbackModelsTextChange={setFallbackModelsText}
-          onToggleApiTokenVisibility={() => setShowApiToken(current => !current)}
-          onTimeoutTextChange={setTimeoutText}
           onSourceSelect={setActiveSourceId}
           onSourceChange={value =>
             setSourceDrafts(current => ({
@@ -445,36 +291,21 @@ export const AgentEditPage: React.FC = () => {
               ),
             }))
           }
-          defaultOpenclawAgentId={DEFAULT_OPENCLAW_AGENT_ID}
-          defaultOpenclawProviderId={DEFAULT_OPENCLAW_PROVIDER_ID}
-          defaultOpenclawApiFormat={DEFAULT_OPENCLAW_API_FORMAT}
         />
 
         <div className={styles.actions}>
           <Button variant="ghost" onClick={() => navigate("/agents")}>
             {t("agentManagement.back")}
           </Button>
-          {editMode === "form" ? (
-            <Button
-              variant="primary"
-              icon={Save}
-              loading={saveMode === "form"}
-              disabled={!isFormDirty || !!timeoutError}
-              onClick={handleSaveForm}
-            >
-              {t("agentManagement.save")}
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              icon={Save}
-              loading={saveMode === "source"}
-              disabled={!isActiveSourceDirty}
-              onClick={handleSaveSource}
-            >
-              {t("agentManagement.save")}
-            </Button>
-          )}
+          <Button
+            variant="primary"
+            icon={Save}
+            loading={saveMode === "source"}
+            disabled={!isActiveSourceDirty}
+            onClick={handleSaveSource}
+          >
+            {t("agentManagement.saveCurrentFile")}
+          </Button>
         </div>
       </section>
     </div>

@@ -6,6 +6,7 @@ import type {
   GroupBackupExportResult,
   GroupBackupImportResult,
   GroupImportMode,
+  Provider,
   ProviderModelHealthSnapshot,
   ProviderModelTestResult,
   ProxyConfig,
@@ -64,6 +65,7 @@ function createDefaultConfig(): ProxyConfig {
     compat: {
       strictMode: false,
       textToolCallFallbackEnabled: true,
+      headerPassthroughEnabled: true,
     },
     logging: {
       captureBody: false,
@@ -103,46 +105,46 @@ function getFallbackGroupProviders(group: GroupLike): Group["providers"] {
 
 function getScopedGroupProviders(group: GroupLike): {
   providerIds: string[]
-  providers: Group["providers"]
+  providers: Provider[]
 } {
   const fallbackProviders = getFallbackGroupProviders(group)
   const hasExplicitProviderIds = Array.isArray(group.providerIds)
   const providerIds = normalizeProviderIds(
     hasExplicitProviderIds
       ? (group.providerIds ?? [])
-      : fallbackProviders.map(provider => provider.id)
+      : (fallbackProviders ?? []).map(provider => provider.id)
   )
 
   if (!hasExplicitProviderIds) {
     return {
       providerIds,
-      providers: fallbackProviders,
+      providers: fallbackProviders ?? [],
     }
   }
 
   const providerIdSet = new Set(providerIds)
   return {
     providerIds,
-    providers: fallbackProviders.filter(provider => providerIdSet.has(provider.id?.trim() ?? "")),
+    providers: (fallbackProviders ?? []).filter(provider =>
+      providerIdSet.has(provider.id?.trim() ?? "")
+    ),
   }
 }
 
-function normalizeGroup(
-  group: GroupLike,
-  globalProviderMap?: Map<string, Group["providers"][number]>
-): Group {
+function normalizeGroup(group: GroupLike, globalProviderMap?: Map<string, Provider>): Group {
   const { providerIds, providers: scopedProviders } = getScopedGroupProviders(group)
   const scopedProviderMap = new Map(
-    scopedProviders
+    (scopedProviders ?? [])
       .filter(provider => provider?.id?.trim())
       .map(provider => [provider.id, provider] as const)
   )
   const resolvedProviders = providerIds
     .map(providerId => globalProviderMap?.get(providerId) ?? scopedProviderMap.get(providerId))
-    .filter((provider): provider is Group["providers"][number] => Boolean(provider))
+    .filter((provider): provider is Provider => Boolean(provider))
   const activeProviderId = group.activeProviderId ?? group.activeRuleId ?? null
   return {
     ...group,
+    routingTable: group.routingTable ?? [],
     providerIds,
     providers: resolvedProviders,
     activeProviderId,
@@ -167,13 +169,13 @@ function normalizeConfig(config: ProxyConfig | null | undefined): ProxyConfig {
     providers: Array.isArray(input.providers) ? input.providers : [],
     groups: Array.isArray(input.groups) ? input.groups : [],
   }
-  const dedupedProviderMap = new Map<string, Group["providers"][number]>()
+  const dedupedProviderMap = new Map<string, Provider>()
   for (const provider of safeConfig.providers ?? []) {
     if (!provider?.id?.trim()) continue
     dedupedProviderMap.set(provider.id, { ...provider })
   }
   for (const group of safeConfig.groups ?? []) {
-    for (const provider of getScopedGroupProviders(group as GroupLike).providers) {
+    for (const provider of getScopedGroupProviders(group as GroupLike).providers ?? []) {
       if (!provider?.id?.trim() || dedupedProviderMap.has(provider.id)) continue
       dedupedProviderMap.set(provider.id, { ...provider })
     }
@@ -191,6 +193,7 @@ function normalizeConfig(config: ProxyConfig | null | undefined): ProxyConfig {
     providers: normalizedProviders,
     compat: {
       ...safeConfig.compat,
+      headerPassthroughEnabled: safeConfig.compat.headerPassthroughEnabled ?? true,
       textToolCallFallbackEnabled: safeConfig.compat.textToolCallFallbackEnabled ?? true,
     },
     groups: (safeConfig.groups ?? []).map(group =>
@@ -200,13 +203,13 @@ function normalizeConfig(config: ProxyConfig | null | undefined): ProxyConfig {
 }
 
 function buildSaveConfigPayload(config: ProxyConfig): ProxyConfig {
-  const globalProviderMap = new Map<string, Group["providers"][number]>()
+  const globalProviderMap = new Map<string, Provider>()
   for (const provider of config.providers ?? []) {
     if (!provider?.id?.trim()) continue
     globalProviderMap.set(provider.id, { ...provider })
   }
   for (const group of config.groups ?? []) {
-    for (const provider of getScopedGroupProviders(group).providers) {
+    for (const provider of getScopedGroupProviders(group).providers ?? []) {
       if (!provider?.id?.trim() || globalProviderMap.has(provider.id)) continue
       globalProviderMap.set(provider.id, { ...provider })
     }
@@ -219,17 +222,18 @@ function buildSaveConfigPayload(config: ProxyConfig): ProxyConfig {
     groups: (config.groups ?? []).map(group => {
       const { providerIds, providers: scopedProviders } = getScopedGroupProviders(group)
       const scopedProviderMap = new Map(
-        scopedProviders
+        (scopedProviders ?? [])
           .filter(provider => provider?.id?.trim())
           .map(provider => [provider.id, provider] as const)
       )
       const activeProviderId = group.activeProviderId ?? group.activeRuleId ?? null
       const resolvedProviders = providerIds
         .map(providerId => providerById.get(providerId) ?? scopedProviderMap.get(providerId))
-        .filter((provider): provider is Group["providers"][number] => Boolean(provider))
+        .filter((provider): provider is Provider => Boolean(provider))
       return {
         id: group.id,
         name: group.name,
+        routingTable: group.routingTable ?? [],
         models: group.models ?? [],
         providerIds,
         providers: resolvedProviders,

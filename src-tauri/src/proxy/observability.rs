@@ -1110,8 +1110,11 @@ mod tests {
             token: "secret".to_string(),
             api_address: "https://api.example.com".to_string(),
             website: String::new(),
-            default_model: "claude-sonnet-4.5".to_string(),
-            model_mappings: HashMap::new(),
+            models: Vec::new(),
+            default_model: Some("claude-sonnet-4.5".to_string()),
+            model_mappings: Some(HashMap::new()),
+            header_passthrough_allow: Vec::new(),
+            header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
             cost: RuleCostConfig {
                 enabled: true,

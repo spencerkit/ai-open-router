@@ -1,0 +1,94 @@
+/* Select — Copper & Slate */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
+.selectRow {
+  position: relative;
+}
+
+.base {
+  display: block;
+  width: 100%;
+  height: 36px;
+  padding: 0 calc(var(--sp-3) + 20px) 0 var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: var(--weight-normal);
+  color: var(--text-primary);
+  background: var(--surface);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.base:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.base:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.base:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.base option {
+  color: var(--text-primary);
+}
+
+.error {
+  border-color: var(--danger);
+}
+
+.error:focus {
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.12);
+}
+
+.chevron {
+  position: absolute;
+  top: 50%;
+  right: var(--sp-3);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.errorText {
+  margin-top: var(--sp-1);
+  font-size: var(--text-xs);
+  color: var(--danger);
+}
+
+.hintText {
+  margin-top: var(--sp-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.fullWidth {
+  width: 100%;
+}

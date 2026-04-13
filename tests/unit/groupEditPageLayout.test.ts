@@ -23,7 +23,9 @@ type UnknownProps = Record<string, unknown>
 
 type ReactElementNode = React.ReactElement<UnknownProps>
 type InputElementNode = React.ReactElement<React.ComponentProps<"input">>
+type SelectElementNode = React.ReactElement<React.ComponentProps<"select">>
 type FormElementNode = React.ReactElement<React.ComponentProps<"form">>
+type ButtonElementNode = React.ReactElement<React.ComponentProps<"button">>
 
 const unitOutDir = path.join(process.cwd(), ".tmp/unit-tests")
 const originalResolveFilename = Module._resolveFilename
@@ -189,6 +191,37 @@ require.cache["@/components"] = {
         error ? React.createElement("p", null, error as React.ReactNode) : null,
         !error && hint ? React.createElement("p", null, hint as React.ReactNode) : null
       ),
+    Select: ({ options, placeholder, value, onChange, ...props }: UnknownProps) =>
+      React.createElement(
+        "select",
+        {
+          ...(props as Record<string, unknown>),
+          value,
+          onChange: (event: React.ChangeEvent<HTMLSelectElement>) =>
+            (
+              onChange as
+                | ((nextValue: string, event: React.ChangeEvent<HTMLSelectElement>) => void)
+                | undefined
+            )?.(event.target.value, event),
+        },
+        [
+          placeholder
+            ? React.createElement(
+                "option",
+                { key: "__placeholder__", value: "", disabled: value !== "" },
+                placeholder as React.ReactNode
+              )
+            : null,
+          ...((options as Array<{ label: string; value: string; disabled?: boolean }>) ?? []).map(
+            option =>
+              React.createElement(
+                "option",
+                { key: option.value, value: option.value, disabled: option.disabled },
+                option.label
+              )
+          ),
+        ]
+      ),
   },
   filename: "@/components",
   id: "@/components",
@@ -199,7 +232,7 @@ function loadGroupEditPage() {
   return require("../../src/renderer/pages/GroupEditPage/GroupEditPage") as typeof import("../../src/renderer/pages/GroupEditPage/GroupEditPage")
 }
 
-function createConfig(): ProxyConfig {
+function createConfig(overrides?: Partial<ProxyConfig>): ProxyConfig {
   return {
     server: {
       host: "0.0.0.0",
@@ -230,22 +263,66 @@ function createConfig(): ProxyConfig {
       token: "",
       branch: "main",
     },
-    providers: [],
+    providers: [
+      {
+        id: "p1",
+        name: "Provider One",
+        protocol: "openai",
+        token: "secret-1",
+        apiAddress: "https://provider-one.example.com/v1",
+        defaultModel: "gpt-4.1-mini",
+        models: ["gpt-4.1-mini", "gpt-4.1"],
+        modelMappings: {},
+        quota: {
+          enabled: false,
+          provider: "",
+          endpoint: "",
+          method: "GET",
+          useRuleToken: false,
+          customToken: "",
+          authHeader: "Authorization",
+          authScheme: "Bearer",
+          customHeaders: {},
+          unitType: "percentage",
+          lowThresholdPercent: 20,
+          response: {},
+        },
+      },
+      {
+        id: "p2",
+        name: "Provider Two",
+        protocol: "anthropic",
+        token: "secret-2",
+        apiAddress: "https://provider-two.example.com/v1",
+        defaultModel: "claude-sonnet-4",
+        models: ["claude-sonnet-4", "claude-haiku-4"],
+        modelMappings: {},
+        quota: {
+          enabled: false,
+          provider: "",
+          endpoint: "",
+          method: "GET",
+          useRuleToken: false,
+          customToken: "",
+          authHeader: "Authorization",
+          authScheme: "Bearer",
+          customHeaders: {},
+          unitType: "percentage",
+          lowThresholdPercent: 20,
+          response: {},
+        },
+      },
+    ],
     groups: [
       {
         id: "dev",
         name: "Dev",
-        models: ["claude-sonnet-4-5"],
-        providerIds: ["p1", "p2"],
-        activeProviderId: "p1",
-        providers: [],
-        failover: {
-          enabled: false,
-          failureThreshold: 3,
-          cooldownSeconds: 300,
-        },
+        activeProviderId: null,
+        models: ["claude-sonnet-4"],
+        routingTable: [{ requestModel: "default", providerId: "", targetModel: "" }],
       },
     ],
+    ...overrides,
   }
 }
 
@@ -375,12 +452,37 @@ function findElement(
   return findElement(element.props.children as React.ReactNode, predicate)
 }
 
-function createCheckboxChangeEvent(checked: boolean): React.ChangeEvent<HTMLInputElement> {
-  return { target: { checked } } as unknown as React.ChangeEvent<HTMLInputElement>
+function findAllElements(
+  node: React.ReactNode,
+  predicate: (element: ReactElementNode) => boolean,
+  results: ReactElementNode[] = []
+): ReactElementNode[] {
+  if (!node) return results
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      findAllElements(child, predicate, results)
+    }
+    return results
+  }
+  if (!React.isValidElement(node)) {
+    return results
+  }
+
+  const element = node as ReactElementNode
+  if (predicate(element)) {
+    results.push(element)
+  }
+
+  findAllElements(element.props.children as React.ReactNode, predicate, results)
+  return results
 }
 
 function createInputChangeEvent(value: string): React.ChangeEvent<HTMLInputElement> {
   return { target: { value } } as unknown as React.ChangeEvent<HTMLInputElement>
+}
+
+function createSelectChangeEvent(value: string): React.ChangeEvent<HTMLSelectElement> {
+  return { target: { value } } as unknown as React.ChangeEvent<HTMLSelectElement>
 }
 
 function createFormSubmitEvent(): React.FormEvent<HTMLFormElement> {
@@ -393,108 +495,145 @@ function findInputById(tree: React.ReactNode, id: string): InputElementNode {
   return element as InputElementNode
 }
 
+function findInputsByPlaceholder(tree: React.ReactNode, placeholder: string): InputElementNode[] {
+  return findAllElements(
+    tree,
+    node => node.type === "input" && node.props.placeholder === placeholder
+  ) as InputElementNode[]
+}
+
+function findAllSelects(tree: React.ReactNode): SelectElementNode[] {
+  return findAllElements(tree, node => node.type === "select") as SelectElementNode[]
+}
+
+function findButtonByText(tree: React.ReactNode, text: string): ButtonElementNode {
+  const buttons = findAllElements(tree, node => node.type === "button") as ButtonElementNode[]
+  const match = buttons.find(button => renderToStaticMarkup(button).includes(text))
+  assert.ok(match)
+  return match
+}
+
 function findForm(tree: React.ReactNode): FormElementNode {
   const element = findElement(tree, node => node.type === "form")
   assert.ok(element)
   return element as FormElementNode
 }
 
-test("renders group failover controls on group edit page", () => {
+test("renders routing table controls and keeps default row locked", () => {
   resetHarness()
   const harness = createComponentHarness()
 
   const markup = renderToStaticMarkup(harness.renderReady() as React.ReactElement)
 
-  assert.match(markup, /groupEditPage\.sectionFailover/)
-  assert.match(markup, /groupEditPage\.failoverEnabled/)
-  assert.match(markup, /groupEditPage\.failoverFailureThreshold/)
-  assert.match(markup, /groupEditPage\.failoverCooldownSeconds/)
+  assert.match(markup, /servicePage\.routingTable/)
+  assert.match(markup, /servicePage\.requestModel/)
+  assert.match(markup, /servicePage\.provider/)
+  assert.match(markup, /servicePage\.targetModel/)
+  assert.match(markup, /value="default"/)
+  assert.match(markup, /readonly=""/)
+  assert.match(markup, /servicePage\.locked/)
 })
 
-test("saves edited failover settings into group config", async () => {
+test("saves edited routing table into group config without mutating source config", async () => {
   const initialConfig = createConfig()
   resetHarness(initialConfig)
   const harness = createComponentHarness()
 
   let tree = harness.renderReady()
-  const thresholdInput = findInputById(tree, "failoverFailureThreshold")
-  const cooldownInput = findInputById(tree, "failoverCooldownSeconds")
-  const enabledInput = findInputById(tree, "failoverEnabled")
+  const groupNameInput = findInputById(tree, "groupName")
+  groupNameInput.props.onChange?.(createInputChangeEvent("Dev Updated"))
 
-  assert.equal(thresholdInput.props.value, "3")
-  assert.equal(cooldownInput.props.value, "300")
-  assert.equal(enabledInput.props.checked, false)
+  tree = harness.renderReady()
+  let selects = findAllSelects(tree)
+  assert.equal(selects.length, 2)
+  const defaultRouteProviderSelect = selects[1]
+  defaultRouteProviderSelect.props.onChange?.(createSelectChangeEvent("p1"))
 
-  enabledInput.props.onChange?.(createCheckboxChangeEvent(true))
-  thresholdInput.props.onChange?.(createInputChangeEvent("5"))
-  cooldownInput.props.onChange?.(createInputChangeEvent("90"))
+  tree = harness.renderReady()
+  let targetModelInputs = findInputsByPlaceholder(tree, "groupEditPage.targetModelPlaceholder")
+  assert.equal(targetModelInputs.length, 1)
+  targetModelInputs[0]?.props.onChange?.(createInputChangeEvent("gpt-4.1-mini"))
+
+  tree = harness.renderReady()
+  const addRouteButton = findButtonByText(tree, "servicePage.addRoute")
+  addRouteButton.props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
+
+  tree = harness.renderReady()
+  const blankRequestModelInputs = findAllElements(
+    tree,
+    node => node.type === "input" && node.props.type === "text" && node.props.value === ""
+  ) as InputElementNode[]
+  assert.ok(blankRequestModelInputs.length >= 1)
+  blankRequestModelInputs[0]?.props.onChange?.(createInputChangeEvent("sonnet"))
+
+  tree = harness.renderReady()
+  selects = findAllSelects(tree)
+  assert.equal(selects.length, 3)
+  const customRouteProviderSelect = selects[2]
+  customRouteProviderSelect.props.onChange?.(createSelectChangeEvent("p2"))
+
+  tree = harness.renderReady()
+  targetModelInputs = findInputsByPlaceholder(tree, "groupEditPage.targetModelPlaceholder")
+  assert.equal(targetModelInputs.length, 2)
+  targetModelInputs[1]?.props.onChange?.(createInputChangeEvent("claude-sonnet-4"))
 
   tree = harness.renderReady()
   const form = findForm(tree)
   await form.props.onSubmit?.(createFormSubmitEvent())
 
   assert.equal(saveConfigCalls.length, 1)
-  assert.deepEqual(saveConfigCalls[0]?.groups[0]?.failover, {
-    enabled: true,
-    failureThreshold: 5,
-    cooldownSeconds: 90,
-  })
-  assert.deepEqual(initialConfig.groups[0]?.failover, {
-    enabled: false,
-    failureThreshold: 3,
-    cooldownSeconds: 300,
-  })
+  assert.equal(saveConfigCalls[0]?.groups[0]?.name, "Dev Updated")
+  assert.deepEqual(saveConfigCalls[0]?.groups[0]?.routingTable, [
+    { requestModel: "default", providerId: "p1", targetModel: "gpt-4.1-mini" },
+    { requestModel: "sonnet", providerId: "p2", targetModel: "claude-sonnet-4" },
+  ])
+  assert.deepEqual(initialConfig.groups[0]?.routingTable, [
+    { requestModel: "default", providerId: "", targetModel: "" },
+  ])
 })
 
-test("rejects invalid failover failure threshold input", async () => {
+test("applies template routes by appending missing request models", () => {
   resetHarness()
   const harness = createComponentHarness()
 
   let tree = harness.renderReady()
-  const thresholdInput = findInputById(tree, "failoverFailureThreshold")
-  thresholdInput.props.onChange?.(createInputChangeEvent("0"))
+  const templateSelect = findAllSelects(tree)[0]
+  assert.ok(templateSelect)
+  templateSelect.props.onChange?.(createSelectChangeEvent("codex"))
 
   tree = harness.renderReady()
+  const markup = renderToStaticMarkup(tree as React.ReactElement)
+
+  assert.match(markup, /gpt-5\.4/)
+  assert.match(markup, /gpt-5\.3-codex/)
+  assert.match(markup, /gpt-5\.2-codex/)
+  assert.match(markup, /gpt-5\.1-codex/)
+})
+
+test("rejects submission when routing table has no default route", async () => {
+  const config = createConfig({
+    groups: [
+      {
+        id: "dev",
+        name: "Dev",
+        activeProviderId: null,
+        models: ["claude-sonnet-4"],
+        routingTable: [
+          { requestModel: "sonnet", providerId: "p2", targetModel: "claude-sonnet-4" },
+        ],
+      },
+    ],
+  })
+  resetHarness(config)
+  const harness = createComponentHarness()
+
+  const tree = harness.renderReady()
   const form = findForm(tree)
   await form.props.onSubmit?.(createFormSubmitEvent())
 
   assert.equal(saveConfigCalls.length, 0)
   assert.deepEqual(toastCalls.at(-1), {
-    message: "validation.invalidFormat:groupEditPage.failoverFailureThreshold",
-    type: "error",
-  })
-})
-
-test("rejects malformed failover numeric input", async () => {
-  resetHarness()
-  const harness = createComponentHarness()
-
-  let tree = harness.renderReady()
-  const thresholdInput = findInputById(tree, "failoverFailureThreshold")
-  thresholdInput.props.onChange?.(createInputChangeEvent("1.5"))
-
-  tree = harness.renderReady()
-  let form = findForm(tree)
-  await form.props.onSubmit?.(createFormSubmitEvent())
-
-  assert.equal(saveConfigCalls.length, 0)
-  assert.deepEqual(toastCalls.at(-1), {
-    message: "validation.invalidFormat:groupEditPage.failoverFailureThreshold",
-    type: "error",
-  })
-
-  resetHarness()
-  tree = harness.renderReady()
-  const cooldownInput = findInputById(tree, "failoverCooldownSeconds")
-  cooldownInput.props.onChange?.(createInputChangeEvent("3abc"))
-
-  tree = harness.renderReady()
-  form = findForm(tree)
-  await form.props.onSubmit?.(createFormSubmitEvent())
-
-  assert.equal(saveConfigCalls.length, 0)
-  assert.deepEqual(toastCalls.at(-1), {
-    message: "validation.invalidFormat:groupEditPage.failoverCooldownSeconds",
+    message: "groupEditPage.routingTableMustHaveDefault",
     type: "error",
   })
 })

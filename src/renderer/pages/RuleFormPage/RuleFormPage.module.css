@@ -648,3 +648,56 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Model Tags ── */
+.modelsTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+}
+
+.modelTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-success-subtle, #dcfce7);
+  color: var(--text-success, #166534);
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border-success, #bbf7d0);
+}
+
+.modelTagRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-success, #166534);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.modelTagRemove:hover {
+  opacity: 1;
+}
+
+.modelInputRow {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.modelInputRow .input {
+  flex: 1;
+}

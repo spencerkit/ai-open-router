@@ -1,12 +1,12 @@
 import assert from "node:assert/strict"
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { test } from "node:test"
 import React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 
 import type { TranslateFunction } from "../../src/renderer/hooks/useTranslation"
-import type { AgentConfig, AgentSourceFile, IntegrationClientKind } from "../../src/renderer/types"
+import type { AgentSourceFile, IntegrationClientKind } from "../../src/renderer/types"
 
 const Module = require("node:module") as {
   _resolveFilename: (
@@ -78,8 +78,8 @@ require.extensions[".css"] = module => {
   })
 }
 
-function loadAgentEditContent() {
-  return require("../../src/renderer/pages/AgentEditPage/AgentEditContent") as typeof import("../../src/renderer/pages/AgentEditPage/AgentEditContent")
+function loadAgentSourceTabs() {
+  return require("../../src/renderer/pages/AgentEditPage/AgentSourceTabs") as typeof import("../../src/renderer/pages/AgentEditPage/AgentSourceTabs")
 }
 
 const t: TranslateFunction = (key, options) => {
@@ -89,15 +89,8 @@ const t: TranslateFunction = (key, options) => {
   return key
 }
 
-function renderContent(input: {
+function renderSourceTabs(input: {
   kind: IntegrationClientKind
-  editMode?: "form" | "source"
-  formData?: AgentConfig
-  fallbackModelsText?: string
-  showApiToken?: boolean
-  supportsTimeout?: boolean
-  timeoutText?: string
-  timeoutError?: string
   sourceFiles?: AgentSourceFile[]
   activeSourceFile?: AgentSourceFile
   sourceContent?: string
@@ -114,19 +107,11 @@ function renderContent(input: {
     },
   ]
 
-  const { AgentEditContent } = loadAgentEditContent()
+  const { AgentSourceTabs } = loadAgentSourceTabs()
 
   return renderToStaticMarkup(
-    React.createElement(AgentEditContent, {
+    React.createElement(AgentSourceTabs, {
       kind: input.kind,
-      editMode: input.editMode ?? "form",
-      formData: input.formData ?? {},
-      fallbackModelsText: input.fallbackModelsText ?? "",
-      showApiToken: input.showApiToken ?? false,
-      supportsTimeout:
-        input.supportsTimeout ?? (input.kind === "claude" || input.kind === "opencode"),
-      timeoutText: input.timeoutText ?? "",
-      timeoutError: input.timeoutError ?? "",
       sourceFiles,
       activeSourceFile: input.activeSourceFile ?? sourceFiles[0],
       sourceContent: input.sourceContent ?? sourceFiles[0]?.content ?? "",
@@ -134,76 +119,49 @@ function renderContent(input: {
       metaFormat: input.metaFormat ?? "config.json",
       dirtySourceIds: input.dirtySourceIds ?? [],
       t,
-      onFormDataChange: () => {},
-      onFallbackModelsTextChange: () => {},
-      onToggleApiTokenVisibility: () => {},
-      onTimeoutTextChange: () => {},
       onSourceSelect: () => {},
       onSourceChange: () => {},
-      defaultOpenclawAgentId: "default",
-      defaultOpenclawProviderId: "aor_shared",
-      defaultOpenclawApiFormat: "openai-responses",
     })
   )
 }
 
-test("renders OpenClaw-specific form fields when kind is openclaw", () => {
-  const markup = renderContent({
+test("agent edit page is source-only", () => {
+  const source = readFileSync(
+    path.join(process.cwd(), "src/renderer/pages/AgentEditPage/AgentEditPage.tsx"),
+    "utf8"
+  )
+
+  assert.doesNotMatch(source, /writeAgentConfigAction/)
+  assert.doesNotMatch(source, /handleSaveForm/)
+  assert.doesNotMatch(source, /\beditMode\b/)
+  assert.doesNotMatch(source, /agentManagement\.formEditor/)
+  assert.doesNotMatch(source, /AgentEditContent/)
+  assert.match(source, /agentManagement\.sourceEditor/)
+  assert.match(source, /agentManagement\.saveCurrentFile/)
+})
+
+test("source-only page keeps load callback independent from draft state", () => {
+  const source = readFileSync(
+    path.join(process.cwd(), "src/renderer/pages/AgentEditPage/AgentEditPage.tsx"),
+    "utf8"
+  )
+
+  assert.match(source, /\[readAgentConfig, targetId\]/)
+})
+
+test("source-only page distinguishes inactive dirty tabs from the current file", () => {
+  const source = readFileSync(
+    path.join(process.cwd(), "src/renderer/pages/AgentEditPage/AgentEditPage.tsx"),
+    "utf8"
+  )
+
+  assert.match(source, /agentManagement\.otherSourceChangesPending/)
+  assert.match(source, /getSourceDraftStatus/)
+})
+
+test("shows format action in OpenClaw source editor", () => {
+  const markup = renderSourceTabs({
     kind: "openclaw",
-    formData: {
-      agentId: "workspace-alpha",
-      providerId: "aor_shared",
-      model: "gpt-4.1",
-      apiFormat: "openai-responses",
-      url: "http://127.0.0.1:8899/oc/dev/v1",
-      apiToken: "secret",
-    },
-    fallbackModelsText: "gpt-4.1-mini",
-  })
-
-  assert.match(markup, /agentManagement\.openclawAgentId/)
-  assert.match(markup, /agentManagement\.openclawProviderId/)
-  assert.match(markup, /agentManagement\.openclawApiFormat/)
-  assert.match(markup, /agentManagement\.openclawFallbackModels/)
-  assert.doesNotMatch(markup, /agentManagement\.alwaysThinkingEnabled/)
-})
-
-test("renders masked generic token field with visibility toggle", () => {
-  const markup = renderContent({
-    kind: "claude",
-    formData: {
-      apiToken: "secret",
-    },
-  })
-
-  assert.match(markup, /type="password"/)
-  assert.match(markup, /agentManagement\.showToken/)
-})
-
-test("renders generic form fields for non-OpenClaw kinds", () => {
-  const markup = renderContent({
-    kind: "claude",
-    formData: {
-      model: "claude-sonnet-4-5-20250929",
-      apiToken: "secret",
-      url: "http://localhost:8080/oc/dev",
-      alwaysThinkingEnabled: true,
-    },
-    timeoutText: "300000",
-  })
-
-  assert.match(markup, /agentManagement\.url/)
-  assert.match(markup, /agentManagement\.apiToken/)
-  assert.match(markup, /agentManagement\.model/)
-  assert.match(markup, /agentManagement\.timeout/)
-  assert.match(markup, /agentManagement\.alwaysThinkingEnabled/)
-  assert.doesNotMatch(markup, /agentManagement\.openclawAgentId/)
-})
-
-test("shows format action in OpenClaw source mode", () => {
-  const markup = renderContent({
-    kind: "openclaw",
-    editMode: "source",
     sourceFiles: [
       {
         sourceId: "primary",
@@ -221,9 +179,8 @@ test("shows format action in OpenClaw source mode", () => {
 })
 
 test("shows OpenClaw source hint about validating related files", () => {
-  const markup = renderContent({
+  const markup = renderSourceTabs({
     kind: "openclaw",
-    editMode: "source",
     sourceFiles: [
       {
         sourceId: "models",
@@ -239,22 +196,9 @@ test("shows OpenClaw source hint about validating related files", () => {
   assert.match(markup, /agentManagement\.openclawSourceValidationHint/)
 })
 
-test("keeps agent edit loading callback independent from draft state", () => {
-  const source = require("node:fs").readFileSync(
-    path.join(process.cwd(), "src/renderer/pages/AgentEditPage/AgentEditPage.tsx"),
-    "utf8"
-  ) as string
-
-  assert.doesNotMatch(
-    source,
-    /\[fallbackModelsText, formData, readAgentConfig, targetId, timeoutText\]/
-  )
-  assert.match(source, /\[readAgentConfig, targetId\]/)
-})
 test("marks dirty OpenClaw source tabs", () => {
-  const markup = renderContent({
+  const markup = renderSourceTabs({
     kind: "openclaw",
-    editMode: "source",
     sourceFiles: [
       {
         sourceId: "primary",
@@ -284,9 +228,8 @@ test("marks dirty OpenClaw source tabs", () => {
 })
 
 test("shows OpenClaw source files and active source hint", () => {
-  const markup = renderContent({
+  const markup = renderSourceTabs({
     kind: "openclaw",
-    editMode: "source",
     sourceFiles: [
       {
         sourceId: "primary",

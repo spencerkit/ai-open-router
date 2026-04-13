@@ -128,16 +128,42 @@ fn resolve_provider_for_test(
             .iter()
             .find(|group| group.id == group_id)
             .ok_or_else(|| AppError::not_found(format!("group not found: {group_id}")))?;
-        return group
+
+        if let Some(provider) = group
             .providers
             .iter()
+            .flatten()
             .find(|provider| provider.id == normalized_provider_id)
             .cloned()
-            .ok_or_else(|| {
-                AppError::not_found(format!(
-                    "provider not found in group {group_id}: {provider_id}"
-                ))
-            });
+        {
+            return Ok(provider);
+        }
+
+        let routed_provider_id = group.routing_table.iter().find_map(|route| {
+            let route_provider_id = route.provider_id.trim();
+            if route_provider_id == normalized_provider_id {
+                Some(route_provider_id)
+            } else {
+                None
+            }
+        });
+
+        if routed_provider_id.is_some() {
+            return config
+                .providers
+                .iter()
+                .find(|provider| provider.id == normalized_provider_id)
+                .cloned()
+                .ok_or_else(|| {
+                    AppError::not_found(format!(
+                        "provider not found in group {group_id}: {provider_id}"
+                    ))
+                });
+        }
+
+        return Err(AppError::not_found(format!(
+            "provider not found in group {group_id}: {provider_id}"
+        )));
     }
 
     config
@@ -156,7 +182,11 @@ fn validate_provider(provider: &Rule) -> AppResult<()> {
     if provider.api_address.trim().is_empty() {
         return Err(AppError::validation("provider apiAddress is empty"));
     }
-    if provider.default_model.trim().is_empty() {
+    if provider
+        .default_model
+        .as_ref()
+        .map_or(true, |m| m.trim().is_empty())
+    {
         return Err(AppError::validation("provider defaultModel is empty"));
     }
     Ok(())
@@ -184,7 +214,7 @@ fn build_request_headers(provider: &Rule) -> AppResult<HeaderMap> {
 fn build_request_payload(provider: &Rule) -> Value {
     match provider.protocol {
         RuleProtocol::Openai => json!({
-            "model": provider.default_model.as_str(),
+            "model": provider.default_model.as_deref().unwrap_or(""),
             "instructions": MODEL_TEST_SYSTEM_PROMPT,
             "input": [
                 {
@@ -202,7 +232,7 @@ fn build_request_payload(provider: &Rule) -> Value {
             "max_output_tokens": MODEL_TEST_MAX_OUTPUT_TOKENS
         }),
         RuleProtocol::OpenaiCompletion => json!({
-            "model": provider.default_model.as_str(),
+            "model": provider.default_model.as_deref().unwrap_or(""),
             "messages": [
                 {
                     "role": "system",
@@ -217,7 +247,7 @@ fn build_request_payload(provider: &Rule) -> Value {
             "max_tokens": MODEL_TEST_MAX_OUTPUT_TOKENS
         }),
         RuleProtocol::Anthropic => json!({
-            "model": provider.default_model.as_str(),
+            "model": provider.default_model.as_deref().unwrap_or(""),
             "system": MODEL_TEST_SYSTEM_PROMPT,
             "messages": [
                 {
@@ -577,8 +607,11 @@ mod tests {
             token: token.to_string(),
             api_address: "https://example.com".to_string(),
             website: String::new(),
-            default_model: "gpt-5-mini".to_string(),
-            model_mappings: Default::default(),
+            models: Vec::new(),
+            default_model: Some("gpt-5-mini".to_string()),
+            model_mappings: Some(Default::default()),
+            header_passthrough_allow: Vec::new(),
+            header_passthrough_deny: Vec::new(),
             quota: crate::domain::entities::default_rule_quota_config(),
             cost: crate::domain::entities::default_rule_cost_config(),
         }
@@ -596,6 +629,7 @@ mod tests {
             compat: CompatConfig {
                 strict_mode: false,
                 text_tool_call_fallback_enabled: true,
+                header_passthrough_enabled: true,
             },
             logging: LoggingConfig {
                 capture_body: false,
@@ -620,11 +654,16 @@ mod tests {
             groups: vec![Group {
                 id: "group-a".to_string(),
                 name: "Group A".to_string(),
-                models: vec![],
-                provider_ids: vec!["group-provider".to_string()],
+                routing_table: vec![crate::models::RouteEntry {
+                    request_model: "default".to_string(),
+                    provider_id: "global-provider".to_string(),
+                    target_model: "gpt-5-mini".to_string(),
+                }],
+                models: Some(vec![]),
+                provider_ids: Some(vec!["group-provider".to_string()]),
                 active_provider_id: Some("group-provider".to_string()),
-                providers: vec![sample_provider("group-provider", "group-token")],
-                failover: crate::models::default_group_failover_config(),
+                providers: Some(vec![sample_provider("group-provider", "group-token")]),
+                failover: Some(crate::models::default_group_failover_config()),
             }],
         }
     }
@@ -669,6 +708,18 @@ mod tests {
 
         assert_eq!(provider.id, "group-provider");
         assert_eq!(provider.token, "group-token");
+    }
+
+    #[test]
+    /// Resolves providers referenced only by routing_table from the global provider catalog.
+    fn resolve_provider_for_test_reads_routing_table_provider_from_global_catalog() {
+        let config = sample_config();
+
+        let provider = resolve_provider_for_test(&config, Some("group-a"), "global-provider")
+            .expect("routing table provider should resolve from global catalog");
+
+        assert_eq!(provider.id, "global-provider");
+        assert_eq!(provider.token, "global-token");
     }
 
     #[test]

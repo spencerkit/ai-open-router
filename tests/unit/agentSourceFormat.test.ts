@@ -1,12 +1,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import type { AgentConfig } from "../../src/renderer/types"
 import {
   formatAgentSourceDraft,
   getDirtySourceIds,
+  getSourceDraftStatus,
   hasDirtySourceDrafts,
-  mergeReloadedFormDraftState,
   mergeReloadedSourceDrafts,
 } from "../../src/renderer/utils/agentSourceFormat"
 
@@ -45,38 +44,6 @@ test("getDirtySourceIds returns every changed source tab", () => {
   )
 
   assert.deepEqual(result, ["models"])
-})
-
-test("mergeReloadedFormDraftState preserves unsaved form drafts during source reload", () => {
-  const currentFormData: AgentConfig = {
-    url: "http://localhost:8080/oc/dev/v1",
-    apiToken: "draft-token",
-    model: "gpt-4.1",
-  }
-
-  const result = mergeReloadedFormDraftState(
-    {
-      formData: currentFormData,
-      timeoutText: "",
-      fallbackModelsText: "gpt-4.1-mini",
-    },
-    {
-      formData: {
-        url: "http://localhost:8080/oc/dev/v1",
-        apiToken: "saved-token",
-        model: "gpt-4.1",
-      },
-      timeoutText: "",
-      fallbackModelsText: "",
-    },
-    true
-  )
-
-  assert.deepEqual(result, {
-    formData: currentFormData,
-    timeoutText: "",
-    fallbackModelsText: "gpt-4.1-mini",
-  })
 })
 
 test("mergeReloadedSourceDrafts preserves inactive dirty tabs after saving another file", () => {
@@ -145,6 +112,32 @@ test("hasDirtySourceDrafts checks all source tabs", () => {
   )
 
   assert.equal(result, true)
+})
+
+test("getSourceDraftStatus reports when only another tab is dirty", () => {
+  const result = getSourceDraftStatus(
+    [
+      {
+        sourceId: "primary",
+        label: "openclaw.json",
+        filePath: "/tmp/openclaw.json",
+        content: "{}",
+      },
+      {
+        sourceId: "models",
+        label: "models.json",
+        filePath: "/tmp/models.json",
+        content: "{}",
+      },
+    ],
+    {
+      primary: "{}",
+      models: '{\n  "providers": {}\n}',
+    },
+    "primary"
+  )
+
+  assert.equal(result, "inactive-dirty")
 })
 
 test("formatAgentSourceDraft leaves invalid source unchanged", () => {

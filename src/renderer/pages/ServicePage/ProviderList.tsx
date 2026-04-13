@@ -172,7 +172,7 @@ export const ProviderList: React.FC<{
       <div className={styles.ruleListHeader}>
         <div className={styles.ruleHeaderTitle}>
           <h3>{t("servicePage.ruleName")}</h3>
-          <span className={styles.countBadge}>{providers.length}</span>
+          <span className={styles.countBadge}>{providers?.length ?? 0}</span>
         </div>
         <div className={styles.ruleHeaderActions}>
           {onTestAll ? (
@@ -190,7 +190,7 @@ export const ProviderList: React.FC<{
                   ? t("servicePage.testingAllProviders")
                   : t("servicePage.testAllProviders")
               }
-              disabled={providers.length === 0 || testingAll}
+              disabled={!providers || providers.length === 0 || testingAll}
             >
               {testingAll ? (
                 <Loader2 size={14} className={styles.spinner} />
@@ -210,7 +210,7 @@ export const ProviderList: React.FC<{
       </div>
 
       <div className={styles.ruleListContent}>
-        {providers.length === 0 ? (
+        {!providers || providers.length === 0 ? (
           <p className={styles.emptyHint}>{emptyMessage || t("servicePage.noRulesHint")}</p>
         ) : (
           <ul className={`${styles.ruleItems} ${styles.ruleItemsTwoColumn}`}>
@@ -360,6 +360,14 @@ export const ProviderList: React.FC<{
                             title={provider.apiAddress}
                           >
                             {compactApiAddress}
+                          </span>
+                        </div>
+                        <div className={styles.providerCompactModelPanel}>
+                          <span className={styles.providerPanelEyebrow}>
+                            {t("servicePage.latency")}
+                          </span>
+                          <span className={styles.providerCompactModelValue}>
+                            {health.latencyLabel || "-"}
                           </span>
                         </div>
                       </div>

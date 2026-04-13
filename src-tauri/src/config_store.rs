@@ -285,55 +285,69 @@ fn normalize_groups_and_providers(
 
     let mut normalized_groups = Vec::new();
     for group in groups {
-        let scoped_provider_ids: HashSet<String> = if has_global_providers {
-            group
-                .provider_ids
-                .iter()
-                .map(|provider_id| provider_id.trim())
-                .filter(|provider_id| !provider_id.is_empty())
-                .map(|provider_id| provider_id.to_string())
-                .collect()
-        } else {
-            group
-                .providers
-                .iter()
-                .map(|provider| provider.id.trim())
-                .filter(|provider_id| !provider_id.is_empty())
-                .map(|provider_id| provider_id.to_string())
-                .collect()
-        };
+        // Determine which provider IDs are scoped to this group.
+        // If we have global providers AND the group has explicit provider_ids → use those.
+        // Otherwise, fall back to the group's built-in providers.
+        let scoped_provider_ids: HashSet<String> =
+            if has_global_providers && group.provider_ids.is_some() {
+                group
+                    .provider_ids
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|provider_id| provider_id.trim().to_string())
+                    .filter(|provider_id| !provider_id.is_empty())
+                    .collect()
+            } else {
+                group
+                    .providers
+                    .iter()
+                    .flatten()
+                    .map(|provider| provider.id.trim().to_string())
+                    .filter(|provider_id| !provider_id.is_empty())
+                    .collect()
+            };
         let mut group_provider_id_remap: HashMap<String, String> = HashMap::new();
-        for provider in &group.providers {
-            let provider_id = provider.id.trim().to_string();
-            if provider_id.is_empty() {
-                continue;
-            }
-            if !scoped_provider_ids.contains(&provider_id) {
-                continue;
-            }
-            if let Some(existing_provider) = provider_map.get(&provider_id) {
-                let existing_json = serde_json::to_string(existing_provider).unwrap_or_default();
-                let incoming_json = serde_json::to_string(provider).unwrap_or_default();
-                if existing_json != incoming_json {
-                    let next_provider_id = alloc_unique_provider_id(&provider_id, &provider_map);
-                    let mut next_provider = provider.clone();
-                    next_provider.id = next_provider_id.clone();
-                    provider_order.push(next_provider_id.clone());
-                    provider_map.insert(next_provider_id.clone(), next_provider);
-                    group_provider_id_remap.insert(provider_id, next_provider_id);
+        if let Some(providers) = &group.providers {
+            for provider in providers {
+                let provider_id = provider.id.trim().to_string();
+                if provider_id.is_empty() {
+                    continue;
                 }
-                continue;
+                if !scoped_provider_ids.contains(&provider_id) {
+                    continue;
+                }
+                if let Some(existing_provider) = provider_map.get(&provider_id) {
+                    let existing_json =
+                        serde_json::to_string(existing_provider).unwrap_or_default();
+                    let incoming_json = serde_json::to_string(provider).unwrap_or_default();
+                    if existing_json != incoming_json {
+                        let next_provider_id =
+                            alloc_unique_provider_id(&provider_id, &provider_map);
+                        let mut next_provider = provider.clone();
+                        next_provider.id = next_provider_id.clone();
+                        provider_order.push(next_provider_id.clone());
+                        provider_map.insert(next_provider_id.clone(), next_provider);
+                        group_provider_id_remap.insert(provider_id, next_provider_id);
+                    }
+                    continue;
+                }
+                provider_order.push(provider_id.clone());
+                provider_map.insert(provider_id, provider.clone());
             }
-            provider_order.push(provider_id.clone());
-            provider_map.insert(provider_id, provider.clone());
         }
 
-        let raw_provider_ids = if has_global_providers {
-            group.provider_ids.clone()
+        // Determine which provider IDs to include in the group.
+        // If scoped_provider_ids came from explicit group.provider_ids → use those.
+        // Otherwise, derive from the group's built-in providers.
+        let raw_provider_ids: Vec<String> = if has_global_providers && group.provider_ids.is_some()
+        {
+            group.provider_ids.clone().unwrap()
         } else {
             group
                 .providers
                 .iter()
+                .flatten()
                 .map(|provider| provider.id.clone())
                 .collect()
         };
@@ -364,10 +378,11 @@ fn normalize_groups_and_providers(
         normalized_groups.push(Group {
             id: group.id,
             name: group.name,
+            routing_table: group.routing_table,
             models: group.models,
-            provider_ids,
+            provider_ids: Some(provider_ids),
             active_provider_id,
-            providers: providers_for_group,
+            providers: Some(providers_for_group),
             failover: group.failover,
         });
     }
@@ -402,9 +417,35 @@ fn alloc_unique_provider_id(provider_id: &str, provider_map: &HashMap<String, Ru
 /// Normalizes full config structure for this module's workflow.
 fn normalize_config_for_storage(config: ProxyConfig) -> Result<ProxyConfig, String> {
     let (groups, providers) = normalize_groups_and_providers(config.groups, config.providers);
+
+    // Filter out groups that have no routing_table and no legacy provider data.
+    // A group is considered valid if it has a non-empty routing_table, or if it
+    // has legacy fields (provider_ids or providers) which would indicate it was
+    // converted from the old structure.
+    let valid_groups: Vec<Group> = groups
+        .into_iter()
+        .filter(|g| {
+            !g.routing_table.is_empty()
+                || g.provider_ids.as_ref().map_or(false, |ids| !ids.is_empty())
+                || g.providers.as_ref().map_or(false, |p| !p.is_empty())
+        })
+        .collect();
+
+    // Filter out providers that have no models defined.
+    // A provider is valid if it has models in its models list, or if it has a
+    // default_model/model_mappings (legacy providers may only have these fields).
+    let valid_providers: Vec<Rule> = providers
+        .into_iter()
+        .filter(|p| {
+            !p.models.is_empty()
+                || p.default_model.is_some()
+                || p.model_mappings.as_ref().is_some_and(|m| !m.is_empty())
+        })
+        .collect();
+
     Ok(ProxyConfig {
-        groups,
-        providers,
+        groups: valid_groups,
+        providers: valid_providers,
         ..config
     })
 }
@@ -517,11 +558,16 @@ fn load_groups_and_providers_from_relational_tables(
             let raw_group_json = row.map_err(|e| format!("read group_records row failed: {e}"))?;
             let mut group = serde_json::from_str::<Group>(&raw_group_json)
                 .map_err(|e| format!("parse group_json failed: {e}"))?;
-            group.providers = group
-                .provider_ids
-                .iter()
-                .filter_map(|provider_id| provider_map.get(provider_id).cloned())
-                .collect();
+            group.providers = Some(
+                group
+                    .provider_ids
+                    .as_ref()
+                    .map(|ids| ids.iter())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|provider_id| provider_map.get(provider_id).cloned())
+                    .collect(),
+            );
             groups.push(group);
         }
     } else {
@@ -550,11 +596,12 @@ fn load_groups_and_providers_from_relational_tables(
             groups.push(Group {
                 id: group_id,
                 name: group_name,
-                models,
-                provider_ids,
+                routing_table: Vec::new(),
+                models: Some(models),
+                provider_ids: Some(provider_ids),
                 active_provider_id,
-                providers: providers_for_group,
-                failover: default_group_failover_config(),
+                providers: Some(providers_for_group),
+                failover: Some(default_group_failover_config()),
             });
         }
     }
@@ -628,11 +675,12 @@ fn load_groups_from_legacy_relational_tables(conn: &Connection) -> Result<Vec<Gr
         groups.push(Group {
             id: group_id,
             name: group_name,
-            models,
-            provider_ids,
+            routing_table: Vec::new(),
+            models: Some(models),
+            provider_ids: Some(provider_ids),
             active_provider_id,
-            providers,
-            failover: default_group_failover_config(),
+            providers: Some(providers),
+            failover: Some(default_group_failover_config()),
         });
     }
     Ok(groups)
@@ -694,7 +742,7 @@ fn select_records_with_soft_delete_filter(
 mod tests {
     use super::*;
     use crate::domain::entities::{
-        default_rule_cost_config, default_rule_quota_config, Rule, RuleProtocol,
+        default_rule_cost_config, default_rule_quota_config, RouteEntry, Rule, RuleProtocol,
     };
     use std::collections::HashMap;
     use uuid::Uuid;
@@ -704,22 +752,30 @@ mod tests {
         Group {
             id: "group-1".to_string(),
             name: "group-1".to_string(),
-            models: vec!["gpt-4o-mini".to_string()],
-            provider_ids: vec!["provider-1".to_string()],
+            routing_table: vec![RouteEntry {
+                request_model: "gpt-4o-mini".to_string(),
+                provider_id: "provider-1".to_string(),
+                target_model: "gpt-4o-mini".to_string(),
+            }],
+            models: Some(vec!["gpt-4o-mini".to_string()]),
+            provider_ids: Some(vec!["provider-1".to_string()]),
             active_provider_id: Some("provider-1".to_string()),
-            providers: vec![Rule {
+            providers: Some(vec![Rule {
                 id: "provider-1".to_string(),
                 name: "provider-1".to_string(),
                 protocol: RuleProtocol::Openai,
                 token: "test-token".to_string(),
                 api_address: "https://api.openai.com".to_string(),
                 website: String::new(),
-                default_model: "gpt-4o-mini".to_string(),
-                model_mappings: HashMap::new(),
+                models: vec!["gpt-4o-mini".to_string()],
+                default_model: Some("gpt-4o-mini".to_string()),
+                model_mappings: Some(HashMap::new()),
+                header_passthrough_allow: Vec::new(),
+                header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
-            }],
-            failover: default_group_failover_config(),
+            }]),
+            failover: Some(default_group_failover_config()),
         }
     }
 
@@ -731,8 +787,11 @@ mod tests {
             token: "test-token".to_string(),
             api_address: "https://api.openai.com".to_string(),
             website: String::new(),
-            default_model: "gpt-4o-mini".to_string(),
-            model_mappings: HashMap::new(),
+            models: vec!["gpt-4o-mini".to_string()],
+            default_model: Some("gpt-4o-mini".to_string()),
+            model_mappings: Some(HashMap::new()),
+            header_passthrough_allow: Vec::new(),
+            header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
             cost: default_rule_cost_config(),
         }
@@ -756,7 +815,7 @@ mod tests {
 
         let in_memory = store.get();
         assert_eq!(in_memory.groups.len(), 1);
-        assert_eq!(in_memory.groups[0].providers.len(), 1);
+        assert_eq!(in_memory.groups[0].providers.as_ref().unwrap().len(), 1);
 
         let config_raw = std::fs::read_to_string(&config_path).expect("read config");
         let config_json: serde_json::Value =
@@ -800,9 +859,11 @@ mod tests {
 
         let mut cfg = default_config();
         let mut group = sample_group();
-        group.failover.enabled = true;
-        group.failover.failure_threshold = 5;
-        group.failover.cooldown_seconds = 90;
+        let mut failover_cfg = default_group_failover_config();
+        failover_cfg.enabled = true;
+        failover_cfg.failure_threshold = 5;
+        failover_cfg.cooldown_seconds = 90;
+        group.failover = Some(failover_cfg);
         cfg.groups = vec![group];
         let raw = serde_json::to_string_pretty(&cfg).expect("serialize config");
         std::fs::write(&config_path, raw).expect("write config");
@@ -814,9 +875,19 @@ mod tests {
         second_store.initialize().expect("second initialize");
         let loaded = second_store.get();
         assert_eq!(loaded.groups.len(), 1);
-        assert!(loaded.groups[0].failover.enabled);
-        assert_eq!(loaded.groups[0].failover.failure_threshold, 5);
-        assert_eq!(loaded.groups[0].failover.cooldown_seconds, 90);
+        assert_eq!(loaded.groups[0].failover.as_ref().unwrap().enabled, true);
+        assert_eq!(
+            loaded.groups[0]
+                .failover
+                .as_ref()
+                .unwrap()
+                .failure_threshold,
+            5
+        );
+        assert_eq!(
+            loaded.groups[0].failover.as_ref().unwrap().cooldown_seconds,
+            90
+        );
     }
 
     #[test]
@@ -839,7 +910,10 @@ mod tests {
         let loaded = second_store.get();
         assert_eq!(loaded.groups.len(), 1);
         assert_eq!(loaded.groups[0].id, "group-1");
-        assert_eq!(loaded.groups[0].providers[0].id, "provider-1");
+        assert_eq!(
+            loaded.groups[0].providers.as_ref().unwrap()[0].id,
+            "provider-1"
+        );
     }
 
     #[test]
@@ -884,22 +958,33 @@ mod tests {
         cfg.groups = vec![Group {
             id: "group-1".to_string(),
             name: "group-1".to_string(),
-            models: vec!["gpt-4o-mini".to_string()],
-            provider_ids: vec!["provider-1".to_string()],
+            routing_table: vec![RouteEntry {
+                request_model: "gpt-4o-mini".to_string(),
+                provider_id: "provider-1".to_string(),
+                target_model: "gpt-4o-mini".to_string(),
+            }],
+            models: Some(vec!["gpt-4o-mini".to_string()]),
+            provider_ids: Some(vec!["provider-1".to_string()]),
             active_provider_id: Some("provider-1".to_string()),
-            providers: vec![linked_provider.clone(), stale_provider],
-            failover: default_group_failover_config(),
+            providers: Some(vec![linked_provider.clone(), stale_provider]),
+            failover: Some(default_group_failover_config()),
         }];
 
         let normalized = normalize_config_for_storage(cfg).expect("normalize config");
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].id, "provider-1");
         assert_eq!(
-            normalized.groups[0].provider_ids,
-            vec!["provider-1".to_string()]
+            normalized.groups[0].provider_ids.as_ref(),
+            Some(&vec!["provider-1".to_string()])
         );
-        assert_eq!(normalized.groups[0].providers.len(), 1);
-        assert_eq!(normalized.groups[0].providers[0].id, "provider-1");
+        assert_eq!(
+            normalized.groups[0].providers.as_ref().map(|p| p.len()),
+            Some(1)
+        );
+        assert_eq!(
+            normalized.groups[0].providers.as_ref().unwrap()[0].id,
+            "provider-1"
+        );
     }
 
     #[test]
@@ -909,22 +994,29 @@ mod tests {
         cfg.groups = vec![Group {
             id: "group-1".to_string(),
             name: "group-1".to_string(),
-            models: vec!["gpt-4o-mini".to_string()],
-            provider_ids: vec![],
+            routing_table: Vec::new(),
+            models: Some(vec!["gpt-4o-mini".to_string()]),
+            provider_ids: Some(vec![]),
             active_provider_id: Some("provider-1".to_string()),
-            providers: vec![linked_provider],
-            failover: default_group_failover_config(),
+            providers: Some(vec![linked_provider]),
+            failover: Some(default_group_failover_config()),
         }];
 
         let normalized = normalize_config_for_storage(cfg).expect("normalize config");
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].id, "provider-1");
         assert_eq!(
-            normalized.groups[0].provider_ids,
-            vec!["provider-1".to_string()]
+            normalized.groups[0].provider_ids.as_ref(),
+            Some(&vec!["provider-1".to_string()])
         );
-        assert_eq!(normalized.groups[0].providers.len(), 1);
-        assert_eq!(normalized.groups[0].providers[0].id, "provider-1");
+        assert_eq!(
+            normalized.groups[0].providers.as_ref().map(|p| p.len()),
+            Some(1)
+        );
+        assert_eq!(
+            normalized.groups[0].providers.as_ref().unwrap()[0].id,
+            "provider-1"
+        );
     }
 
     #[test]
@@ -952,8 +1044,15 @@ mod tests {
         let models_json = serde_json::to_string(&vec!["gpt-4o-mini"]).expect("serialize models");
         let provider_ids_json =
             serde_json::to_string(&vec!["provider-1".to_string()]).expect("serialize provider ids");
-        let provider_json =
-            serde_json::to_string(&sample_group().providers[0]).expect("serialize provider json");
+        let provider_json = serde_json::to_string(
+            sample_group()
+                .providers
+                .as_ref()
+                .unwrap()
+                .first()
+                .expect("provider should exist"),
+        )
+        .expect("serialize provider json");
 
         conn.execute(
             "INSERT INTO group_records(group_id, group_name, models_json, active_provider_id, provider_ids_json, is_deleted)
@@ -996,8 +1095,8 @@ mod tests {
         let loaded = load_groups_from_legacy_relational_tables(&conn).expect("load groups");
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].id, "group-active");
-        assert_eq!(loaded[0].providers.len(), 1);
-        assert_eq!(loaded[0].providers[0].id, "provider-1");
+        assert_eq!(loaded[0].providers.as_ref().unwrap().len(), 1);
+        assert_eq!(loaded[0].providers.as_ref().unwrap()[0].id, "provider-1");
     }
 
     #[test]
@@ -1034,8 +1133,15 @@ mod tests {
         let models_json = serde_json::to_string(&vec!["gpt-4o-mini"]).expect("serialize models");
         let provider_ids_json =
             serde_json::to_string(&vec!["provider-1".to_string()]).expect("serialize provider ids");
-        let provider_json =
-            serde_json::to_string(&sample_group().providers[0]).expect("serialize provider json");
+        let provider_json = serde_json::to_string(
+            sample_group()
+                .providers
+                .as_ref()
+                .unwrap()
+                .first()
+                .expect("provider should exist"),
+        )
+        .expect("serialize provider json");
 
         conn.execute(
             "INSERT INTO group_records(group_id, group_name, models_json, active_provider_id, provider_ids_json, updated_at)
@@ -1064,8 +1170,8 @@ mod tests {
         assert_eq!(loaded.groups.len(), 1);
         assert_eq!(loaded.providers.len(), 1);
         assert_eq!(
-            loaded.groups[0].provider_ids,
-            vec!["provider-1".to_string()]
+            loaded.groups[0].provider_ids.as_ref(),
+            Some(&vec!["provider-1".to_string()])
         );
 
         let conn = Connection::open(&db_path).expect("reopen sqlite");
@@ -1090,5 +1196,95 @@ mod tests {
             )
             .expect("query legacy table count");
         assert_eq!(legacy_table_count, 0);
+    }
+
+    #[test]
+    fn normalize_config_for_storage_filters_groups_without_routing_or_legacy_fields() {
+        let p = sample_provider("p1");
+        let mut cfg = default_config();
+        cfg.providers = vec![p.clone()];
+        // Replace default groups with only our test groups.
+        cfg.groups = vec![
+            Group {
+                id: "group-empty".to_string(),
+                name: "group-empty".to_string(),
+                routing_table: Vec::new(),
+                models: None,
+                provider_ids: None,
+                active_provider_id: None,
+                providers: None,
+                failover: Some(default_group_failover_config()),
+            },
+            Group {
+                id: "group-valid".to_string(),
+                name: "group-valid".to_string(),
+                routing_table: vec![RouteEntry {
+                    request_model: "gpt-4o-mini".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-4o-mini".to_string(),
+                }],
+                models: Some(vec!["gpt-4o-mini".to_string()]),
+                provider_ids: Some(vec!["p1".to_string()]),
+                active_provider_id: Some("p1".to_string()),
+                providers: Some(vec![p.clone()]),
+                failover: Some(default_group_failover_config()),
+            },
+        ];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.groups.len(), 1);
+        assert_eq!(normalized.groups[0].id, "group-valid");
+    }
+
+    #[test]
+    fn normalize_config_for_storage_keeps_group_with_routing_table_even_without_legacy_fields() {
+        let mut cfg = default_config();
+        cfg.providers = vec![];
+        // Group with routing_table entries but no legacy fields — should be kept.
+        cfg.groups = vec![Group {
+            id: "group-routing".to_string(),
+            name: "group-routing".to_string(),
+            routing_table: vec![RouteEntry {
+                request_model: "gpt-4o-mini".to_string(),
+                provider_id: "p1".to_string(),
+                target_model: "gpt-4o-mini".to_string(),
+            }],
+            models: Some(vec!["gpt-4o-mini".to_string()]),
+            provider_ids: None,
+            active_provider_id: None,
+            providers: None,
+            failover: Some(default_group_failover_config()),
+        }];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.groups.len(), 1);
+        assert_eq!(normalized.groups[0].id, "group-routing");
+    }
+
+    #[test]
+    fn normalize_config_for_storage_filters_providers_without_models() {
+        let mut cfg = default_config();
+        cfg.providers = vec![
+            Rule {
+                id: "p-no-models".to_string(),
+                name: "p-no-models".to_string(),
+                protocol: RuleProtocol::Openai,
+                token: "test-token".to_string(),
+                api_address: "https://api.openai.com".to_string(),
+                website: String::new(),
+                models: Vec::new(),
+                default_model: None,
+                model_mappings: None,
+                header_passthrough_allow: Vec::new(),
+                header_passthrough_deny: Vec::new(),
+                quota: default_rule_quota_config(),
+                cost: default_rule_cost_config(),
+            },
+            sample_provider("p-with-models"),
+        ];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].id, "p-with-models");
     }
 }

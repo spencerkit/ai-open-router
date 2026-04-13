@@ -92,6 +92,23 @@ const COST_CURRENCY_OPTIONS = ["USD", "CNY", "EUR", "JPY", "HKD", "GBP", "SGD"] 
 
 const parseCostInputValue = (value: string): number => Number(value || "0")
 
+const normalizeHeaderPassthroughList = (raw: string): string[] => {
+  const normalizedHeaders: string[] = []
+  const seenHeaders = new Set<string>()
+
+  for (const part of raw.split(/[\n,]+/)) {
+    const normalized = part.trim().toLowerCase()
+    if (!normalized || seenHeaders.has(normalized)) continue
+    seenHeaders.add(normalized)
+    normalizedHeaders.push(normalized)
+  }
+
+  return normalizedHeaders
+}
+
+const formatHeaderPassthroughList = (headers?: string[] | null): string =>
+  normalizeHeaderPassthroughList((headers ?? []).join("\n")).join("\n")
+
 const formatBillingTemplatePrice = (value: number | undefined, currency: string): string => {
   if (value === undefined) return "-"
   return `${value} ${currency}`
@@ -285,8 +302,11 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const [showToken, setShowToken] = useState(false)
   const [apiAddress, setApiAddress] = useState("")
   const [website, setWebsite] = useState("")
-  const [defaultModel, setDefaultModel] = useState("")
   const [modelMappings, setModelMappings] = useState<Record<string, string>>({})
+  const [models, setModels] = useState<string[]>([])
+  const [newModelName, setNewModelName] = useState("")
+  const [headerPassthroughAllowText, setHeaderPassthroughAllowText] = useState("")
+  const [headerPassthroughDenyText, setHeaderPassthroughDenyText] = useState("")
   const [importFormat, setImportFormat] = useState<ProviderImportInputFormat>("auto")
   const [importText, setImportText] = useState("")
   const [importResult, setImportResult] = useState<ProviderImportParseResult | null>(null)
@@ -330,7 +350,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     name?: string
     token?: string
     apiAddress?: string
-    defaultModel?: string
     quotaEndpoint?: string
     quotaHeaders?: string
     quotaRemaining?: string
@@ -341,7 +360,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const group = groupId ? config?.groups.find(g => g.id === groupId) : null
   const provider = isGlobalMode
     ? ((config?.providers ?? []).find(item => item.id === providerId) ?? null)
-    : (group?.providers.find(item => item.id === providerId) ?? null)
+    : (group?.providers?.find(item => item.id === providerId) ?? null)
   const quotaDraftFingerprint = JSON.stringify({
     token,
     name,
@@ -423,8 +442,10 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setToken(provider.token)
     setApiAddress(provider.apiAddress)
     setWebsite(provider.website || "")
-    setDefaultModel(provider.defaultModel)
     setModelMappings(provider.modelMappings || {})
+    setModels(provider.models ?? [])
+    setHeaderPassthroughAllowText(formatHeaderPassthroughList(provider.headerPassthroughAllow))
+    setHeaderPassthroughDenyText(formatHeaderPassthroughList(provider.headerPassthroughDeny))
 
     const quota = provider.quota
     setQuotaEnabled(!!quota?.enabled)
@@ -530,7 +551,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
         token,
         apiAddress,
         website,
-        defaultModel,
+        defaultModel: models[0] ?? "",
       },
       importResult.draft
     )
@@ -540,13 +561,11 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setToken(nextFields.token)
     setApiAddress(nextFields.apiAddress)
     setWebsite(nextFields.website)
-    setDefaultModel(nextFields.defaultModel)
     setErrors(prev => ({
       ...prev,
       name: undefined,
       token: undefined,
       apiAddress: undefined,
-      defaultModel: undefined,
     }))
     setShowImportModal(false)
   }
@@ -619,6 +638,14 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setCostTemplateBaseline(null)
   }
 
+  const handleAddModel = () => {
+    const trimmed = newModelName.trim()
+    if (trimmed && !models.includes(trimmed)) {
+      setModels([...models, trimmed])
+      setNewModelName("")
+    }
+  }
+
   const focusField = (id: string) => {
     const input = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null
     input?.focus()
@@ -631,7 +658,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       name?: string
       token?: string
       apiAddress?: string
-      defaultModel?: string
       quotaEndpoint?: string
       quotaHeaders?: string
       quotaRemaining?: string
@@ -654,9 +680,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     }
     if (!apiAddress.trim()) {
       nextErrors.apiAddress = t("validation.required", { field: t("servicePage.apiAddress") })
-    }
-    if (!defaultModel.trim()) {
-      nextErrors.defaultModel = t("validation.required", { field: t("servicePage.defaultModel") })
     }
 
     if (quotaEnabled) {
@@ -692,10 +715,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     }
     if (nextErrors.apiAddress) {
       focusField("apiAddress")
-      return false
-    }
-    if (nextErrors.defaultModel) {
-      focusField("defaultModel")
       return false
     }
     if (nextErrors.quotaEndpoint) {
@@ -791,7 +810,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
         name: name.trim() || "Draft Provider",
         token,
         apiAddress,
-        defaultModel,
+        defaultModel: models[0] ?? "",
         quotaConfig,
       })
       setQuotaTestResult(result)
@@ -815,6 +834,8 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
 
     const quotaHeaders = parseQuotaHeaders(quotaHeadersText)
     const threshold = Number(quotaLowThresholdPercent)
+    const headerPassthroughAllow = normalizeHeaderPassthroughList(headerPassthroughAllowText)
+    const headerPassthroughDeny = normalizeHeaderPassthroughList(headerPassthroughDenyText)
     const quotaConfig = buildQuotaConfig({
       enabled: quotaEnabled,
       provider: quotaProvider,
@@ -833,18 +854,22 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     })
 
     const providerDraft: Provider = {
+      ...(provider ?? {}),
       id: isEditMode ? providerId || createStableId() : createStableId(),
       name: name.trim(),
       protocol,
       token,
       apiAddress,
       website: website.trim(),
-      defaultModel: defaultModel.trim(),
+      defaultModel: models[0] ?? "",
+      models,
       modelMappings: Object.fromEntries(
         Object.entries(modelMappings)
           .map(([key, value]) => [key.trim(), value.trim()])
           .filter(([key, value]) => key && value)
       ),
+      headerPassthroughAllow,
+      headerPassthroughDeny,
       quota: quotaConfig,
       cost: {
         enabled: costEnabled,
@@ -879,7 +904,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       }
 
       const currentProviderIds =
-        currentGroup.providerIds ?? currentGroup.providers.map(rule => rule.id)
+        currentGroup.providerIds ?? currentGroup.providers?.map(rule => rule.id) ?? []
       const providerIds = currentProviderIds.includes(providerDraft.id)
         ? currentProviderIds
         : [...currentProviderIds, providerDraft.id]
@@ -913,7 +938,6 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     name.trim() &&
     token.trim() &&
     apiAddress.trim() &&
-    defaultModel.trim() &&
     (!quotaEnabled || (quotaEndpoint.trim() && quotaRemainingExpr.trim()))
   const breadcrumbLabel = isEditMode && provider ? provider.name : t("ruleCreatePage.newRule")
   const backLabel = isGlobalMode ? t("header.providers") : t("header.backToService")
@@ -1046,21 +1070,48 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
               <h2 className={styles.sectionTitle}>{t("ruleForm.sectionModelSettings")}</h2>
 
               <div className={styles.formGroup}>
-                <label htmlFor="defaultModel">{t("servicePage.defaultModel")}</label>
-                <Input
-                  id="defaultModel"
-                  value={defaultModel}
-                  onChange={e => {
-                    setDefaultModel(e.target.value)
-                    if (errors.defaultModel) {
-                      setErrors(prev => ({ ...prev, defaultModel: undefined }))
-                    }
-                  }}
-                  placeholder={t("ruleForm.defaultModelPlaceholder")}
-                  className={styles.input}
-                  error={errors.defaultModel}
-                  hint={t("ruleForm.defaultModelHint")}
-                />
+                <label htmlFor="provider-models">{t("providersPage.models")}</label>
+                {models.length > 0 && (
+                  <div className={styles.modelsTags}>
+                    {models.map((model, index) => (
+                      <span key={model} className={styles.modelTag}>
+                        {model}
+                        <button
+                          type="button"
+                          onClick={() => setModels(models.filter((_, i) => i !== index))}
+                          className={styles.modelTagRemove}
+                          aria-label={`Remove ${model}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.modelInputRow}>
+                  <Input
+                    id="provider-models"
+                    type="text"
+                    value={newModelName}
+                    onChange={e => setNewModelName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleAddModel()
+                      }
+                    }}
+                    placeholder={t("ruleForm.addModelPlaceholder")}
+                    className={styles.input}
+                  />
+                  <Button
+                    type="button"
+                    variant="default"
+                    onClick={handleAddModel}
+                    disabled={!newModelName.trim()}
+                  >
+                    {t("ruleForm.add")}
+                  </Button>
+                </div>
               </div>
             </section>
 
@@ -1125,6 +1176,34 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
                   className={styles.input}
                   hint={t("ruleForm.officialWebsiteHint")}
                 />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="header-passthrough-allow">
+                  {t("ruleForm.headerPassthroughAllow")}
+                </label>
+                <textarea
+                  id="header-passthrough-allow"
+                  className={styles.jsonTextarea}
+                  value={headerPassthroughAllowText}
+                  onChange={e => setHeaderPassthroughAllowText(e.target.value)}
+                  placeholder={t("ruleForm.headerPassthroughPlaceholder")}
+                />
+                <p className={styles.fieldHint}>{t("ruleForm.headerPassthroughAllowHint")}</p>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="header-passthrough-deny">
+                  {t("ruleForm.headerPassthroughDeny")}
+                </label>
+                <textarea
+                  id="header-passthrough-deny"
+                  className={styles.jsonTextarea}
+                  value={headerPassthroughDenyText}
+                  onChange={e => setHeaderPassthroughDenyText(e.target.value)}
+                  placeholder={t("ruleForm.headerPassthroughPlaceholder")}
+                />
+                <p className={styles.fieldHint}>{t("ruleForm.headerPassthroughDenyHint")}</p>
               </div>
             </section>
 

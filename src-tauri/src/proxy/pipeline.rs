@@ -9,10 +9,9 @@ use super::observability::{
     response_headers_sse, StreamTokenAccumulator,
 };
 use super::routing::{
-    assert_rule_ready, build_rule_headers, detect_entry_protocol, record_route_provider_failure,
-    record_route_provider_success, refresh_route_index_if_needed, resolve_runtime_active_route,
-    resolve_target_model, resolve_upstream_path, resolve_upstream_url, EntryEndpoint,
-    EntryProtocol, ParsedPath, PathEntry, RouteResolution,
+    assert_rule_ready, build_forward_headers, detect_entry_protocol, refresh_route_index_if_needed,
+    resolve_runtime_active_route, resolve_target_model, resolve_upstream_path,
+    resolve_upstream_url, EntryEndpoint, EntryProtocol, ParsedPath, PathEntry, RouteResolution,
 };
 use super::{
     ServiceState, MAX_REQUEST_BODY_BYTES, MAX_STREAM_LOG_BODY_BYTES,
@@ -20,7 +19,7 @@ use super::{
     STREAM_REQUEST_TIMEOUT_MS,
 };
 use crate::auth::extract_bearer_token;
-use crate::models::{RuleProtocol, TokenUsage};
+use crate::models::{IntegrationClientKind, RuleProtocol, TokenUsage};
 use crate::transformer::convert::claude_openai_responses::ResponsesToClaudeOptions;
 use crate::transformer::{StreamContext, Transformer};
 use axum::body::{to_bytes, Body, Bytes};
@@ -207,6 +206,7 @@ pub(super) async fn handle_proxy_request(
         capture_body,
         _strict_mode,
         text_tool_call_fallback_enabled,
+        header_passthrough_enabled,
     ) = match state.config.read() {
         Ok(cfg) => (
             cfg.server.auth_enabled,
@@ -214,6 +214,7 @@ pub(super) async fn handle_proxy_request(
             cfg.logging.capture_body,
             cfg.compat.strict_mode,
             cfg.compat.text_tool_call_fallback_enabled,
+            cfg.compat.header_passthrough_enabled,
         ),
         Err(_) => {
             state.metrics.increment_error();
@@ -256,29 +257,23 @@ pub(super) async fn handle_proxy_request(
     };
     let active_route = match active_route {
         Some(RouteResolution::Ready(route)) => route,
-        Some(RouteResolution::NoActiveRule { group_name }) => {
+        Some(RouteResolution::NoRoutingTable { group_name }) => {
             state.metrics.increment_error();
             return proxy_error_response(
                 409,
                 "proxy_error",
-                &format!("Group {} has no active rule", group_name),
+                &format!("Group {} has no routing table", group_name),
                 None,
                 "proxy",
                 &trace_id,
             );
         }
-        Some(RouteResolution::MissingActiveRule {
-            group_name,
-            active_rule_id,
-        }) => {
+        Some(RouteResolution::NoDefaultRoute { group_name }) => {
             state.metrics.increment_error();
             return proxy_error_response(
                 409,
                 "proxy_error",
-                &format!(
-                    "Active rule {} is missing in group {}",
-                    active_rule_id, group_name
-                ),
+                &format!("Group {} routing table has no default route", group_name),
                 None,
                 "proxy",
                 &trace_id,
@@ -296,19 +291,6 @@ pub(super) async fn handle_proxy_request(
             );
         }
     };
-    let active_route = match resolve_runtime_active_route(&state, &active_route) {
-        Ok(route) => route,
-        Err(msg) => {
-            state.metrics.increment_error();
-            return proxy_error_response(500, "proxy_error", &msg, None, "proxy", &trace_id);
-        }
-    };
-
-    if let Err((status, msg)) = assert_rule_ready(&active_route.rule) {
-        state.metrics.increment_error();
-        return proxy_error_response(status, "proxy_error", &msg, None, "proxy", &trace_id);
-    }
-
     let body_bytes = match to_bytes(body, MAX_REQUEST_BODY_BYTES).await {
         Ok(v) => v,
         Err(_) => {
@@ -338,16 +320,28 @@ pub(super) async fn handle_proxy_request(
         }
     };
 
-    let target_model = resolve_target_model(
-        &active_route.rule,
-        &active_route.group_models,
-        &request_body,
-    );
-    let requested_model = request_body
+    let request_model = request_body
         .get("model")
         .and_then(|v| v.as_str())
-        .unwrap_or(&active_route.rule.default_model)
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("default")
         .to_string();
+
+    let active_route = match resolve_runtime_active_route(&state, &active_route, &request_model) {
+        Ok(route) => route,
+        Err(msg) => {
+            state.metrics.increment_error();
+            return proxy_error_response(500, "proxy_error", &msg, None, "proxy", &trace_id);
+        }
+    };
+
+    if let Err((status, msg)) = assert_rule_ready(&active_route.rule) {
+        state.metrics.increment_error();
+        return proxy_error_response(status, "proxy_error", &msg, None, "proxy", &trace_id);
+    }
+
+    let target_model = resolve_target_model(&active_route.routing_table[0]);
+    let requested_model = request_model;
     let target_protocol = active_route.rule.protocol.clone();
     let declared_tool_names = extract_declared_tool_names(&request_body);
     let enable_text_tool_call_fallback = text_tool_call_fallback_enabled
@@ -443,7 +437,12 @@ pub(super) async fn handle_proxy_request(
         }
     };
 
-    let upstream_body = match build_upstream_body(transformer.as_ref(), &request_body) {
+    let effective_request_body = maybe_inject_default_thinking(
+        &request_body,
+        should_inject_claude_thinking(&state, &parsed_path.group_id, &entry, &target_protocol),
+    );
+
+    let upstream_body = match build_upstream_body(transformer.as_ref(), &effective_request_body) {
         Ok(v) => v,
         Err(msg) => {
             state.metrics.increment_error();
@@ -490,7 +489,13 @@ pub(super) async fn handle_proxy_request(
         .unwrap_or(false);
     state.metrics.increment_request(stream);
 
-    let upstream_headers = build_rule_headers(&target_protocol, &active_route.rule);
+    let upstream_headers = build_forward_headers(
+        entry.protocol,
+        &target_protocol,
+        &active_route.rule,
+        &headers,
+        header_passthrough_enabled,
+    );
     append_processing_log(
         &state,
         &request_timestamp,
@@ -511,16 +516,21 @@ pub(super) async fn handle_proxy_request(
     );
     let request_timeout_ms = resolve_request_timeout_ms(stream, &transformer_name);
 
+    let mut reqwest_headers = reqwest::header::HeaderMap::new();
+    for (key, value) in &upstream_headers {
+        let Ok(name) = reqwest::header::HeaderName::from_bytes(key.as_bytes()) else {
+            continue;
+        };
+        let Ok(value) = reqwest::header::HeaderValue::from_str(value) else {
+            continue;
+        };
+        reqwest_headers.insert(name, value);
+    }
+
     let request_builder = state
         .client
         .post(upstream_url.clone())
-        .headers(reqwest::header::HeaderMap::from_iter(
-            upstream_headers.iter().filter_map(|(k, v)| {
-                let name = reqwest::header::HeaderName::from_bytes(k.as_bytes()).ok()?;
-                let value = reqwest::header::HeaderValue::from_str(v).ok()?;
-                Some((name, value))
-            }),
-        ))
+        .headers(reqwest_headers)
         .json(&upstream_body);
 
     let upstream_resp = if stream {
@@ -533,19 +543,6 @@ pub(super) async fn handle_proxy_request(
             Ok(Ok(r)) => r,
             Ok(Err(err)) => {
                 let err_msg = format!("Upstream request failed: {err}");
-                if classify_provider_side_failure(Some(&err_msg), None) {
-                    let _ = record_route_provider_failure(
-                        &state,
-                        &active_route.group_id,
-                        &active_route.rule.id,
-                        &active_route.provider_ids,
-                        &crate::proxy::failover::FailoverConfigSnapshot {
-                            enabled: active_route.failover.enabled,
-                            failure_threshold: active_route.failover.failure_threshold,
-                            cooldown_seconds: active_route.failover.cooldown_seconds,
-                        },
-                    );
-                }
                 state.metrics.increment_error();
                 finalize_log(
                     &state,
@@ -593,19 +590,6 @@ pub(super) async fn handle_proxy_request(
                 let err_msg = format!(
                     "Upstream response header timeout exceeded after {request_timeout_ms}ms"
                 );
-                if classify_provider_side_failure(Some(&err_msg), Some(504)) {
-                    let _ = record_route_provider_failure(
-                        &state,
-                        &active_route.group_id,
-                        &active_route.rule.id,
-                        &active_route.provider_ids,
-                        &crate::proxy::failover::FailoverConfigSnapshot {
-                            enabled: active_route.failover.enabled,
-                            failure_threshold: active_route.failover.failure_threshold,
-                            cooldown_seconds: active_route.failover.cooldown_seconds,
-                        },
-                    );
-                }
                 state.metrics.increment_error();
                 finalize_log(
                     &state,
@@ -659,19 +643,6 @@ pub(super) async fn handle_proxy_request(
             Ok(r) => r,
             Err(err) => {
                 let err_msg = format!("Upstream request failed: {err}");
-                if classify_provider_side_failure(Some(&err_msg), None) {
-                    let _ = record_route_provider_failure(
-                        &state,
-                        &active_route.group_id,
-                        &active_route.rule.id,
-                        &active_route.provider_ids,
-                        &crate::proxy::failover::FailoverConfigSnapshot {
-                            enabled: active_route.failover.enabled,
-                            failure_threshold: active_route.failover.failure_threshold,
-                            cooldown_seconds: active_route.failover.cooldown_seconds,
-                        },
-                    );
-                }
                 state.metrics.increment_error();
                 finalize_log(
                     &state,
@@ -720,19 +691,6 @@ pub(super) async fn handle_proxy_request(
 
     let upstream_status = upstream_resp.status().as_u16();
     let upstream_is_error = upstream_status >= 400;
-    if upstream_is_error && classify_provider_side_failure(None, Some(upstream_status)) {
-        let _ = record_route_provider_failure(
-            &state,
-            &active_route.group_id,
-            &active_route.rule.id,
-            &active_route.provider_ids,
-            &crate::proxy::failover::FailoverConfigSnapshot {
-                enabled: active_route.failover.enabled,
-                failure_threshold: active_route.failover.failure_threshold,
-                cooldown_seconds: active_route.failover.cooldown_seconds,
-            },
-        );
-    }
     let upstream_headers_plain = plain_headers(upstream_resp.headers());
     let upstream_ct = upstream_resp
         .headers()
@@ -779,13 +737,7 @@ pub(super) async fn handle_proxy_request(
         let stream_debug_capture_body = cfg!(debug_assertions);
         let stream_upstream_status = upstream_status;
         let stream_upstream_is_error = upstream_is_error;
-        let stream_group_id = active_route.group_id.clone();
-        let stream_provider_ids = active_route.provider_ids.clone();
-        let stream_failover_config = crate::proxy::failover::FailoverConfigSnapshot {
-            enabled: active_route.failover.enabled,
-            failure_threshold: active_route.failover.failure_threshold,
-            cooldown_seconds: active_route.failover.cooldown_seconds,
-        };
+        let _stream_group_id = active_route.group_id.clone();
         let stream_upstream_ct = upstream_ct.clone();
         let stream_started = started;
         let stream_transformer = transformer.clone();
@@ -798,7 +750,6 @@ pub(super) async fn handle_proxy_request(
             let mut bytes_stream = upstream_resp.bytes_stream();
             let mut usage_acc = StreamTokenAccumulator::default();
             let mut stream_failed = false;
-            let mut provider_side_stream_failure = false;
             let mut downstream_closed = false;
             let mut stream_upstream_response_bytes = Vec::<u8>::new();
             let mut stream_upstream_response_truncated = false;
@@ -1227,7 +1178,6 @@ pub(super) async fn handle_proxy_request(
                     }
                     Err(_) => {
                         stream_failed = true;
-                        provider_side_stream_failure = true;
                         stream_debug_terminal(
                             &stream_trace_id,
                             "read_error",
@@ -1302,31 +1252,6 @@ pub(super) async fn handle_proxy_request(
                 .add_latency(stream_started.elapsed().as_millis() as u64);
             if stream_failed || stream_upstream_is_error {
                 stream_state.metrics.increment_error();
-            }
-
-            match classify_stream_failover_outcome(
-                stream_failed,
-                downstream_closed,
-                stream_upstream_is_error,
-                provider_side_stream_failure,
-            ) {
-                StreamFailoverOutcome::ProviderFailure => {
-                    let _ = record_route_provider_failure(
-                        &stream_state,
-                        &stream_group_id,
-                        &stream_rule.id,
-                        &stream_provider_ids,
-                        &stream_failover_config,
-                    );
-                }
-                StreamFailoverOutcome::Success => {
-                    let _ = record_route_provider_success(
-                        &stream_state,
-                        &stream_group_id,
-                        &stream_rule.id,
-                    );
-                }
-                StreamFailoverOutcome::Ignore => {}
             }
 
             let stream_response_body = if stream_capture_body {
@@ -1424,19 +1349,6 @@ pub(super) async fn handle_proxy_request(
         Ok(v) => v,
         Err(err) => {
             let err_msg = format!("Failed to read upstream response: {err}");
-            if classify_provider_side_failure(Some(&err_msg), Some(upstream_status)) {
-                let _ = record_route_provider_failure(
-                    &state,
-                    &active_route.group_id,
-                    &active_route.rule.id,
-                    &active_route.provider_ids,
-                    &crate::proxy::failover::FailoverConfigSnapshot {
-                        enabled: active_route.failover.enabled,
-                        failure_threshold: active_route.failover.failure_threshold,
-                        cooldown_seconds: active_route.failover.cooldown_seconds,
-                    },
-                );
-            }
             state.metrics.increment_error();
             finalize_log(
                 &state,
@@ -1587,7 +1499,6 @@ pub(super) async fn handle_proxy_request(
         extract_token_usage(&upstream_json),
         extract_token_usage(&output_body),
     );
-    let _ = record_route_provider_success(&state, &active_route.group_id, &active_route.rule.id);
     if let Some(ref usage) = token_usage {
         state.metrics.add_token_usage(usage);
     }
@@ -1629,59 +1540,6 @@ pub(super) async fn handle_proxy_request(
     );
 
     resp
-}
-
-fn classify_provider_side_failure(
-    error_message: Option<&str>,
-    upstream_status: Option<u16>,
-) -> bool {
-    if let Some(status) = upstream_status {
-        if status == 429 || status >= 500 {
-            return true;
-        }
-    }
-
-    let normalized = error_message
-        .map(|message| message.trim().to_ascii_lowercase())
-        .unwrap_or_default();
-    if normalized.is_empty() {
-        return false;
-    }
-
-    normalized.contains("timeout")
-        || normalized.contains("timed out")
-        || normalized.contains("network")
-        || normalized.contains("connection")
-        || normalized.contains("upstream request failed")
-        || normalized.contains("failed to read upstream response")
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum StreamFailoverOutcome {
-    Success,
-    ProviderFailure,
-    Ignore,
-}
-
-fn classify_stream_failover_outcome(
-    stream_failed: bool,
-    downstream_closed: bool,
-    upstream_is_error: bool,
-    provider_side_stream_failure: bool,
-) -> StreamFailoverOutcome {
-    if upstream_is_error {
-        return StreamFailoverOutcome::Ignore;
-    }
-    if provider_side_stream_failure && stream_failed {
-        return StreamFailoverOutcome::ProviderFailure;
-    }
-    if downstream_closed {
-        return StreamFailoverOutcome::Ignore;
-    }
-    if stream_failed {
-        return StreamFailoverOutcome::Ignore;
-    }
-    StreamFailoverOutcome::Success
 }
 
 fn extract_header_token(headers: &HeaderMap, header_name: &str) -> Option<String> {
@@ -1726,6 +1584,58 @@ pub(super) fn build_upstream_body(
         serde_json::to_vec(request_body).map_err(|e| format!("serialize request: {}", e))?;
     let converted = transformer.transform_request(&request_bytes)?;
     serde_json::from_slice(&converted).map_err(|e| format!("parse converted: {}", e))
+}
+
+fn should_inject_claude_thinking(
+    state: &ServiceState,
+    group_id: &str,
+    entry: &PathEntry,
+    target_protocol: &RuleProtocol,
+) -> bool {
+    if entry.protocol != EntryProtocol::Anthropic
+        || entry.endpoint != EntryEndpoint::Messages
+        || !matches!(
+            *target_protocol,
+            RuleProtocol::Anthropic | RuleProtocol::Openai | RuleProtocol::OpenaiCompletion
+        )
+    {
+        return false;
+    }
+
+    let Some(shared_state) = state.shared_state.as_ref() else {
+        return false;
+    };
+
+    shared_state.integration_store.list().iter().any(|target| {
+        target.kind == IntegrationClientKind::Claude
+            && target.group_id.as_deref() == Some(group_id)
+            && target
+                .config
+                .as_ref()
+                .and_then(|config| config.always_thinking_enabled)
+                .unwrap_or(false)
+    })
+}
+
+fn maybe_inject_default_thinking(request_body: &Value, should_inject: bool) -> Value {
+    if !should_inject {
+        return request_body.clone();
+    }
+
+    let mut injected = request_body.clone();
+    let Some(root) = injected.as_object_mut() else {
+        return request_body.clone();
+    };
+
+    let has_explicit_thinking = root
+        .get("thinking")
+        .filter(|value| !value.is_null())
+        .is_some();
+    if !has_explicit_thinking {
+        root.insert("thinking".to_string(), json!({ "type": "enabled" }));
+    }
+
+    injected
 }
 
 /// Map upstream response body back to the downstream entry surface.
@@ -2152,20 +2062,20 @@ fn looks_like_sse_prelude(chunk: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_provider_side_failure, classify_stream_failover_outcome, find_sse_delimiter,
-        handle_proxy_request, looks_like_sse_prelude, merge_token_usage, pop_sse_event,
-        prepare_transformer_for_route, request_matches_local_access_token,
+        find_sse_delimiter, handle_proxy_request, looks_like_sse_prelude, merge_token_usage,
+        pop_sse_event, prepare_transformer_for_route, request_matches_local_access_token,
         stream_requires_sse_event_buffer, EntryEndpoint, ParsedPath, PathEntry,
-        StreamFailoverOutcome,
     };
+    use crate::api::dto::AgentConfig;
+    use crate::domain::entities::RouteEntry;
     use crate::models::{
-        default_group_failover_config, default_rule_cost_config, default_rule_quota_config, Group,
-        Rule, RuleProtocol, TokenUsage,
+        default_rule_cost_config, default_rule_quota_config, Group, IntegrationClientKind, Rule,
+        RuleProtocol, TokenUsage,
     };
     use crate::proxy::routing::EntryProtocol;
     use crate::proxy::{headless_service_state_for_tests, ServiceState};
     use axum::{
-        body::{to_bytes, Body},
+        body::{to_bytes, Body, Bytes},
         extract::State as AxumState,
         http::{HeaderMap, HeaderValue, Method, StatusCode},
         response::{IntoResponse, Response},
@@ -2173,10 +2083,10 @@ mod tests {
         Json, Router,
     };
     use serde_json::{json, Value};
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex,
     };
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
@@ -2196,7 +2106,31 @@ mod tests {
         shutdown: Option<oneshot::Sender<()>>,
     }
 
+    #[derive(Clone)]
+    struct CapturingUpstreamState {
+        responses: Arc<Vec<(u16, Value)>>,
+        hits: Arc<AtomicUsize>,
+        captured_headers: Arc<Mutex<Vec<HashMap<String, String>>>>,
+        captured_bodies: Arc<Mutex<Vec<Value>>>,
+    }
+
+    struct CapturingTestUpstream {
+        base_url: String,
+        hits: Arc<AtomicUsize>,
+        captured_headers: Arc<Mutex<Vec<HashMap<String, String>>>>,
+        captured_bodies: Arc<Mutex<Vec<Value>>>,
+        shutdown: Option<oneshot::Sender<()>>,
+    }
+
     impl Drop for TestUpstream {
+        fn drop(&mut self) {
+            if let Some(shutdown) = self.shutdown.take() {
+                let _ = shutdown.send(());
+            }
+        }
+    }
+
+    impl Drop for CapturingTestUpstream {
         fn drop(&mut self) {
             if let Some(shutdown) = self.shutdown.take() {
                 let _ = shutdown.send(());
@@ -2217,6 +2151,51 @@ mod tests {
 
         (
             StatusCode::from_u16(status).expect("scripted status must be valid"),
+            Json(payload),
+        )
+            .into_response()
+    }
+
+    async fn capturing_upstream_handler(
+        AxumState(state): AxumState<CapturingUpstreamState>,
+        headers: HeaderMap,
+        body: Bytes,
+    ) -> Response {
+        let call_index = state.hits.fetch_add(1, Ordering::SeqCst);
+        let (status, payload) = state
+            .responses
+            .get(call_index)
+            .cloned()
+            .or_else(|| state.responses.last().cloned())
+            .expect("capturing upstream must have at least one response");
+
+        let mut captured = HashMap::new();
+        for (name, value) in &headers {
+            let key = name.as_str().to_ascii_lowercase();
+            let entry = captured.entry(key).or_insert_with(String::new);
+            let text = value.to_str().unwrap_or_default().to_string();
+            if entry.is_empty() {
+                *entry = text;
+            } else {
+                entry.push_str(", ");
+                entry.push_str(&text);
+            }
+        }
+        state
+            .captured_headers
+            .lock()
+            .expect("capture lock should succeed")
+            .push(captured);
+        let captured_body =
+            serde_json::from_slice::<Value>(&body).expect("captured request body should be json");
+        state
+            .captured_bodies
+            .lock()
+            .expect("capture body lock should succeed")
+            .push(captured_body);
+
+        (
+            StatusCode::from_u16(status).expect("captured status must be valid"),
             Json(payload),
         )
             .into_response()
@@ -2250,6 +2229,47 @@ mod tests {
         TestUpstream {
             base_url: format!("http://{}", address),
             hits,
+            shutdown: Some(shutdown_tx),
+        }
+    }
+
+    async fn spawn_capturing_json_upstream(
+        path: &'static str,
+        responses: Vec<(u16, Value)>,
+    ) -> CapturingTestUpstream {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let captured_headers = Arc::new(Mutex::new(Vec::new()));
+        let captured_bodies = Arc::new(Mutex::new(Vec::new()));
+        let state = CapturingUpstreamState {
+            responses: Arc::new(responses),
+            hits: hits.clone(),
+            captured_headers: captured_headers.clone(),
+            captured_bodies: captured_bodies.clone(),
+        };
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("capturing upstream listener should bind");
+        let address = listener
+            .local_addr()
+            .expect("capturing upstream listener should have local addr");
+        let app = Router::new()
+            .route(path, post(capturing_upstream_handler))
+            .with_state(state);
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+
+        tokio::spawn(async move {
+            let server = axum::serve(listener, app);
+            let graceful = server.with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            });
+            let _ = graceful.await;
+        });
+
+        CapturingTestUpstream {
+            base_url: format!("http://{}", address),
+            hits,
+            captured_headers,
+            captured_bodies,
             shutdown: Some(shutdown_tx),
         }
     }
@@ -2483,6 +2503,27 @@ mod tests {
         })
     }
 
+    fn openai_responses_response(text: &str) -> Value {
+        json!({
+            "id": "resp-test",
+            "object": "response",
+            "status": "completed",
+            "output": [{
+                "type": "message",
+                "role": "assistant",
+                "content": [{
+                    "type": "output_text",
+                    "text": text
+                }]
+            }],
+            "usage": {
+                "input_tokens": 1,
+                "output_tokens": 1,
+                "total_tokens": 2
+            }
+        })
+    }
+
     fn test_rule(
         id: &str,
         protocol: RuleProtocol,
@@ -2496,54 +2537,36 @@ mod tests {
             token: "test-token".to_string(),
             api_address,
             website: String::new(),
-            default_model: default_model.to_string(),
+            models: Vec::new(),
+            default_model: Some(default_model.to_string()),
             model_mappings: Default::default(),
+            header_passthrough_allow: Vec::new(),
+            header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
             cost: default_rule_cost_config(),
         }
     }
 
-    fn install_failover_group(
+    fn install_routing_group(
         service_state: &ServiceState,
-        providers: Vec<Rule>,
-        failure_threshold: u32,
-    ) {
-        install_failover_group_with_cooldown(service_state, providers, failure_threshold, 300);
-    }
-
-    fn install_failover_group_with_cooldown(
-        service_state: &ServiceState,
-        providers: Vec<Rule>,
-        failure_threshold: u32,
-        cooldown_seconds: u32,
+        provider: Rule,
+        routing_table: Vec<crate::domain::entities::RouteEntry>,
     ) {
         let shared = service_state
             .shared_state
             .clone()
             .expect("headless service state should include shared state");
-        let preferred_provider_id = providers
-            .first()
-            .expect("test group needs at least one provider")
-            .id
-            .clone();
-        let provider_ids = providers
-            .iter()
-            .map(|provider| provider.id.clone())
-            .collect();
-        let mut failover = default_group_failover_config();
-        failover.enabled = true;
-        failover.failure_threshold = failure_threshold;
-        failover.cooldown_seconds = cooldown_seconds;
         let mut next_config = shared.config_store.get();
-        next_config.providers = providers.clone();
+        next_config.providers = vec![provider.clone()];
         next_config.groups = vec![Group {
             id: "dev".to_string(),
             name: "Dev".to_string(),
-            models: vec!["claude-test".to_string()],
-            provider_ids,
-            active_provider_id: Some(preferred_provider_id),
-            providers,
-            failover,
+            routing_table,
+            models: Some(vec!["claude-test".to_string()]),
+            provider_ids: Some(vec![provider.id.clone()]),
+            active_provider_id: None,
+            providers: Some(vec![provider]),
+            failover: None,
         }];
         shared
             .config_store
@@ -2551,37 +2574,22 @@ mod tests {
             .expect("test config should save");
     }
 
-    fn runtime_failure_count(
-        service_state: &ServiceState,
-        group_id: &str,
-        provider_id: &str,
-    ) -> u32 {
-        let runtime = service_state
-            .failover_state
-            .read()
-            .expect("failover state lock should be readable");
-        crate::proxy::failover::provider_failure_count(&runtime, group_id, provider_id)
-    }
-
-    fn runtime_active_failover_provider(
-        service_state: &ServiceState,
-        group_id: &str,
-    ) -> Option<String> {
-        let runtime = service_state
-            .failover_state
-            .read()
-            .expect("failover state lock should be readable");
-        crate::proxy::failover::active_failover_provider_id(&runtime, group_id)
-    }
-
     async fn send_messages_request(
         service_state: &ServiceState,
+        request_body: Value,
+    ) -> (StatusCode, Value) {
+        send_messages_request_with_headers(service_state, HeaderMap::new(), request_body).await
+    }
+
+    async fn send_messages_request_with_headers(
+        service_state: &ServiceState,
+        headers: HeaderMap,
         request_body: Value,
     ) -> (StatusCode, Value) {
         let response = handle_proxy_request(
             service_state.clone(),
             Method::POST,
-            HeaderMap::new(),
+            headers,
             Body::from(
                 serde_json::to_vec(&request_body).expect("request body should serialize to json"),
             ),
@@ -2629,15 +2637,26 @@ mod tests {
     #[tokio::test]
     async fn request_body_larger_than_10m_reaches_validation_stage() {
         let service_state = headless_service_state_for_tests();
-        install_failover_group(
+        install_routing_group(
             &service_state,
-            vec![test_rule(
+            test_rule(
                 "p1",
                 RuleProtocol::OpenaiCompletion,
                 "http://127.0.0.1:1".to_string(),
                 "gpt-test",
-            )],
-            1,
+            ),
+            vec![
+                RouteEntry {
+                    request_model: "claude-test".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "claude-test".to_string(),
+                },
+                RouteEntry {
+                    request_model: "default".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-test".to_string(),
+                },
+            ],
         );
 
         let oversized_messages = "x".repeat(10 * 1024 * 1024 + 1024);
@@ -2848,842 +2867,6 @@ mod tests {
     }
 
     #[test]
-    fn failover_classification_counts_provider_side_status_codes() {
-        assert!(classify_provider_side_failure(None, Some(429)));
-        assert!(classify_provider_side_failure(None, Some(500)));
-        assert!(!classify_provider_side_failure(None, Some(400)));
-        assert!(!classify_provider_side_failure(None, Some(422)));
-    }
-
-    #[test]
-    fn failover_classification_ignores_local_validation_errors_without_upstream_failure() {
-        assert!(!classify_provider_side_failure(
-            Some("invalid request payload"),
-            None
-        ));
-        assert!(!classify_provider_side_failure(
-            Some("unsupported model alias"),
-            Some(200)
-        ));
-    }
-
-    #[test]
-    fn failover_classification_counts_transport_failures_even_after_non_error_status() {
-        assert!(classify_provider_side_failure(
-            Some("network failure"),
-            None
-        ));
-        assert!(classify_provider_side_failure(Some("timeout"), None));
-        assert!(classify_provider_side_failure(
-            Some("Failed to read upstream response"),
-            Some(200)
-        ));
-        assert!(!classify_provider_side_failure(None, Some(422)));
-    }
-
-    #[test]
-    fn stream_failover_outcome_distinguishes_provider_failures_from_local_ones() {
-        assert_eq!(
-            classify_stream_failover_outcome(false, false, false, false),
-            StreamFailoverOutcome::Success
-        );
-        assert_eq!(
-            classify_stream_failover_outcome(true, false, false, true),
-            StreamFailoverOutcome::ProviderFailure
-        );
-        assert_eq!(
-            classify_stream_failover_outcome(true, true, false, true),
-            StreamFailoverOutcome::ProviderFailure
-        );
-        assert_eq!(
-            classify_stream_failover_outcome(true, false, false, false),
-            StreamFailoverOutcome::Ignore
-        );
-        assert_eq!(
-            classify_stream_failover_outcome(false, true, false, true),
-            StreamFailoverOutcome::Ignore
-        );
-        assert_eq!(
-            classify_stream_failover_outcome(false, false, true, true),
-            StreamFailoverOutcome::Ignore
-        );
-    }
-
-    #[tokio::test]
-    async fn cooldown_expiry_retries_preferred_provider_on_next_live_request() {
-        let primary = spawn_json_upstream(
-            "/chat/completions",
-            vec![
-                (503, json!({"error": {"message": "service unavailable"}})),
-                (200, openai_chat_completion_response("recovered")),
-            ],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("backup"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group_with_cooldown(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-            1,
-        );
-
-        let request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-
-        let (failure_status, _) = send_messages_request(&service_state, request.clone()).await;
-        assert_eq!(failure_status, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 1);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 0);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            Some("p2".to_string())
-        );
-
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-        let (success_status, success_payload) =
-            send_messages_request(&service_state, request).await;
-        assert_eq!(success_status, StatusCode::OK);
-        assert_eq!(
-            success_payload["content"][0]["text"].as_str(),
-            Some("recovered")
-        );
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 2);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 0);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            None
-        );
-    }
-
-    #[tokio::test]
-    async fn local_errors_after_cooldown_do_not_clear_failover_before_preferred_provider_recovers()
-    {
-        let primary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("recovered"))],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("backup"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group_with_cooldown(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-            1,
-        );
-
-        {
-            let mut runtime = service_state
-                .failover_state
-                .write()
-                .expect("failover state lock should be writable");
-            crate::proxy::failover::record_provider_failure(
-                &mut runtime,
-                "dev",
-                "p1",
-                &["p1".to_string(), "p2".to_string()],
-                &crate::proxy::failover::FailoverConfigSnapshot {
-                    enabled: true,
-                    failure_threshold: 1,
-                    cooldown_seconds: 1,
-                },
-                chrono::Utc::now() - chrono::Duration::seconds(2),
-            );
-        }
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            Some("p2".to_string())
-        );
-
-        let (error_status, _) = send_messages_request(
-            &service_state,
-            json!({
-                "model": "claude-test",
-                "max_tokens": 16,
-                "messages": "invalid"
-            }),
-        )
-        .await;
-        assert_eq!(error_status, StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 0);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 0);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            Some("p2".to_string())
-        );
-
-        let (success_status, success_payload) = send_messages_request(
-            &service_state,
-            json!({
-                "model": "claude-test",
-                "max_tokens": 16,
-                "messages": [{"role": "user", "content": "hello"}]
-            }),
-        )
-        .await;
-        assert_eq!(success_status, StatusCode::OK);
-        assert_eq!(
-            success_payload["content"][0]["text"].as_str(),
-            Some("recovered")
-        );
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 1);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 0);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            None
-        );
-    }
-
-    #[tokio::test]
-    async fn provider_failure_after_cooldown_restarts_failover_to_secondary() {
-        let primary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(503, json!({"error": {"message": "still failing"}}))],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("backup"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group_with_cooldown(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-            1,
-        );
-
-        {
-            let mut runtime = service_state
-                .failover_state
-                .write()
-                .expect("failover state lock should be writable");
-            crate::proxy::failover::record_provider_failure(
-                &mut runtime,
-                "dev",
-                "p1",
-                &["p1".to_string(), "p2".to_string()],
-                &crate::proxy::failover::FailoverConfigSnapshot {
-                    enabled: true,
-                    failure_threshold: 1,
-                    cooldown_seconds: 1,
-                },
-                chrono::Utc::now() - chrono::Duration::seconds(2),
-            );
-        }
-
-        let (failure_status, failure_payload) = send_messages_request(
-            &service_state,
-            json!({
-                "model": "claude-test",
-                "max_tokens": 16,
-                "messages": [{"role": "user", "content": "hello"}]
-            }),
-        )
-        .await;
-        assert_eq!(failure_status, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(
-            failure_payload["error"]["message"].as_str(),
-            Some("still failing")
-        );
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 1);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 0);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            Some("p2".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn provider_side_failures_switch_live_requests_to_next_provider() {
-        let primary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(429, json!({"error": {"message": "rate limited"}}))],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("ok"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-        );
-
-        let failure_request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-        let (failure_status, failure_payload) =
-            send_messages_request(&service_state, failure_request.clone()).await;
-        assert_eq!(failure_status, StatusCode::TOO_MANY_REQUESTS);
-        assert_eq!(
-            failure_payload["error"]["message"].as_str(),
-            Some("rate limited")
-        );
-
-        let (success_status, success_payload) =
-            send_messages_request(&service_state, failure_request).await;
-        assert_eq!(success_status, StatusCode::OK);
-        assert_eq!(success_payload["content"][0]["text"].as_str(), Some("ok"));
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 1);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn local_transform_errors_do_not_activate_failover_for_live_requests() {
-        let primary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("ok"))],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("backup"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-        );
-
-        let local_error_request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "messages": "invalid"
-        });
-        let (error_status, _) = send_messages_request(&service_state, local_error_request).await;
-        assert_eq!(error_status, StatusCode::UNPROCESSABLE_ENTITY);
-
-        let success_request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-        let (success_status, success_payload) =
-            send_messages_request(&service_state, success_request).await;
-        assert_eq!(success_status, StatusCode::OK);
-        assert_eq!(success_payload["content"][0]["text"].as_str(), Some("ok"));
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 1);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 0);
-    }
-
-    #[tokio::test]
-    async fn upstream_5xx_failures_switch_live_requests_to_next_provider() {
-        let primary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(503, json!({"error": {"message": "service unavailable"}}))],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("ok"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-        );
-
-        let request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-
-        let (failure_status, failure_payload) =
-            send_messages_request(&service_state, request.clone()).await;
-        assert_eq!(failure_status, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(
-            failure_payload["error"]["message"].as_str(),
-            Some("service unavailable")
-        );
-        assert_eq!(runtime_failure_count(&service_state, "dev", "p1"), 1);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            Some("p2".to_string())
-        );
-
-        let (success_status, success_payload) =
-            send_messages_request(&service_state, request).await;
-        assert_eq!(success_status, StatusCode::OK);
-        assert_eq!(success_payload["content"][0]["text"].as_str(), Some("ok"));
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 1);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn transport_failures_switch_live_requests_to_next_provider() {
-        let service_state = headless_service_state_for_tests();
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("ok"))],
-        )
-        .await;
-        install_failover_group(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    "http://127.0.0.1:1".to_string(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-        );
-
-        let request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-
-        let (failure_status, failure_payload) =
-            send_messages_request(&service_state, request.clone()).await;
-        assert_eq!(failure_status, StatusCode::BAD_GATEWAY);
-        assert!(failure_payload["error"]["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("Upstream request failed"));
-        assert_eq!(runtime_failure_count(&service_state, "dev", "p1"), 1);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            Some("p2".to_string())
-        );
-
-        let (success_status, success_payload) =
-            send_messages_request(&service_state, request).await;
-        assert_eq!(success_status, StatusCode::OK);
-        assert_eq!(success_payload["content"][0]["text"].as_str(), Some("ok"));
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn stream_read_failures_activate_failover_for_next_live_request() {
-        let primary = spawn_stream_upstream(
-            "/chat/completions",
-            vec![
-                Ok(b"data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"he\"},\"finish_reason\":null}]}\n\n".to_vec()),
-                Err("stream read failed".to_string()),
-            ],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("ok"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-        );
-
-        let request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "stream": true,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-
-        let (stream_status, stream_body) =
-            send_streaming_messages_request(&service_state, request.clone()).await;
-        assert_eq!(
-            stream_status,
-            StatusCode::OK,
-            "unexpected stream body: {stream_body}"
-        );
-        assert!(stream_body.contains("message_start"));
-        assert_eq!(runtime_failure_count(&service_state, "dev", "p1"), 1);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            Some("p2".to_string())
-        );
-
-        let (success_status, success_payload) = send_messages_request(
-            &service_state,
-            json!({
-                "model": "claude-test",
-                "max_tokens": 16,
-                "messages": [{"role": "user", "content": "hello again"}]
-            }),
-        )
-        .await;
-        assert_eq!(success_status, StatusCode::OK);
-        assert_eq!(success_payload["content"][0]["text"].as_str(), Some("ok"));
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 1);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn successful_stream_request_resets_failure_count_before_threshold_is_reached() {
-        let primary = spawn_scripted_stream_upstream(
-            "/chat/completions",
-            vec![
-                vec![
-                    Ok(b"data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"he\"},\"finish_reason\":null}]}\n\n".to_vec()),
-                    Err("stream read failed".to_string()),
-                ],
-                vec![
-                    Ok(b"data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":null}]}\n\n".to_vec()),
-                    Ok(b"data: [DONE]\n\n".to_vec()),
-                ],
-                vec![
-                    Ok(b"data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"bye\"},\"finish_reason\":null}]}\n\n".to_vec()),
-                    Err("stream read failed again".to_string()),
-                ],
-                vec![
-                    Ok(b"data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"final\"},\"finish_reason\":null}]}\n\n".to_vec()),
-                    Ok(b"data: [DONE]\n\n".to_vec()),
-                ],
-            ],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("backup"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            2,
-        );
-
-        let request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "stream": true,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-
-        let (first_status, first_body) =
-            send_streaming_messages_request(&service_state, request.clone()).await;
-        assert_eq!(
-            first_status,
-            StatusCode::OK,
-            "unexpected stream body: {first_body}"
-        );
-        assert!(first_body.contains("message_start"));
-        assert_eq!(runtime_failure_count(&service_state, "dev", "p1"), 1);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            None
-        );
-
-        let (second_status, second_body) =
-            send_streaming_messages_request(&service_state, request.clone()).await;
-        assert_eq!(
-            second_status,
-            StatusCode::OK,
-            "unexpected stream body: {second_body}"
-        );
-        assert!(second_body.contains("message_start"));
-        assert_eq!(runtime_failure_count(&service_state, "dev", "p1"), 0);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            None
-        );
-
-        let (third_status, third_body) =
-            send_streaming_messages_request(&service_state, request.clone()).await;
-        assert_eq!(
-            third_status,
-            StatusCode::OK,
-            "unexpected stream body: {third_body}"
-        );
-        assert!(third_body.contains("message_start"));
-        assert_eq!(runtime_failure_count(&service_state, "dev", "p1"), 1);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            None
-        );
-
-        let (fourth_status, fourth_body) =
-            send_streaming_messages_request(&service_state, request).await;
-        assert_eq!(
-            fourth_status,
-            StatusCode::OK,
-            "unexpected stream body: {fourth_body}"
-        );
-        assert!(fourth_body.contains("message_start"));
-        assert_eq!(runtime_failure_count(&service_state, "dev", "p1"), 0);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            None
-        );
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 4);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 0);
-    }
-
-    #[tokio::test]
-    async fn non_stream_body_read_failures_activate_failover_for_next_live_request() {
-        let primary = spawn_raw_json_upstream(
-            "/chat/completions",
-            vec![vec![
-                Ok(
-                    serde_json::to_vec(&openai_chat_completion_response("partial"))
-                        .expect("chat completion response should serialize"),
-                ),
-                Err("body read failed".to_string()),
-            ]],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("ok"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            1,
-        );
-
-        let request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-
-        let (failure_status, failure_payload) =
-            send_messages_request(&service_state, request.clone()).await;
-        assert_eq!(failure_status, StatusCode::BAD_GATEWAY);
-        assert!(failure_payload["error"]["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("Failed to read upstream response"));
-        assert_eq!(runtime_failure_count(&service_state, "dev", "p1"), 1);
-        assert_eq!(
-            runtime_active_failover_provider(&service_state, "dev"),
-            Some("p2".to_string())
-        );
-
-        let (success_status, success_payload) =
-            send_messages_request(&service_state, request).await;
-        assert_eq!(success_status, StatusCode::OK);
-        assert_eq!(success_payload["content"][0]["text"].as_str(), Some("ok"));
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 1);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn successful_live_request_resets_failure_count_before_threshold_is_reached() {
-        let primary = spawn_json_upstream(
-            "/chat/completions",
-            vec![
-                (429, json!({"error": {"message": "rate limited"}})),
-                (200, openai_chat_completion_response("primary-ok")),
-                (429, json!({"error": {"message": "rate limited again"}})),
-                (200, openai_chat_completion_response("primary-final")),
-            ],
-        )
-        .await;
-        let secondary = spawn_json_upstream(
-            "/chat/completions",
-            vec![(200, openai_chat_completion_response("backup"))],
-        )
-        .await;
-        let service_state = headless_service_state_for_tests();
-        install_failover_group(
-            &service_state,
-            vec![
-                test_rule(
-                    "p1",
-                    RuleProtocol::OpenaiCompletion,
-                    primary.base_url.clone(),
-                    "gpt-test",
-                ),
-                test_rule(
-                    "p2",
-                    RuleProtocol::OpenaiCompletion,
-                    secondary.base_url.clone(),
-                    "gpt-test",
-                ),
-            ],
-            2,
-        );
-
-        let request = json!({
-            "model": "claude-test",
-            "max_tokens": 16,
-            "messages": [{"role": "user", "content": "hello"}]
-        });
-
-        let (first_status, _) = send_messages_request(&service_state, request.clone()).await;
-        assert_eq!(first_status, StatusCode::TOO_MANY_REQUESTS);
-
-        let (second_status, second_payload) =
-            send_messages_request(&service_state, request.clone()).await;
-        assert_eq!(second_status, StatusCode::OK);
-        assert_eq!(
-            second_payload["content"][0]["text"].as_str(),
-            Some("primary-ok")
-        );
-
-        let (third_status, _) = send_messages_request(&service_state, request.clone()).await;
-        assert_eq!(third_status, StatusCode::TOO_MANY_REQUESTS);
-
-        let (fourth_status, fourth_payload) = send_messages_request(&service_state, request).await;
-        assert_eq!(fourth_status, StatusCode::OK);
-        assert_eq!(
-            fourth_payload["content"][0]["text"].as_str(),
-            Some("primary-final")
-        );
-        assert_eq!(primary.hits.load(Ordering::SeqCst), 4);
-        assert_eq!(secondary.hits.load(Ordering::SeqCst), 0);
-    }
-
-    #[test]
     fn local_access_token_accepts_bearer_for_openai_entries() {
         let entry = PathEntry {
             protocol: EntryProtocol::Openai,
@@ -3751,5 +2934,441 @@ mod tests {
             &entry,
             "local-test-token"
         ));
+    }
+
+    #[tokio::test]
+    async fn safe_passthrough_forwards_business_headers_but_overrides_reserved_ones() {
+        let upstream = spawn_capturing_json_upstream(
+            "/v1/messages",
+            vec![(200, anthropic_message_response("ok"))],
+        )
+        .await;
+        let service_state = headless_service_state_for_tests();
+        install_routing_group(
+            &service_state,
+            test_rule(
+                "p1",
+                RuleProtocol::Anthropic,
+                upstream.base_url.clone(),
+                "claude-test",
+            ),
+            vec![RouteEntry {
+                request_model: "default".to_string(),
+                provider_id: "p1".to_string(),
+                target_model: "claude-test".to_string(),
+            }],
+        );
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-request-id", HeaderValue::from_static("req-123"));
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer downstream"),
+        );
+        headers.insert("x-api-key", HeaderValue::from_static("downstream-key"));
+        headers.insert("anthropic-beta", HeaderValue::from_static("beta-flag"));
+        headers.insert("connection", HeaderValue::from_static("keep-alive"));
+
+        let (status, _) = send_messages_request_with_headers(
+            &service_state,
+            headers,
+            json!({
+                "model": "claude-test",
+                "max_tokens": 16,
+                "messages": [{"role": "user", "content": "hello"}]
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(upstream.hits.load(Ordering::SeqCst), 1);
+        let captured = upstream
+            .captured_headers
+            .lock()
+            .expect("capture lock should succeed");
+        let forwarded = captured.last().expect("captured request should exist");
+
+        assert_eq!(
+            forwarded.get("x-request-id").map(String::as_str),
+            Some("req-123")
+        );
+        assert_eq!(
+            forwarded.get("x-api-key").map(String::as_str),
+            Some("test-token")
+        );
+        assert_eq!(
+            forwarded.get("anthropic-version").map(String::as_str),
+            Some("2023-06-01")
+        );
+        assert!(!forwarded.contains_key("authorization"));
+        assert!(!forwarded.contains_key("connection"));
+        assert!(!forwarded.contains_key("anthropic-beta"));
+    }
+
+    #[tokio::test]
+    async fn anthropic_version_passthrough_requires_explicit_allow_on_same_protocol() {
+        let upstream = spawn_capturing_json_upstream(
+            "/v1/messages",
+            vec![(200, anthropic_message_response("ok"))],
+        )
+        .await;
+        let service_state = headless_service_state_for_tests();
+        let mut rule = test_rule(
+            "p1",
+            RuleProtocol::Anthropic,
+            upstream.base_url.clone(),
+            "claude-test",
+        );
+        rule.header_passthrough_allow = vec!["anthropic-version".to_string()];
+        install_routing_group(
+            &service_state,
+            rule,
+            vec![
+                RouteEntry {
+                    request_model: "default".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "claude-test".to_string(),
+                },
+                RouteEntry {
+                    request_model: "claude-test".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "claude-test".to_string(),
+                },
+            ],
+        );
+
+        let mut headers = HeaderMap::new();
+        headers.insert("anthropic-version", HeaderValue::from_static("2025-02-19"));
+
+        let (status, _) = send_messages_request_with_headers(
+            &service_state,
+            headers,
+            json!({
+                "model": "claude-test",
+                "max_tokens": 16,
+                "messages": [{"role": "user", "content": "hello"}]
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let captured = upstream
+            .captured_headers
+            .lock()
+            .expect("capture lock should succeed");
+        let forwarded = captured.last().expect("captured request should exist");
+        assert_eq!(
+            forwarded.get("anthropic-version").map(String::as_str),
+            Some("2025-02-19")
+        );
+    }
+
+    #[tokio::test]
+    async fn anthropic_messages_inject_thinking_for_bound_claude_target() {
+        let upstream = spawn_capturing_json_upstream(
+            "/v1/messages",
+            vec![(200, anthropic_message_response("ok"))],
+        )
+        .await;
+        let service_state = headless_service_state_for_tests();
+        install_routing_group(
+            &service_state,
+            test_rule(
+                "p1",
+                RuleProtocol::Anthropic,
+                upstream.base_url.clone(),
+                "claude-test",
+            ),
+            vec![
+                RouteEntry {
+                    request_model: "default".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "claude-test".to_string(),
+                },
+                RouteEntry {
+                    request_model: "claude-test".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "claude-test".to_string(),
+                },
+            ],
+        );
+
+        let shared = service_state
+            .shared_state
+            .clone()
+            .expect("headless service state should include shared state");
+        let config_dir = std::env::temp_dir().join("oc-proxy-thinking-test-claude");
+        std::fs::create_dir_all(&config_dir).expect("test claude config dir should exist");
+        shared
+            .integration_store
+            .put_target(
+                "claude-target",
+                IntegrationClientKind::Claude,
+                config_dir.to_string_lossy().to_string(),
+                Some(AgentConfig {
+                    agent_id: None,
+                    provider_id: None,
+                    url: None,
+                    api_token: None,
+                    api_format: None,
+                    model: None,
+                    fallback_models: None,
+                    timeout: None,
+                    always_thinking_enabled: Some(true),
+                    include_coauthored_by: None,
+                    skip_dangerous_mode_permission_prompt: None,
+                }),
+            )
+            .expect("claude target should persist");
+        shared
+            .integration_store
+            .set_target_group_id("claude-target", Some("dev".to_string()))
+            .expect("group binding should persist");
+
+        let (status, _) = send_messages_request(
+            &service_state,
+            json!({
+                "model": "claude-test",
+                "max_tokens": 16,
+                "messages": [{"role": "user", "content": "hello"}]
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let captured = upstream
+            .captured_bodies
+            .lock()
+            .expect("capture body lock should succeed");
+        let forwarded = captured.last().expect("captured request should exist");
+        assert_eq!(forwarded["thinking"], json!({"type": "enabled"}));
+
+        let _ = std::fs::remove_dir_all(&config_dir);
+    }
+
+    #[tokio::test]
+    async fn anthropic_messages_inject_reasoning_effort_for_bound_claude_target_on_openai_chat() {
+        let upstream = spawn_capturing_json_upstream(
+            "/chat/completions",
+            vec![(200, openai_chat_completion_response("ok"))],
+        )
+        .await;
+        let service_state = headless_service_state_for_tests();
+        install_routing_group(
+            &service_state,
+            test_rule(
+                "p1",
+                RuleProtocol::OpenaiCompletion,
+                upstream.base_url.clone(),
+                "gpt-test",
+            ),
+            vec![
+                RouteEntry {
+                    request_model: "default".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-test".to_string(),
+                },
+                RouteEntry {
+                    request_model: "claude-test".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-test".to_string(),
+                },
+            ],
+        );
+
+        let shared = service_state
+            .shared_state
+            .clone()
+            .expect("headless service state should include shared state");
+        let config_dir = std::env::temp_dir().join("oc-proxy-thinking-test-openai-chat");
+        std::fs::create_dir_all(&config_dir).expect("test claude config dir should exist");
+        shared
+            .integration_store
+            .put_target(
+                "claude-target",
+                IntegrationClientKind::Claude,
+                config_dir.to_string_lossy().to_string(),
+                Some(AgentConfig {
+                    agent_id: None,
+                    provider_id: None,
+                    url: None,
+                    api_token: None,
+                    api_format: None,
+                    model: None,
+                    fallback_models: None,
+                    timeout: None,
+                    always_thinking_enabled: Some(true),
+                    include_coauthored_by: None,
+                    skip_dangerous_mode_permission_prompt: None,
+                }),
+            )
+            .expect("claude target should persist");
+        shared
+            .integration_store
+            .set_target_group_id("claude-target", Some("dev".to_string()))
+            .expect("group binding should persist");
+
+        let (status, _) = send_messages_request(
+            &service_state,
+            json!({
+                "model": "claude-test",
+                "max_tokens": 16,
+                "messages": [{"role": "user", "content": "hello"}]
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let captured = upstream
+            .captured_bodies
+            .lock()
+            .expect("capture body lock should succeed");
+        let forwarded = captured.last().expect("captured request should exist");
+        assert_eq!(forwarded["reasoning_effort"], json!("medium"));
+
+        let _ = std::fs::remove_dir_all(&config_dir);
+    }
+
+    #[tokio::test]
+    async fn anthropic_messages_inject_reasoning_effort_for_bound_claude_target_on_openai_responses(
+    ) {
+        let upstream = spawn_capturing_json_upstream(
+            "/responses",
+            vec![(200, openai_responses_response("ok"))],
+        )
+        .await;
+        let service_state = headless_service_state_for_tests();
+        install_routing_group(
+            &service_state,
+            test_rule(
+                "p1",
+                RuleProtocol::Openai,
+                upstream.base_url.clone(),
+                "gpt-test",
+            ),
+            vec![
+                RouteEntry {
+                    request_model: "default".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-test".to_string(),
+                },
+                RouteEntry {
+                    request_model: "claude-test".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-test".to_string(),
+                },
+            ],
+        );
+
+        let shared = service_state
+            .shared_state
+            .clone()
+            .expect("headless service state should include shared state");
+        let config_dir = std::env::temp_dir().join("oc-proxy-thinking-test-openai-responses");
+        std::fs::create_dir_all(&config_dir).expect("test claude config dir should exist");
+        shared
+            .integration_store
+            .put_target(
+                "claude-target",
+                IntegrationClientKind::Claude,
+                config_dir.to_string_lossy().to_string(),
+                Some(AgentConfig {
+                    agent_id: None,
+                    provider_id: None,
+                    url: None,
+                    api_token: None,
+                    api_format: None,
+                    model: None,
+                    fallback_models: None,
+                    timeout: None,
+                    always_thinking_enabled: Some(true),
+                    include_coauthored_by: None,
+                    skip_dangerous_mode_permission_prompt: None,
+                }),
+            )
+            .expect("claude target should persist");
+        shared
+            .integration_store
+            .set_target_group_id("claude-target", Some("dev".to_string()))
+            .expect("group binding should persist");
+
+        let (status, _) = send_messages_request(
+            &service_state,
+            json!({
+                "model": "claude-test",
+                "max_tokens": 16,
+                "messages": [{"role": "user", "content": "hello"}]
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let captured = upstream
+            .captured_bodies
+            .lock()
+            .expect("capture body lock should succeed");
+        let forwarded = captured.last().expect("captured request should exist");
+        assert_eq!(forwarded["reasoning"]["effort"], json!("medium"));
+
+        let _ = std::fs::remove_dir_all(&config_dir);
+    }
+
+    #[tokio::test]
+    async fn anthropic_version_passthrough_is_blocked_on_cross_protocol_routes() {
+        let upstream = spawn_capturing_json_upstream(
+            "/chat/completions",
+            vec![(200, openai_chat_completion_response("ok"))],
+        )
+        .await;
+        let service_state = headless_service_state_for_tests();
+        let mut rule = test_rule(
+            "p1",
+            RuleProtocol::OpenaiCompletion,
+            upstream.base_url.clone(),
+            "gpt-test",
+        );
+        rule.header_passthrough_allow = vec!["anthropic-version".to_string()];
+        install_routing_group(
+            &service_state,
+            rule,
+            vec![
+                RouteEntry {
+                    request_model: "default".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-test".to_string(),
+                },
+                RouteEntry {
+                    request_model: "claude-test".to_string(),
+                    provider_id: "p1".to_string(),
+                    target_model: "gpt-test".to_string(),
+                },
+            ],
+        );
+
+        let mut headers = HeaderMap::new();
+        headers.insert("anthropic-version", HeaderValue::from_static("2025-02-19"));
+
+        let (status, _) = send_messages_request_with_headers(
+            &service_state,
+            headers,
+            json!({
+                "model": "claude-test",
+                "max_tokens": 16,
+                "messages": [{"role": "user", "content": "hello"}]
+            }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let captured = upstream
+            .captured_headers
+            .lock()
+            .expect("capture lock should succeed");
+        let forwarded = captured.last().expect("captured request should exist");
+        assert!(!forwarded.contains_key("anthropic-version"));
+        assert_eq!(
+            forwarded.get("authorization").map(String::as_str),
+            Some("Bearer test-token")
+        );
     }
 }

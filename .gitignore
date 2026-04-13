@@ -27,3 +27,6 @@ docs/plans
 packages/aor-cli/vendor/
 output/
 .worktrees/
+.claude/
+.superpowers/
+docs/superpowers/

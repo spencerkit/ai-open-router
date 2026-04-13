@@ -28,6 +28,11 @@ pub fn default_auto_update_enabled() -> bool {
     true
 }
 
+/// Performs default header passthrough enabled flag.
+pub fn default_header_passthrough_enabled() -> bool {
+    true
+}
+
 /// Performs default remote git config.
 pub fn default_remote_git_config() -> RemoteGitConfig {
     RemoteGitConfig {
@@ -51,6 +56,7 @@ pub fn default_config() -> ProxyConfig {
         compat: CompatConfig {
             strict_mode: false,
             text_tool_call_fallback_enabled: true,
+            header_passthrough_enabled: default_header_passthrough_enabled(),
         },
         logging: LoggingConfig {
             capture_body: false,
@@ -100,6 +106,7 @@ struct PartialServerConfig {
 struct PartialCompatConfig {
     strict_mode: Option<bool>,
     text_tool_call_fallback_enabled: Option<bool>,
+    header_passthrough_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -150,13 +157,36 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
         .map_err(|e| format!("invalid config structure: {e}"))?;
 
     let groups = if let Some(raw_groups) = partial.groups {
-        serde_json::from_value(raw_groups).map_err(|e| format!("invalid groups structure: {e}"))?
+        let parsed: Vec<crate::domain::entities::Group> = serde_json::from_value(raw_groups)
+            .map_err(|e| format!("invalid groups structure: {e}"))?;
+        // Normalize: ensure each group has a routing_table (default to empty Vec)
+        let normalized: Vec<_> = parsed
+            .into_iter()
+            .map(|mut g| {
+                if g.routing_table.is_empty() && g.provider_ids.is_none() && g.providers.is_none() {
+                    g.routing_table = Vec::new();
+                }
+                g
+            })
+            .collect();
+        normalized
     } else {
         defaults.groups
     };
     let providers = if let Some(raw_providers) = partial.providers {
-        serde_json::from_value(raw_providers)
-            .map_err(|e| format!("invalid providers structure: {e}"))?
+        let parsed: Vec<crate::domain::entities::Rule> = serde_json::from_value(raw_providers)
+            .map_err(|e| format!("invalid providers structure: {e}"))?;
+        // Normalize: ensure each provider has a models field (default to empty Vec)
+        let normalized: Vec<_> = parsed
+            .into_iter()
+            .map(|mut p| {
+                if p.models.is_empty() {
+                    p.models = Vec::new();
+                }
+                p
+            })
+            .collect();
+        normalized
     } else {
         defaults.providers
     };
@@ -244,6 +274,11 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
                 .as_ref()
                 .and_then(|c| c.text_tool_call_fallback_enabled)
                 .unwrap_or(defaults.compat.text_tool_call_fallback_enabled),
+            header_passthrough_enabled: partial
+                .compat
+                .as_ref()
+                .and_then(|c| c.header_passthrough_enabled)
+                .unwrap_or(defaults.compat.header_passthrough_enabled),
         },
         logging: LoggingConfig {
             capture_body: partial

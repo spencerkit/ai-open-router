@@ -12,22 +12,18 @@ import {
   integrationTargetsState,
   loadIntegrationTargetsAction,
   pickIntegrationDirectoryAction,
-  providerModelHealthByProviderKeyState,
   readAgentConfigAction,
   saveConfigAction,
   setActiveGroupIdAction,
   statusState,
-  testProviderModelAction,
   updateIntegrationTargetAction,
   writeGroupEntryAction,
 } from "@/store"
 import type { Group, IntegrationClientKind, IntegrationTarget, ProxyConfig } from "@/types"
-import { normalizeGroupFailoverConfig } from "@/utils/groupFailover"
-import { createProviderTestKey, formatProviderLatency } from "@/utils/providerTesting"
 import { useActions, useRelaxValue } from "@/utils/relax"
 import { isHeadlessHttpRuntime } from "@/utils/runtime"
 import { resolveReachableServerBaseUrls } from "@/utils/serverAddress"
-import { ProviderList } from "./ProviderList"
+import { RoutingTableEditor } from "./RoutingTableEditor"
 import styles from "./ServicePage.module.css"
 
 const SERVICE_ACTIONS = [
@@ -40,7 +36,6 @@ const SERVICE_ACTIONS = [
   updateIntegrationTargetAction,
   writeGroupEntryAction,
   readAgentConfigAction,
-  testProviderModelAction,
 ] as const
 
 /** Matches search text against a list of candidate strings. */
@@ -68,7 +63,6 @@ export const ServicePage: React.FC = () => {
   const activeGroupId = useRelaxValue(activeGroupIdState)
   const integrationTargets = useRelaxValue(integrationTargetsState)
   const integrationLoading = useRelaxValue(integrationTargetsLoadingState)
-  const providerModelHealthByProviderKey = useRelaxValue(providerModelHealthByProviderKeyState)
   const [
     saveConfig,
     setActiveGroupId,
@@ -79,22 +73,11 @@ export const ServicePage: React.FC = () => {
     updateIntegrationTarget,
     writeGroupEntry,
     readAgentConfigAction,
-    testProviderModel,
   ] = useActions(SERVICE_ACTIONS)
   const { showToast } = useLogs()
   const [groupSearchValue, setGroupSearchValue] = useState("")
   const [showAddGroupModal, setShowAddGroupModal] = useState(false)
   const [showDeleteGroupModal, setShowDeleteGroupModal] = useState(false)
-  const [showDeleteProviderModal, setShowDeleteProviderModal] = useState(false)
-  const [showAssociateProviderModal, setShowAssociateProviderModal] = useState(false)
-  const [pendingDeleteProviderId, setPendingDeleteProviderId] = useState<string | null>(null)
-  const [associateProviderSearch, setAssociateProviderSearch] = useState("")
-  const [associateProviderChecks, setAssociateProviderChecks] = useState<Record<string, boolean>>(
-    {}
-  )
-  const [activatingProviderId, setActivatingProviderId] = useState<string | null>(null)
-  const [testingProviderIds, setTestingProviderIds] = useState<Record<string, boolean>>({})
-  const [testingAllProviders, setTestingAllProviders] = useState(false)
   const [showIntegrationWriteModal, setShowIntegrationWriteModal] = useState(false)
   const [integrationStatusRefreshing, setIntegrationStatusRefreshing] = useState(false)
   const [integrationTargetUrlById, setIntegrationTargetUrlById] = useState<Record<string, string>>(
@@ -122,47 +105,14 @@ export const ServicePage: React.FC = () => {
   const activeGroup = groups.find(group => group.id === activeGroupId) ?? null
   const activeGroupProviderIds = useMemo(() => {
     if (!activeGroup) return []
-    return activeGroup.providerIds ?? activeGroup.providers.map(provider => provider.id)
+    const routingProviderIds = (activeGroup.routingTable ?? [])
+      .map(route => route.providerId?.trim())
+      .filter((providerId): providerId is string => Boolean(providerId))
+    const legacyProviderIds =
+      activeGroup.providerIds ?? activeGroup.providers?.map(provider => provider.id) ?? []
+    return [...new Set([...legacyProviderIds, ...routingProviderIds])]
   }, [activeGroup])
-  const activeGroupProviderIdSet = useMemo(() => {
-    return new Set(activeGroupProviderIds)
-  }, [activeGroupProviderIds])
-  const providerHealthByProviderId = useMemo(() => {
-    if (!activeGroup) return {}
-    return Object.fromEntries(
-      activeGroup.providers.map(provider => {
-        const key = createProviderTestKey(activeGroup.id, provider.id)
-        return [provider.id, providerModelHealthByProviderKey[key]]
-      })
-    )
-  }, [activeGroup, providerModelHealthByProviderKey])
-  const activeGroupRuntime = useMemo(() => {
-    if (!activeGroup) return null
-    return status?.groupRuntime.find(item => item.groupId === activeGroup.id) ?? null
-  }, [activeGroup, status])
-  const associateCandidates = useMemo(() => {
-    const normalized = associateProviderSearch.trim().toLowerCase()
-    const candidates = globalProviders.filter(
-      provider => !activeGroupProviderIdSet.has(provider.id)
-    )
-    if (!normalized) return candidates
-    return candidates.filter(provider =>
-      [
-        provider.name,
-        provider.id,
-        provider.apiAddress,
-        provider.defaultModel,
-        provider.website,
-      ].some(value => value?.toLowerCase().includes(normalized))
-    )
-  }, [activeGroupProviderIdSet, associateProviderSearch, globalProviders])
-  const selectedAssociateProviderIds = useMemo(() => {
-    return Object.entries(associateProviderChecks)
-      .filter(([, checked]) => checked)
-      .map(([providerId]) => providerId)
-  }, [associateProviderChecks])
-  const pendingDeleteProvider =
-    activeGroup?.providers.find(item => item.id === pendingDeleteProviderId) ?? null
+  const activeGroupRuleCount = activeGroupProviderIds.length
   const integrationSections = useMemo(
     () => [
       {
@@ -219,11 +169,6 @@ export const ServicePage: React.FC = () => {
 
   const handleSelectGroup = (groupId: string) => {
     setActiveGroupId({ groupId })
-    setShowDeleteProviderModal(false)
-    setShowAssociateProviderModal(false)
-    setPendingDeleteProviderId(null)
-    setTestingProviderIds({})
-    setTestingAllProviders(false)
   }
 
   const openAddGroupModal = () => {
@@ -253,11 +198,8 @@ export const ServicePage: React.FC = () => {
     const newGroup: Group = {
       id: normalizedId,
       name: newGroupName.trim(),
-      models: [],
-      providerIds: [],
+      routingTable: [{ requestModel: "default", providerId: "", targetModel: "" }],
       activeProviderId: null,
-      providers: [],
-      failover: normalizeGroupFailoverConfig(),
     }
 
     const newConfig: ProxyConfig = {
@@ -291,224 +233,24 @@ export const ServicePage: React.FC = () => {
     }
   }
 
-  const handleRequestDeleteProvider = (providerId: string) => {
-    setPendingDeleteProviderId(providerId)
-    setShowDeleteProviderModal(true)
-  }
+  const handleSaveRoutingTable = async (routes: Group["routingTable"]) => {
+    if (!activeGroup || !config) return
 
-  const openAssociateProviderModal = () => {
-    setAssociateProviderSearch("")
-    setAssociateProviderChecks({})
-    setShowAssociateProviderModal(true)
-  }
-
-  const closeAssociateProviderModal = () => {
-    setShowAssociateProviderModal(false)
-    setAssociateProviderSearch("")
-    setAssociateProviderChecks({})
-  }
-
-  const handleToggleAssociateProvider = (providerId: string, checked: boolean) => {
-    setAssociateProviderChecks(prev => ({
-      ...prev,
-      [providerId]: checked,
-    }))
-  }
-
-  const handleAssociateProviders = async () => {
-    if (!config || !activeGroupId || selectedAssociateProviderIds.length === 0) return
-
-    const nextGroups = config.groups.map(group => {
-      if (group.id !== activeGroupId) return group
-      const currentProviderIds = group.providerIds ?? group.providers.map(provider => provider.id)
-      const mergedProviderIds = [...currentProviderIds]
-      for (const providerId of selectedAssociateProviderIds) {
-        if (!mergedProviderIds.includes(providerId)) {
-          mergedProviderIds.push(providerId)
-        }
-      }
-      return {
-        ...group,
-        providerIds: mergedProviderIds,
-        activeProviderId: group.activeProviderId ?? mergedProviderIds[0] ?? null,
-      }
-    })
-
-    try {
-      await saveConfig({
-        ...config,
-        groups: nextGroups,
-      })
-      closeAssociateProviderModal()
-      showToast(t("servicePage.associateRule"), "success")
-    } catch (error) {
-      showToast(t("errors.saveFailed", { message: String(error) }), "error")
-    }
-  }
-
-  const handleActivateProvider = async (providerId: string) => {
-    if (!activeGroupId || !config) return
-    if (activeGroup?.activeProviderId === providerId) return
-
-    setActivatingProviderId(providerId)
-    try {
-      const newGroups = config.groups.map(group => {
-        if (group.id !== activeGroupId) {
-          return group
-        }
-        return {
-          ...group,
-          activeProviderId: providerId,
-        }
-      })
-
-      await saveConfig({
-        ...config,
-        groups: newGroups,
-      })
-      showToast(t("toast.ruleSwitched"), "success")
-    } catch (error) {
-      showToast(t("errors.saveFailed", { message: String(error) }), "error")
-    } finally {
-      setActivatingProviderId(null)
-    }
-  }
-
-  const handleTestProviderModel = async (providerId: string) => {
-    if (!activeGroup) return
-    if (testingProviderIds[providerId]) return
-
-    const provider = activeGroup.providers.find(item => item.id === providerId)
-    if (!provider) {
-      showToast(t("toast.ruleNotFound"), "error")
-      return
+    const newConfig: ProxyConfig = {
+      ...config,
+      groups: config.groups.map(group =>
+        group.id === activeGroup.id
+          ? {
+              ...group,
+              routingTable: routes.map(route => ({ ...route })),
+            }
+          : group
+      ),
     }
 
-    setTestingProviderIds(prev => ({ ...prev, [providerId]: true }))
-    try {
-      const result = await testProviderModel({ groupId: activeGroup.id, providerId })
-      if (!result.ok) {
-        showToast(
-          t("toast.providerModelTestFailed", {
-            provider: provider.name,
-            message:
-              result.message?.trim() || t("errors.operationFailed", { message: provider.name }),
-          }),
-          "error"
-        )
-        return
-      }
-
-      const modelName =
-        result.resolvedModel?.trim() ||
-        result.rawText?.trim() ||
-        provider.defaultModel.trim() ||
-        provider.name
-      const latencyLabel = formatProviderLatency(result.responseTimeMs)
-
-      showToast(
-        t("toast.providerModelTestSuccess", {
-          provider: provider.name,
-          model: modelName,
-          latency: latencyLabel || "-",
-        }),
-        "success"
-      )
-    } catch (error) {
-      showToast(
-        t("toast.providerModelTestFailed", {
-          provider: provider.name,
-          message: String(error),
-        }),
-        "error"
-      )
-    } finally {
-      setTestingProviderIds(prev => {
-        const next = { ...prev }
-        delete next[providerId]
-        return next
-      })
-    }
-  }
-
-  const handleTestAllProviders = async () => {
-    if (!activeGroup || testingAllProviders || activeGroup.providers.length === 0) return
-
-    setTestingAllProviders(true)
-    setTestingProviderIds(
-      Object.fromEntries(activeGroup.providers.map(provider => [provider.id, true]))
-    )
-
-    let available = 0
-    let unavailable = 0
-
-    for (const provider of activeGroup.providers) {
-      try {
-        const result = await testProviderModel({
-          groupId: activeGroup.id,
-          providerId: provider.id,
-        })
-        if (result.ok) {
-          available += 1
-        } else {
-          unavailable += 1
-        }
-      } catch {
-        unavailable += 1
-      } finally {
-        setTestingProviderIds(prev => {
-          const next = { ...prev }
-          delete next[provider.id]
-          return next
-        })
-      }
-    }
-
-    setTestingAllProviders(false)
-    showToast(
-      t("toast.providerBatchTestSummary", {
-        available,
-        unavailable,
-        skipped: 0,
-      }),
-      unavailable > 0 ? "error" : "success"
-    )
-  }
-
-  const handleDeleteProvider = async () => {
-    if (!activeGroupId || !config || !pendingDeleteProviderId) return
-
-    const newGroups = config.groups.map(group => {
-      if (group.id === activeGroupId) {
-        const currentProviderIds = group.providerIds ?? group.providers.map(provider => provider.id)
-        const nextProviderIds = currentProviderIds.filter(
-          providerId => providerId !== pendingDeleteProviderId
-        )
-        const nextProviders = group.providers.filter(
-          provider => provider.id !== pendingDeleteProviderId
-        )
-        const newActiveId =
-          group.activeProviderId === pendingDeleteProviderId
-            ? nextProviderIds.length > 0
-              ? nextProviderIds[0]
-              : null
-            : group.activeProviderId
-        return {
-          ...group,
-          providerIds: nextProviderIds,
-          providers: nextProviders,
-          activeProviderId: newActiveId,
-        }
-      }
-      return group
-    })
-
-    const newConfig = { ...config, groups: newGroups }
     try {
       await saveConfig(newConfig)
-      setShowDeleteProviderModal(false)
-      setPendingDeleteProviderId(null)
-      showToast(t("servicePage.unlinkRule"), "success")
+      showToast(t("toast.groupUpdated"), "success")
     } catch (error) {
       showToast(t("errors.saveFailed", { message: String(error) }), "error")
     }
@@ -830,7 +572,20 @@ export const ServicePage: React.FC = () => {
                       <span className={styles.groupName}>{group.name}</span>
                       <span className={styles.groupPath}>/{group.id}</span>
                       <span className={styles.groupRuleCount}>
-                        {(group.providerIds ?? group.providers.map(provider => provider.id)).length}
+                        {group.id === activeGroupId
+                          ? activeGroupRuleCount
+                          : [
+                              ...new Set([
+                                ...(group.providerIds ??
+                                  group.providers?.map(provider => provider.id) ??
+                                  []),
+                                ...(group.routingTable ?? [])
+                                  .map(route => route.providerId?.trim())
+                                  .filter((providerId): providerId is string =>
+                                    Boolean(providerId)
+                                  ),
+                              ]),
+                            ].length}
                       </span>
                     </button>
                   </li>
@@ -969,24 +724,10 @@ export const ServicePage: React.FC = () => {
               </div>
             </div>
 
-            <ProviderList
-              providers={activeGroup.providers}
-              activeProviderId={activeGroup.activeProviderId}
-              groupRuntime={activeGroupRuntime}
-              onActivate={handleActivateProvider}
-              activatingProviderId={activatingProviderId}
-              onTestModel={handleTestProviderModel}
-              onTestAll={() => void handleTestAllProviders()}
-              testingProviderIds={testingProviderIds}
-              providerHealthByProviderId={providerHealthByProviderId}
-              testingAll={testingAllProviders}
-              onDelete={handleRequestDeleteProvider}
-              onEdit={providerId => navigate(`/providers/${providerId}/edit`)}
-              onAdd={openAssociateProviderModal}
-              groupId={activeGroup.id}
-              addButtonTitle={t("servicePage.associateRule")}
-              deleteActionLabel={t("servicePage.unlinkRule")}
-              emptyMessage={t("servicePage.noRulesHint")}
+            <RoutingTableEditor
+              providers={globalProviders}
+              routes={activeGroup.routingTable ?? []}
+              onSave={handleSaveRoutingTable}
             />
           </>
         )}
@@ -1195,105 +936,6 @@ export const ServicePage: React.FC = () => {
             </Button>
             <Button variant="danger" onClick={handleDeleteGroup}>
               {t("deleteGroupModal.confirmDelete")}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={showAssociateProviderModal}
-        onClose={closeAssociateProviderModal}
-        title={t("servicePage.associateRule")}
-      >
-        <div className={styles.modalContent}>
-          {globalProviders.length === 0 ? (
-            <div className={styles.emptyHint}>
-              <p>{t("providersPage.empty")}</p>
-              <Button variant="primary" onClick={() => navigate("/providers")}>
-                {t("header.providers")}
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className={styles.formGroup}>
-                <label htmlFor="associate-provider-search">
-                  {t("providersPage.searchPlaceholder")}
-                </label>
-                <Input
-                  id="associate-provider-search"
-                  value={associateProviderSearch}
-                  onChange={event => setAssociateProviderSearch(event.target.value)}
-                  placeholder={t("providersPage.searchPlaceholder")}
-                />
-              </div>
-
-              {associateCandidates.length === 0 ? (
-                <p>{t("servicePage.noRulesHint")}</p>
-              ) : (
-                <ul className={styles.integrationTargetList}>
-                  {associateCandidates.map(provider => (
-                    <li key={provider.id} className={styles.integrationTargetItem}>
-                      <label className={styles.integrationTargetLabel}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(associateProviderChecks[provider.id])}
-                          onChange={event =>
-                            handleToggleAssociateProvider(provider.id, event.target.checked)
-                          }
-                        />
-                        <span className={styles.integrationTargetPathWrap}>
-                          <span className={styles.integrationTargetPath}>{provider.name}</span>
-                          <span className={styles.integrationTargetWriteDetail}>
-                            {provider.protocol} · {provider.defaultModel || "-"}
-                          </span>
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <div className={styles.modalActions}>
-                <Button variant="default" onClick={closeAssociateProviderModal}>
-                  {t("common.cancel")}
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    void handleAssociateProviders()
-                  }}
-                  disabled={selectedAssociateProviderIds.length === 0}
-                >
-                  {t("servicePage.associateRule")}
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      </Modal>
-
-      <Modal
-        open={showDeleteProviderModal}
-        onClose={() => {
-          setShowDeleteProviderModal(false)
-          setPendingDeleteProviderId(null)
-        }}
-        title={t("servicePage.unlinkRule")}
-      >
-        <div className={styles.modalContent}>
-          <p>{`${t("servicePage.unlinkRule")} ${pendingDeleteProvider?.name ?? ""} ?`}</p>
-          <div className={styles.modalActions}>
-            <Button
-              variant="default"
-              onClick={() => {
-                setShowDeleteProviderModal(false)
-                setPendingDeleteProviderId(null)
-              }}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button variant="danger" onClick={handleDeleteProvider}>
-              {t("servicePage.unlinkRule")}
             </Button>
           </div>
         </div>

@@ -4,7 +4,7 @@
 
 use serde_json::{Map, Value};
 
-pub const CURRENT_CONFIG_VERSION: u32 = 4;
+pub const CURRENT_CONFIG_VERSION: u32 = 5;
 
 /// Migrates arbitrary config payload into the latest supported schema version.
 pub fn migrate_config(input: Value) -> Result<Value, String> {
@@ -22,6 +22,7 @@ pub fn migrate_config(input: Value) -> Result<Value, String> {
             1 => migrate_v1_to_v2(root),
             2 => migrate_v2_to_v3(root),
             3 => migrate_v3_to_v4(root),
+            4 => migrate_v4_to_v5(root),
             _ => {
                 return Err(format!(
                     "missing migrator for configVersion {version} -> {}",
@@ -149,6 +150,26 @@ fn migrate_v3_to_v4(mut root: Value) -> Value {
         }
     }
 
+    obj.insert("configVersion".to_string(), Value::Number(5u64.into()));
+    root
+}
+
+/// Applies v4 -> v5 migration: filters out invalid groups and providers.
+fn migrate_v4_to_v5(mut root: Value) -> Value {
+    let Some(obj) = root.as_object_mut() else {
+        return Value::Object(Map::new());
+    };
+
+    // Filter out groups that lack both routingTable and routing_table.
+    if let Some(groups) = obj.get_mut("groups").and_then(Value::as_array_mut) {
+        groups.retain(|g| g.get("routingTable").is_some() || g.get("routing_table").is_some());
+    }
+
+    // Filter out providers that lack models.
+    if let Some(providers) = obj.get_mut("providers").and_then(Value::as_array_mut) {
+        providers.retain(|p| p.get("models").is_some());
+    }
+
     obj.insert("configVersion".to_string(), Value::Number(4u64.into()));
     root
 }
@@ -179,7 +200,7 @@ mod tests {
         }))
         .expect("migration should succeed");
 
-        assert_eq!(migrated["configVersion"], 4);
+        assert_eq!(migrated["configVersion"], 5);
         assert_eq!(migrated["ui"]["localeMode"], "manual");
         assert_eq!(migrated["ui"]["autoStartServer"], true);
         assert_eq!(migrated["ui"]["autoUpdateEnabled"], true);
@@ -225,7 +246,7 @@ mod tests {
         }))
         .expect("migration should succeed");
 
-        assert_eq!(migrated["configVersion"], 4);
+        assert_eq!(migrated["configVersion"], 5);
         assert_eq!(migrated["ui"]["autoStartServer"], true);
         assert_eq!(migrated["ui"]["autoUpdateEnabled"], true);
     }

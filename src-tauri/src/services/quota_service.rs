@@ -58,8 +58,11 @@ pub async fn test_draft(
         token: rule_token,
         api_address: rule_api_address,
         website: String::new(),
-        default_model: rule_default_model,
-        model_mappings: std::collections::HashMap::new(),
+        models: Vec::new(),
+        default_model: Some(rule_default_model),
+        model_mappings: Some(std::collections::HashMap::new()),
+        header_passthrough_allow: Vec::new(),
+        header_passthrough_deny: Vec::new(),
         quota,
         cost: default_rule_cost_config(),
     };

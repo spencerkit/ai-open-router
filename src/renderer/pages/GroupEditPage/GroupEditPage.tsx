@@ -2,12 +2,12 @@ import { ArrowLeft } from "lucide-react"
 import type React from "react"
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Button, Input } from "@/components"
+import { Button, Input, Select } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import { configState, saveConfigAction } from "@/store"
-import type { ProxyConfig } from "@/types"
-import { normalizeGroupFailoverConfig } from "@/utils/groupFailover"
+import type { Provider, ProxyConfig, RouteEntry } from "@/types"
 import { useActions, useRelaxValue } from "@/utils/relax"
+import { applyTemplateToRoutes, ROUTING_TEMPLATES } from "@/utils/routingTemplates"
 import styles from "./GroupEditPage.module.css"
 
 const GROUP_EDIT_ACTIONS = [saveConfigAction] as const
@@ -23,9 +23,7 @@ export const GroupEditPage: React.FC = () => {
   const group = config?.groups.find(item => item.id === groupId)
 
   const [name, setName] = useState("")
-  const [failoverEnabled, setFailoverEnabled] = useState(false)
-  const [failoverFailureThreshold, setFailoverFailureThreshold] = useState("3")
-  const [failoverCooldownSeconds, setFailoverCooldownSeconds] = useState("300")
+  const [routingTable, setRoutingTable] = useState<RouteEntry[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -37,12 +35,34 @@ export const GroupEditPage: React.FC = () => {
       return
     }
     setName(group.name)
-    const failover = normalizeGroupFailoverConfig(group.failover)
-    setFailoverEnabled(failover.enabled)
-    setFailoverFailureThreshold(String(failover.failureThreshold))
-    setFailoverCooldownSeconds(String(failover.cooldownSeconds))
+    if (group.routingTable && group.routingTable.length > 0) {
+      setRoutingTable(group.routingTable)
+    } else {
+      setRoutingTable([{ requestModel: "default", providerId: "", targetModel: "" }])
+    }
     setLoading(false)
   }, [group, config, navigate, showToast, t])
+
+  const handleTemplateFill = (templateId: string) => {
+    if (!templateId) return
+    const filled = applyTemplateToRoutes(templateId, routingTable)
+    setRoutingTable(filled)
+  }
+
+  const handleAddRoute = () => {
+    setRoutingTable([...routingTable, { requestModel: "", providerId: "", targetModel: "" }])
+  }
+
+  const handleRemoveRoute = (index: number) => {
+    if (routingTable[index].requestModel === "default") return
+    setRoutingTable(routingTable.filter((_, i) => i !== index))
+  }
+
+  const handleRouteChange = (index: number, field: keyof RouteEntry, value: string) => {
+    setRoutingTable(
+      routingTable.map((route, i) => (i === index ? { ...route, [field]: value } : route))
+    )
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -52,29 +72,10 @@ export const GroupEditPage: React.FC = () => {
       return
     }
 
-    const parsedFailureThreshold = Number.parseInt(failoverFailureThreshold, 10)
-    if (
-      !/^\d+$/.test(failoverFailureThreshold) ||
-      !Number.isInteger(parsedFailureThreshold) ||
-      parsedFailureThreshold < 1
-    ) {
-      showToast(
-        t("validation.invalidFormat", { field: t("groupEditPage.failoverFailureThreshold") }),
-        "error"
-      )
-      return
-    }
-
-    const parsedCooldownSeconds = Number.parseInt(failoverCooldownSeconds, 10)
-    if (
-      !/^\d+$/.test(failoverCooldownSeconds) ||
-      !Number.isInteger(parsedCooldownSeconds) ||
-      parsedCooldownSeconds < 0
-    ) {
-      showToast(
-        t("validation.invalidFormat", { field: t("groupEditPage.failoverCooldownSeconds") }),
-        "error"
-      )
+    // Validate routing table
+    const hasDefault = routingTable.some(r => r.requestModel === "default")
+    if (!hasDefault) {
+      showToast(t("groupEditPage.routingTableMustHaveDefault"), "error")
       return
     }
 
@@ -85,11 +86,7 @@ export const GroupEditPage: React.FC = () => {
         return {
           ...item,
           name: name.trim(),
-          failover: {
-            enabled: failoverEnabled,
-            failureThreshold: parsedFailureThreshold,
-            cooldownSeconds: parsedCooldownSeconds,
-          },
+          routingTable,
         }
       }),
     }
@@ -155,45 +152,95 @@ export const GroupEditPage: React.FC = () => {
         </div>
 
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>{t("groupEditPage.sectionFailover")}</h2>
-
-          <div className={styles.checkboxRow}>
-            <label className={styles.checkboxLabel} htmlFor="failoverEnabled">
-              <input
-                id="failoverEnabled"
-                type="checkbox"
-                checked={failoverEnabled}
-                onChange={e => setFailoverEnabled(e.target.checked)}
+          <div className={styles.routingSectionHeader}>
+            <div>
+              <h2 className={styles.sectionTitle}>{t("servicePage.routingTable")}</h2>
+              <p className={styles.hint}>{t("groupEditPage.routingTableHint")}</p>
+            </div>
+            <div className={styles.routingHeaderActions}>
+              <Select
+                className={styles.templateSelect}
+                onChange={value => handleTemplateFill(value)}
+                options={ROUTING_TEMPLATES.map(tpl => ({
+                  label: tpl.name,
+                  value: tpl.id,
+                }))}
+                placeholder={t("servicePage.fillFromTemplate")}
+                value=""
               />
-              <span>{t("groupEditPage.failoverEnabled")}</span>
-            </label>
-            <p className={styles.hint}>{t("groupEditPage.failoverEnabledHint")}</p>
+              <Button type="button" variant="default" size="small" onClick={handleAddRoute}>
+                + {t("servicePage.addRoute")}
+              </Button>
+            </div>
           </div>
 
-          <div className={styles.formGroup}>
-            <label htmlFor="failoverFailureThreshold">
-              {t("groupEditPage.failoverFailureThreshold")}
-            </label>
-            <Input
-              id="failoverFailureThreshold"
-              type="number"
-              min={1}
-              value={failoverFailureThreshold}
-              onChange={e => setFailoverFailureThreshold(e.target.value)}
-            />
-          </div>
-
-          <div className={styles.formGroup}>
-            <label htmlFor="failoverCooldownSeconds">
-              {t("groupEditPage.failoverCooldownSeconds")}
-            </label>
-            <Input
-              id="failoverCooldownSeconds"
-              type="number"
-              min={0}
-              value={failoverCooldownSeconds}
-              onChange={e => setFailoverCooldownSeconds(e.target.value)}
-            />
+          <div className={styles.routingTableWrap}>
+            <table className={styles.routingTable}>
+              <thead>
+                <tr>
+                  <th>{t("servicePage.requestModel")}</th>
+                  <th>{t("servicePage.provider")}</th>
+                  <th>{t("servicePage.targetModel")}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {routingTable.map((route, index) => (
+                  <tr
+                    key={`${route.requestModel || "route"}-${route.providerId || "provider"}-${route.targetModel || "target"}`}
+                    className={route.requestModel === "default" ? styles.defaultRow : ""}
+                  >
+                    <td>
+                      <Input
+                        type="text"
+                        value={route.requestModel}
+                        onChange={e => handleRouteChange(index, "requestModel", e.target.value)}
+                        readOnly={route.requestModel === "default"}
+                        className={
+                          route.requestModel === "default" ? styles.readonlyInput : undefined
+                        }
+                        placeholder={route.requestModel === "default" ? "default" : ""}
+                      />
+                    </td>
+                    <td>
+                      <Select
+                        className={styles.select}
+                        value={route.providerId}
+                        onChange={value => handleRouteChange(index, "providerId", value)}
+                        options={(config?.providers ?? []).map((p: Provider) => ({
+                          label: p.name,
+                          value: p.id,
+                        }))}
+                        placeholder={t("servicePage.selectProvider")}
+                      />
+                    </td>
+                    <td>
+                      <Input
+                        type="text"
+                        value={route.targetModel}
+                        onChange={e => handleRouteChange(index, "targetModel", e.target.value)}
+                        placeholder={t("groupEditPage.targetModelPlaceholder")}
+                      />
+                    </td>
+                    <td className={styles.actionCell}>
+                      {route.requestModel !== "default" ? (
+                        <button
+                          type="button"
+                          className={styles.removeButton}
+                          onClick={() => handleRemoveRoute(index)}
+                          title={t("servicePage.removeRoute")}
+                          aria-label={t("servicePage.removeRoute")}
+                        >
+                          ×
+                        </button>
+                      ) : (
+                        <span className={styles.lockedLabel}>{t("servicePage.locked")}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 
