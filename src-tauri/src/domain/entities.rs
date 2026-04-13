@@ -296,7 +296,11 @@ pub struct Group {
     pub models: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_ids: Option<Vec<String>>,
-    #[serde(rename = "activeProviderId", alias = "activeRuleId", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "activeProviderId",
+        alias = "activeRuleId",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub active_provider_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub providers: Option<Vec<Rule>>,

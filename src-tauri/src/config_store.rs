@@ -288,58 +288,60 @@ fn normalize_groups_and_providers(
         // Determine which provider IDs are scoped to this group.
         // If we have global providers AND the group has explicit provider_ids → use those.
         // Otherwise, fall back to the group's built-in providers.
-        let scoped_provider_ids: HashSet<String> = if has_global_providers
-            && group.provider_ids.is_some()
-        {
-            group
-                .provider_ids
-                .as_ref()
-                .unwrap()
-                .iter()
-                .map(|provider_id| provider_id.trim().to_string())
-                .filter(|provider_id| !provider_id.is_empty())
-                .collect()
-        } else {
-            group
-                .providers
-                .iter()
-                .flatten()
-                .map(|provider| provider.id.trim().to_string())
-                .filter(|provider_id| !provider_id.is_empty())
-                .collect()
-        };
+        let scoped_provider_ids: HashSet<String> =
+            if has_global_providers && group.provider_ids.is_some() {
+                group
+                    .provider_ids
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|provider_id| provider_id.trim().to_string())
+                    .filter(|provider_id| !provider_id.is_empty())
+                    .collect()
+            } else {
+                group
+                    .providers
+                    .iter()
+                    .flatten()
+                    .map(|provider| provider.id.trim().to_string())
+                    .filter(|provider_id| !provider_id.is_empty())
+                    .collect()
+            };
         let mut group_provider_id_remap: HashMap<String, String> = HashMap::new();
         if let Some(providers) = &group.providers {
             for provider in providers {
-            let provider_id = provider.id.trim().to_string();
-            if provider_id.is_empty() {
-                continue;
-            }
-            if !scoped_provider_ids.contains(&provider_id) {
-                continue;
-            }
-            if let Some(existing_provider) = provider_map.get(&provider_id) {
-                let existing_json = serde_json::to_string(existing_provider).unwrap_or_default();
-                let incoming_json = serde_json::to_string(provider).unwrap_or_default();
-                if existing_json != incoming_json {
-                    let next_provider_id = alloc_unique_provider_id(&provider_id, &provider_map);
-                    let mut next_provider = provider.clone();
-                    next_provider.id = next_provider_id.clone();
-                    provider_order.push(next_provider_id.clone());
-                    provider_map.insert(next_provider_id.clone(), next_provider);
-                    group_provider_id_remap.insert(provider_id, next_provider_id);
+                let provider_id = provider.id.trim().to_string();
+                if provider_id.is_empty() {
+                    continue;
                 }
-                continue;
+                if !scoped_provider_ids.contains(&provider_id) {
+                    continue;
+                }
+                if let Some(existing_provider) = provider_map.get(&provider_id) {
+                    let existing_json =
+                        serde_json::to_string(existing_provider).unwrap_or_default();
+                    let incoming_json = serde_json::to_string(provider).unwrap_or_default();
+                    if existing_json != incoming_json {
+                        let next_provider_id =
+                            alloc_unique_provider_id(&provider_id, &provider_map);
+                        let mut next_provider = provider.clone();
+                        next_provider.id = next_provider_id.clone();
+                        provider_order.push(next_provider_id.clone());
+                        provider_map.insert(next_provider_id.clone(), next_provider);
+                        group_provider_id_remap.insert(provider_id, next_provider_id);
+                    }
+                    continue;
+                }
+                provider_order.push(provider_id.clone());
+                provider_map.insert(provider_id, provider.clone());
             }
-            provider_order.push(provider_id.clone());
-            provider_map.insert(provider_id, provider.clone());
-        }
         }
 
         // Determine which provider IDs to include in the group.
         // If scoped_provider_ids came from explicit group.provider_ids → use those.
         // Otherwise, derive from the group's built-in providers.
-        let raw_provider_ids: Vec<String> = if has_global_providers && group.provider_ids.is_some() {
+        let raw_provider_ids: Vec<String> = if has_global_providers && group.provider_ids.is_some()
+        {
             group.provider_ids.clone().unwrap()
         } else {
             group
@@ -874,8 +876,18 @@ mod tests {
         let loaded = second_store.get();
         assert_eq!(loaded.groups.len(), 1);
         assert_eq!(loaded.groups[0].failover.as_ref().unwrap().enabled, true);
-        assert_eq!(loaded.groups[0].failover.as_ref().unwrap().failure_threshold, 5);
-        assert_eq!(loaded.groups[0].failover.as_ref().unwrap().cooldown_seconds, 90);
+        assert_eq!(
+            loaded.groups[0]
+                .failover
+                .as_ref()
+                .unwrap()
+                .failure_threshold,
+            5
+        );
+        assert_eq!(
+            loaded.groups[0].failover.as_ref().unwrap().cooldown_seconds,
+            90
+        );
     }
 
     #[test]
@@ -898,7 +910,10 @@ mod tests {
         let loaded = second_store.get();
         assert_eq!(loaded.groups.len(), 1);
         assert_eq!(loaded.groups[0].id, "group-1");
-        assert_eq!(loaded.groups[0].providers.as_ref().unwrap()[0].id, "provider-1");
+        assert_eq!(
+            loaded.groups[0].providers.as_ref().unwrap()[0].id,
+            "provider-1"
+        );
     }
 
     #[test]
@@ -962,8 +977,14 @@ mod tests {
             normalized.groups[0].provider_ids.as_ref(),
             Some(&vec!["provider-1".to_string()])
         );
-        assert_eq!(normalized.groups[0].providers.as_ref().map(|p| p.len()), Some(1));
-        assert_eq!(normalized.groups[0].providers.as_ref().unwrap()[0].id, "provider-1");
+        assert_eq!(
+            normalized.groups[0].providers.as_ref().map(|p| p.len()),
+            Some(1)
+        );
+        assert_eq!(
+            normalized.groups[0].providers.as_ref().unwrap()[0].id,
+            "provider-1"
+        );
     }
 
     #[test]
@@ -988,8 +1009,14 @@ mod tests {
             normalized.groups[0].provider_ids.as_ref(),
             Some(&vec!["provider-1".to_string()])
         );
-        assert_eq!(normalized.groups[0].providers.as_ref().map(|p| p.len()), Some(1));
-        assert_eq!(normalized.groups[0].providers.as_ref().unwrap()[0].id, "provider-1");
+        assert_eq!(
+            normalized.groups[0].providers.as_ref().map(|p| p.len()),
+            Some(1)
+        );
+        assert_eq!(
+            normalized.groups[0].providers.as_ref().unwrap()[0].id,
+            "provider-1"
+        );
     }
 
     #[test]
@@ -1017,8 +1044,15 @@ mod tests {
         let models_json = serde_json::to_string(&vec!["gpt-4o-mini"]).expect("serialize models");
         let provider_ids_json =
             serde_json::to_string(&vec!["provider-1".to_string()]).expect("serialize provider ids");
-        let provider_json =
-            serde_json::to_string(sample_group().providers.as_ref().unwrap().first().expect("provider should exist")).expect("serialize provider json");
+        let provider_json = serde_json::to_string(
+            sample_group()
+                .providers
+                .as_ref()
+                .unwrap()
+                .first()
+                .expect("provider should exist"),
+        )
+        .expect("serialize provider json");
 
         conn.execute(
             "INSERT INTO group_records(group_id, group_name, models_json, active_provider_id, provider_ids_json, is_deleted)
@@ -1099,8 +1133,15 @@ mod tests {
         let models_json = serde_json::to_string(&vec!["gpt-4o-mini"]).expect("serialize models");
         let provider_ids_json =
             serde_json::to_string(&vec!["provider-1".to_string()]).expect("serialize provider ids");
-        let provider_json =
-            serde_json::to_string(sample_group().providers.as_ref().unwrap().first().expect("provider should exist")).expect("serialize provider json");
+        let provider_json = serde_json::to_string(
+            sample_group()
+                .providers
+                .as_ref()
+                .unwrap()
+                .first()
+                .expect("provider should exist"),
+        )
+        .expect("serialize provider json");
 
         conn.execute(
             "INSERT INTO group_records(group_id, group_name, models_json, active_provider_id, provider_ids_json, updated_at)

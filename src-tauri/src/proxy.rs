@@ -406,14 +406,14 @@ pub(crate) fn headless_service_state_for_tests() -> ServiceState {
 mod tests {
     use super::observability::{extract_token_usage, StreamTokenAccumulator};
     use super::pipeline::resolve_request_timeout_ms;
-    use crate::proxy::routing::{detect_entry_protocol, resolve_target_model, resolve_upstream_path};
     use super::{
         headless_service_state_for_tests, MESSAGES_TO_RESPONSES_NON_STREAM_REQUEST_TIMEOUT_MS,
         NON_STREAM_REQUEST_TIMEOUT_MS,
     };
     use crate::domain::entities::RouteEntry;
-    use crate::models::{
-        default_rule_cost_config, default_rule_quota_config, RuleProtocol,
+    use crate::models::{default_rule_cost_config, default_rule_quota_config, RuleProtocol};
+    use crate::proxy::routing::{
+        detect_entry_protocol, resolve_target_model, resolve_upstream_path,
     };
     use serde_json::{json, Value};
     use std::collections::HashMap;

@@ -139,17 +139,14 @@ fn resolve_provider_for_test(
             return Ok(provider);
         }
 
-        let routed_provider_id = group
-            .routing_table
-            .iter()
-            .find_map(|route| {
-                let route_provider_id = route.provider_id.trim();
-                if route_provider_id == normalized_provider_id {
-                    Some(route_provider_id)
-                } else {
-                    None
-                }
-            });
+        let routed_provider_id = group.routing_table.iter().find_map(|route| {
+            let route_provider_id = route.provider_id.trim();
+            if route_provider_id == normalized_provider_id {
+                Some(route_provider_id)
+            } else {
+                None
+            }
+        });
 
         if routed_provider_id.is_some() {
             return config
@@ -185,7 +182,11 @@ fn validate_provider(provider: &Rule) -> AppResult<()> {
     if provider.api_address.trim().is_empty() {
         return Err(AppError::validation("provider apiAddress is empty"));
     }
-    if provider.default_model.as_ref().map_or(true, |m| m.trim().is_empty()) {
+    if provider
+        .default_model
+        .as_ref()
+        .map_or(true, |m| m.trim().is_empty())
+    {
         return Err(AppError::validation("provider defaultModel is empty"));
     }
     Ok(())

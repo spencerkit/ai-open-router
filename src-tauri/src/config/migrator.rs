@@ -162,9 +162,7 @@ fn migrate_v4_to_v5(mut root: Value) -> Value {
 
     // Filter out groups that lack both routingTable and routing_table.
     if let Some(groups) = obj.get_mut("groups").and_then(Value::as_array_mut) {
-        groups.retain(|g| {
-            g.get("routingTable").is_some() || g.get("routing_table").is_some()
-        });
+        groups.retain(|g| g.get("routingTable").is_some() || g.get("routing_table").is_some());
     }
 
     // Filter out providers that lack models.

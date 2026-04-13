@@ -10,8 +10,8 @@ use super::observability::{
 };
 use super::routing::{
     assert_rule_ready, build_forward_headers, detect_entry_protocol, refresh_route_index_if_needed,
-    resolve_runtime_active_route, resolve_target_model, resolve_upstream_path, resolve_upstream_url,
-    EntryEndpoint, EntryProtocol, ParsedPath, PathEntry, RouteResolution,
+    resolve_runtime_active_route, resolve_target_model, resolve_upstream_path,
+    resolve_upstream_url, EntryEndpoint, EntryProtocol, ParsedPath, PathEntry, RouteResolution,
 };
 use super::{
     ServiceState, MAX_REQUEST_BODY_BYTES, MAX_STREAM_LOG_BODY_BYTES,
@@ -2069,8 +2069,8 @@ mod tests {
     use crate::api::dto::AgentConfig;
     use crate::domain::entities::RouteEntry;
     use crate::models::{
-        default_rule_cost_config, default_rule_quota_config, Group,
-        IntegrationClientKind, Rule, RuleProtocol, TokenUsage,
+        default_rule_cost_config, default_rule_quota_config, Group, IntegrationClientKind, Rule,
+        RuleProtocol, TokenUsage,
     };
     use crate::proxy::routing::EntryProtocol;
     use crate::proxy::{headless_service_state_for_tests, ServiceState};

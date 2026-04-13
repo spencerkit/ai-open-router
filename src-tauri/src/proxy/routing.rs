@@ -3,7 +3,7 @@
 //! Normalizes entry endpoints, selects upstream protocol paths, and computes final upstream URL.
 
 use super::ServiceState;
-use crate::domain::entities::{RouteEntry, ProxyConfig};
+use crate::domain::entities::{ProxyConfig, RouteEntry};
 use crate::models::{default_rule_cost_config, default_rule_quota_config, Rule, RuleProtocol};
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -344,10 +344,7 @@ pub(super) fn resolve_runtime_active_route<'a>(
     };
 
     // 2. Look up the provider by provider_id
-    let config = state
-        .config
-        .read()
-        .map_err(|_| "config lock poisoned")?;
+    let config = state.config.read().map_err(|_| "config lock poisoned")?;
     let provider = config
         .providers
         .iter()
@@ -380,7 +377,10 @@ pub(super) fn build_route_index(config: &ProxyConfig) -> RouteIndex {
             );
             continue;
         }
-        let has_default = group.routing_table.iter().any(|e| e.request_model == "default");
+        let has_default = group
+            .routing_table
+            .iter()
+            .any(|e| e.request_model == "default");
         if !has_default {
             index.insert(
                 group.id.clone(),

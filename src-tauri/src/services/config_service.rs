@@ -406,11 +406,7 @@ mod tests {
             "Local",
             vec![provider("p1", "x", "m1")],
         )];
-        let imported = vec![group(
-            "group-new",
-            "New",
-            vec![provider("p2", "y", "m2")],
-        )];
+        let imported = vec![group("group-new", "New", vec![provider("p2", "y", "m2")])];
         let merged = merge_imported_groups(&current, &imported);
         assert_eq!(merged.len(), 2);
         assert!(merged.iter().any(|group| group.id == "group-local"));
@@ -479,7 +475,12 @@ mod tests {
         assert_eq!(saved.groups[0].id, "group-local");
         assert_eq!(saved.groups[0].providers.as_ref().unwrap().len(), 1);
         assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].name, "alpha");
-        assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].default_model.as_deref(), Some("new-model"));
+        assert_eq!(
+            saved.groups[0].providers.as_ref().unwrap()[0]
+                .default_model
+                .as_deref(),
+            Some("new-model")
+        );
     }
 
     #[tokio::test]
@@ -526,7 +527,12 @@ mod tests {
         assert_eq!(saved.groups[0].name, "Imported");
         assert_eq!(saved.groups[0].providers.as_ref().unwrap().len(), 1);
         assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].name, "alpha");
-        assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].default_model.as_deref(), Some("new-model"));
+        assert_eq!(
+            saved.groups[0].providers.as_ref().unwrap()[0]
+                .default_model
+                .as_deref(),
+            Some("new-model")
+        );
     }
 
     #[tokio::test]

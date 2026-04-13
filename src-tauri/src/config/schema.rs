@@ -157,8 +157,8 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
         .map_err(|e| format!("invalid config structure: {e}"))?;
 
     let groups = if let Some(raw_groups) = partial.groups {
-        let parsed: Vec<crate::domain::entities::Group> =
-            serde_json::from_value(raw_groups).map_err(|e| format!("invalid groups structure: {e}"))?;
+        let parsed: Vec<crate::domain::entities::Group> = serde_json::from_value(raw_groups)
+            .map_err(|e| format!("invalid groups structure: {e}"))?;
         // Normalize: ensure each group has a routing_table (default to empty Vec)
         let normalized: Vec<_> = parsed
             .into_iter()
@@ -174,9 +174,8 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
         defaults.groups
     };
     let providers = if let Some(raw_providers) = partial.providers {
-        let parsed: Vec<crate::domain::entities::Rule> =
-            serde_json::from_value(raw_providers)
-                .map_err(|e| format!("invalid providers structure: {e}"))?;
+        let parsed: Vec<crate::domain::entities::Rule> = serde_json::from_value(raw_providers)
+            .map_err(|e| format!("invalid providers structure: {e}"))?;
         // Normalize: ensure each provider has a models field (default to empty Vec)
         let normalized: Vec<_> = parsed
             .into_iter()

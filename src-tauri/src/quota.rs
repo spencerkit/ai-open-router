@@ -115,13 +115,19 @@ pub async fn fetch_group_quotas(
         .find(|g| g.id == group_id)
         .ok_or_else(|| format!("group not found: {group_id}"))?;
 
-    let snapshots =
-        stream::iter(group.providers.iter().flatten().cloned().map(|rule| async move {
-            fetch_single_rule_quota(&group, &rule, false).await.snapshot
-        }))
-        .buffered(GROUP_QUOTA_CONCURRENCY)
-        .collect::<Vec<_>>()
-        .await;
+    let snapshots = stream::iter(
+        group
+            .providers
+            .iter()
+            .flatten()
+            .cloned()
+            .map(
+                |rule| async move { fetch_single_rule_quota(&group, &rule, false).await.snapshot },
+            ),
+    )
+    .buffered(GROUP_QUOTA_CONCURRENCY)
+    .collect::<Vec<_>>()
+    .await;
 
     Ok(snapshots)
 }
@@ -457,7 +463,10 @@ fn render_template(group: &Group, rule: &Rule, raw: &str) -> String {
         .replace("{{rule.id}}", &rule.id)
         .replace("{{rule.name}}", &rule.name)
         .replace("{{rule.apiAddress}}", &rule.api_address)
-        .replace("{{rule.defaultModel}}", rule.default_model.as_deref().unwrap_or(""))
+        .replace(
+            "{{rule.defaultModel}}",
+            rule.default_model.as_deref().unwrap_or(""),
+        )
         .replace("{{rule.token}}", &rule.token)
         .replace("{{quota.token}}", resolved_token)
 }
