@@ -560,14 +560,6 @@ export const ServicePage: React.FC = () => {
                     >
                       <span className={styles.groupName}>{group.name}</span>
                       <span className={styles.groupPath}>/{group.id}</span>
-                      <span className={styles.groupRuleCount}>
-                        {
-                          (group.routingTable ?? [])
-                            .map(route => route.providerId?.trim())
-                            .filter((providerId): providerId is string => Boolean(providerId))
-                            .length
-                        }
-                      </span>
                     </button>
                   </li>
                 ))}

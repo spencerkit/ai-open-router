@@ -134,26 +134,6 @@
   white-space: nowrap;
 }
 
-.groupRuleCount {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  margin-left: auto;
-  padding: 0 5px;
-  border-radius: var(--radius-full);
-  background: var(--surface-active);
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-family: var(--font-mono);
-}
-
-.groupItem.active .groupRuleCount {
-  background: var(--accent-subtle);
-  color: var(--accent);
-}
-
 .activeIcon {
   color: var(--accent);
   flex-shrink: 0;
