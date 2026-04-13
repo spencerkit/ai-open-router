@@ -290,4 +290,143 @@ describe("AI Open Router", () => {
     await safeClick(selectors.logsNav)
     await $(selectors.logsTitle).waitForExist({ timeout: 15000 })
   })
+
+  describe("Group provider list cleanup", () => {
+    /**
+     * Test 1: Group detail page has no inline provider list
+     *
+     * The legacy ServicePage/ProviderList component (which showed an h3 "Rule Name")
+     * was removed. The GroupEditPage should NOT contain any provider list section,
+     * "Rule Name" heading, or "Add Provider" button.
+     */
+    it("Group detail page has no inline provider list", async () => {
+      await waitForReady()
+      await browser.url(`#/groups/${groupId}/edit`)
+
+      // Verify the group edit form loads
+      const editTitle = await $('//h1[normalize-space()="Group Edit"]')
+      await editTitle.waitForExist({ timeout: 15000 })
+      const groupIdInput = await $("#groupId")
+      await groupIdInput.waitForExist({ timeout: 10000 })
+      await expect(groupIdInput).toHaveValue(groupId)
+
+      // There must be no "Rule Name" text anywhere on the page (removed ProviderList h3)
+      const ruleNameEls = await $$(
+        '//*[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "rule name")]'
+      )
+      expect(ruleNameEls).toHaveLength(0)
+
+      // There must be no "Add Provider" button on the group edit page
+      const addProviderBtns = await $$('//button[normalize-space()="Add Provider"]')
+      expect(addProviderBtns).toHaveLength(0)
+    })
+
+    /**
+     * Test 2: Creating a provider is visible in the Providers page and routingTable
+     *
+     * Providers are stored globally. After creating a provider, it must appear
+     * in the Provider dropdown within the group routing table.
+     */
+    it("Creating a provider is visible in the routingTable Provider dropdown", async () => {
+      const freshProviderName = "E2E Fresh Provider"
+
+      // Navigate to Providers page and create a fresh provider
+      await safeClick(selectors.providersNav)
+      const providersTitle = await $('//h2[normalize-space()="Providers"]')
+      await providersTitle.waitForExist({ timeout: 15000 })
+
+      const freshProviderEl = await $(providerNameSelector(freshProviderName))
+      if (!(await freshProviderEl.isExisting())) {
+        await safeClick(selectors.addProviderButton)
+        await waitForExisting("#name")
+        await $("#name").setValue(freshProviderName)
+        await $("#token").setValue("sk-e2e-fresh")
+        await $("#apiAddress").setValue("https://api.openai.com/v1")
+
+        const openaiBtn = await $('//button[normalize-space()="OpenAI"]')
+        if (await openaiBtn.isExisting()) {
+          await safeClick('//button[normalize-space()="OpenAI"]')
+        }
+
+        await addModelTag("claude-3-5-sonnet")
+        await safeClick(selectors.createProviderButton)
+        await $(providerNameSelector(freshProviderName)).waitForExist({ timeout: 15000 })
+      }
+
+      // Navigate to the ServicePage routing table
+      await safeClick(selectors.serviceNav)
+      await waitForExisting(selectors.groupInfoTitle)
+
+      // Wait for the routing table to be visible
+      await waitForExisting('//h3[normalize-space()="Routing Table"]')
+
+      // Verify the fresh provider appears in the first row's Provider dropdown
+      const firstProviderSelect = await $('(//tbody//tr)[1]//select[@aria-label="Provider 1"]')
+      await firstProviderSelect.waitForExist({ timeout: 15000 })
+
+      // Find all options in the provider dropdown
+      const options = await firstProviderSelect.$$("option")
+      const optionTexts = await Promise.all(options.map(opt => opt.getText()))
+      expect(optionTexts).toContain(freshProviderName)
+    })
+
+    /**
+     * Test 3: Sidebar rule count reflects routingTable entries
+     *
+     * The sidebar group item badge shows the count of non-empty routes
+     * (routes where providerId is set), computed from routingTable.
+     */
+    it("Sidebar rule count reflects routingTable entries", async () => {
+      // ensureRoutingConfigured was already run by the main flow (adds 5 rows, 5 with providerId)
+      await safeClick(selectors.serviceNav)
+      await waitForExisting(selectors.groupInfoTitle)
+      await waitForExisting('//h3[normalize-space()="Routing Table"]')
+
+      // Count how many routing rows have a non-empty provider selected
+      const rows = await $$("tbody tr")
+      let configuredRowCount = 0
+      for (const row of rows) {
+        const selects = await row.$$("select")
+        if (selects.length > 0) {
+          const providerVal = await selects[0].getValue()
+          if (providerVal && providerVal.trim() !== "") {
+            configuredRowCount++
+          }
+        }
+      }
+
+      // The sidebar active group badge must show the same count
+      const activeGroupButton = await $(
+        '//button[contains(@class, "groupItem")][contains(@class, "active")]'
+      )
+      await activeGroupButton.waitForExist({ timeout: 15000 })
+      const badge = await activeGroupButton.$('span[class*="groupRuleCount"]')
+      await badge.waitForExist({ timeout: 5000 })
+      const badgeText = await badge.getText()
+      const sidebarCount = parseInt(badgeText.trim(), 10)
+      expect(sidebarCount).toBe(configuredRowCount)
+
+      // Add one more route and verify the count increments
+      await safeClick(selectors.addRouteButton)
+      await browser.waitUntil(async () => (await $$("tbody tr")).length >= rows.length + 1, {
+        timeout: 15000,
+        timeoutMsg: "adding a route should increase row count",
+      })
+      await browser.waitUntil(
+        async () => (await $$("tbody tr")).length === configuredRowCount + 1,
+        { timeout: 5000 }
+      )
+
+      // Save the updated routing table
+      await safeClick(selectors.saveButton)
+      await waitForExisting('//h3[normalize-space()="Routing Table"]')
+
+      // Re-read the active group badge — it should be one higher
+      const updatedBadge = await activeGroupButton.$('span[class*="groupRuleCount"]')
+      await updatedBadge.waitForExist({ timeout: 5000 })
+      const updatedText = await updatedBadge.getText()
+      const updatedSidebarCount = parseInt(updatedText.trim(), 10)
+      expect(updatedSidebarCount).toBe(sidebarCount + 1)
+    })
+  })
 })

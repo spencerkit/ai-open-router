@@ -45,7 +45,7 @@ export type {
 } from "./proxy"
 
 import type { CompatConfig, LoggingConfig, RemoteGitConfig, ServerConfig, UIConfig } from "./config"
-import type { Group, ProxyStatus } from "./proxy"
+import type { Group, Provider, ProxyStatus } from "./proxy"
 
 /**
  * Complete proxy configuration interface
@@ -57,7 +57,7 @@ export interface ProxyConfig {
   logging: LoggingConfig
   ui: UIConfig
   remoteGit: RemoteGitConfig
-  providers?: Group["providers"]
+  providers?: Provider[]
   groups: Group[]
 }
 

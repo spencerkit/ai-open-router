@@ -360,7 +360,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const group = groupId ? config?.groups.find(g => g.id === groupId) : null
   const provider = isGlobalMode
     ? ((config?.providers ?? []).find(item => item.id === providerId) ?? null)
-    : (group?.providers?.find(item => item.id === providerId) ?? null)
+    : ((config?.providers ?? []).find(item => item.id === providerId) ?? null)
   const quotaDraftFingerprint = JSON.stringify({
     token,
     name,
@@ -898,21 +898,7 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
 
     const nextGroups = config.groups.map(currentGroup => {
       if (currentGroup.id !== groupId) return currentGroup
-
-      if (isEditMode) {
-        return currentGroup
-      }
-
-      const currentProviderIds =
-        currentGroup.providerIds ?? currentGroup.providers?.map(rule => rule.id) ?? []
-      const providerIds = currentProviderIds.includes(providerDraft.id)
-        ? currentProviderIds
-        : [...currentProviderIds, providerDraft.id]
-      return {
-        ...currentGroup,
-        providerIds,
-        activeProviderId: currentGroup.activeProviderId ?? providerDraft.id,
-      }
+      return currentGroup
     })
 
     const newConfig: ProxyConfig = {

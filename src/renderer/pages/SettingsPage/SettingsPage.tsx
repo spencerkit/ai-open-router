@@ -15,21 +15,10 @@ import {
   saveConfigAction,
   savingConfigState,
 } from "@/store"
-import type {
-  AppInfo,
-  AuthSessionStatus,
-  GroupImportMode,
-  LocaleCode,
-  ProxyConfig,
-  ThemeMode,
-} from "@/types"
+import type { AppInfo, AuthSessionStatus, LocaleCode, ProxyConfig, ThemeMode } from "@/types"
 import { emitAuthSessionChanged } from "@/utils/authSession"
 import { bridge } from "@/utils/bridge"
-import {
-  buildImportRequest,
-  canConfirmImportRequest,
-  getImportModeWarningKey,
-} from "@/utils/importMode"
+import { buildImportRequest, canConfirmImportRequest } from "@/utils/importMode"
 import { resolveEffectiveLocale } from "@/utils/locale"
 import { useActions, useRelaxValue } from "@/utils/relax"
 import { isHeadlessHttpRuntime } from "@/utils/runtime"
@@ -111,7 +100,6 @@ export const SettingsPage: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [importSource, setImportSource] = useState<ImportSource>("file")
-  const [importMode, setImportMode] = useState<GroupImportMode>("incremental")
   const [exportTarget, setExportTarget] = useState<ExportTarget>("folder")
   const [importJsonText, setImportJsonText] = useState("")
   const [readingClipboard, setReadingClipboard] = useState(false)
@@ -609,7 +597,6 @@ export const SettingsPage: React.FC = () => {
 
   const handleImportGroups = async () => {
     setImportSource("file")
-    setImportMode("incremental")
     setShowImportModal(true)
   }
 
@@ -639,13 +626,12 @@ export const SettingsPage: React.FC = () => {
       setImporting(true)
       const request = buildImportRequest({
         source: importSource,
-        mode: importMode,
         jsonText: importJsonText,
       })
       const result =
         request.source === "file"
-          ? await importGroupsBackup(request.payload)
-          : await importGroupsFromJson(request.payload)
+          ? await importGroupsBackup()
+          : await importGroupsFromJson({ jsonText: request.payload.jsonText })
 
       forceCloseImportModal()
       if (!result.canceled) {
@@ -1499,38 +1485,7 @@ export const SettingsPage: React.FC = () => {
         title={t("settings.importModalTitle")}
       >
         <div className={styles.importModalContent}>
-          <p className={styles.importWarning}>{t(getImportModeWarningKey(importMode))}</p>
-
-          <div className={styles.formGroup}>
-            <label htmlFor="settings-import-mode-incremental">
-              {t("settings.importModeLabel")}
-            </label>
-            <div className={styles.importSourceGroup}>
-              <button
-                id="settings-import-mode-incremental"
-                type="button"
-                aria-pressed={importMode === "incremental"}
-                className={`${styles.choiceButton} ${importMode === "incremental" ? styles.choiceButtonActive : ""}`}
-                onClick={() => setImportMode("incremental")}
-              >
-                <span className={styles.choiceTitle}>{t("settings.importModeIncremental")}</span>
-                <span className={styles.choiceDescription}>
-                  {t("settings.importModeIncrementalHint")}
-                </span>
-              </button>
-              <button
-                type="button"
-                aria-pressed={importMode === "overwrite"}
-                className={`${styles.choiceButton} ${importMode === "overwrite" ? styles.choiceButtonActive : ""}`}
-                onClick={() => setImportMode("overwrite")}
-              >
-                <span className={styles.choiceTitle}>{t("settings.importModeOverwrite")}</span>
-                <span className={styles.choiceDescription}>
-                  {t("settings.importModeOverwriteHint")}
-                </span>
-              </button>
-            </div>
-          </div>
+          <p className={styles.importWarning}>{t("settings.importModeOverwriteWarning")}</p>
 
           <div className={styles.formGroup}>
             <label htmlFor="settings-import-source-file">{t("settings.importSourceLabel")}</label>

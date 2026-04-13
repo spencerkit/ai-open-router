@@ -13,7 +13,6 @@ import { memo } from "react"
 import { Button } from "@/components"
 import { useTranslation } from "@/hooks"
 import type {
-  Group,
   Provider,
   ProviderModelHealthSnapshot,
   RuleCardStatsItem,
@@ -347,7 +346,7 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
  * Displays providers for global providers catalog management.
  */
 export const ProviderList: React.FC<{
-  providers: Group["providers"]
+  providers: Provider[]
   quotaByProviderId?: Record<string, RuleQuotaSnapshot | undefined>
   quotaLoadingByProviderId?: Record<string, boolean | undefined>
   cardStatsByProviderId?: Record<string, RuleCardStatsItem | undefined>

@@ -134,26 +134,6 @@
   white-space: nowrap;
 }
 
-.groupRuleCount {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  margin-left: auto;
-  padding: 0 5px;
-  border-radius: var(--radius-full);
-  background: var(--surface-active);
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-family: var(--font-mono);
-}
-
-.groupItem.active .groupRuleCount {
-  background: var(--accent-subtle);
-  color: var(--accent);
-}
-
 .activeIcon {
   color: var(--accent);
   flex-shrink: 0;
@@ -2476,6 +2456,7 @@
 
 .routingEditorTable {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -2485,6 +2466,7 @@
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
+  overflow: hidden;
 }
 
 .routingEditorTable th {
@@ -2494,6 +2476,25 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   background: color-mix(in oklab, var(--surface) 70%, var(--bg-raised));
+}
+
+/* Column widths: fixed to prevent layout shift on provider change */
+.routingEditorTable > thead > tr > th:nth-child(1),
+.routingEditorTable > tbody > tr > td:nth-child(1) {
+  width: 28%;
+}
+
+.routingEditorTable > thead > tr > th:nth-child(2),
+.routingEditorTable > thead > tr > th:nth-child(3),
+.routingEditorTable > tbody > tr > td:nth-child(2),
+.routingEditorTable > tbody > tr > td:nth-child(3) {
+  width: 31%;
+}
+
+.routingEditorTable > thead > tr > th:nth-child(4),
+.routingEditorTable > tbody > tr > td:nth-child(4) {
+  width: 10%;
+  min-width: 48px;
 }
 
 .routingEditorTable tbody tr:last-child td {

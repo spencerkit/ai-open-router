@@ -143,14 +143,7 @@ export interface Group {
   id: string
   name: string
   routingTable: RouteEntry[]
-  // Legacy fields (kept for backward compatibility)
-  models?: string[]
-  providerIds?: string[]
-  activeProviderId: string | null
-  providers?: Provider[]
   failover?: GroupFailoverConfig
-  activeRuleId?: string | null
-  rules?: Provider[]
 }
 
 export interface GroupRuntimeStatus {

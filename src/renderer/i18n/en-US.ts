@@ -465,17 +465,10 @@ export const enUS = {
     importModalTitle: "Confirm Group/Provider Import",
     importModalWarning:
       "Choose how incoming groups and providers should be applied before starting the import.",
-    importModeLabel: "Import Mode",
     importModeHint:
       "Incremental keeps current groups and merges imported entries. Matching groups/providers update from the import, while existing group failover settings stay local. Overwrite replaces all current groups and providers with the imported snapshot.",
-    importModeIncremental: "Incremental Merge",
-    importModeIncrementalHint:
-      "Keep current groups/providers and merge matching entries from the import.",
     importModeIncrementalWarning:
       "Incremental import keeps current groups/providers, updates matching imported entries, and preserves existing group failover settings.",
-    importModeOverwrite: "Full Overwrite",
-    importModeOverwriteHint:
-      "Replace current groups/providers with the imported groups/providers only.",
     importModeOverwriteWarning:
       "Full overwrite replaces current groups/providers with the imported snapshot only. Server, compat, logging, UI, and remote sync settings stay unchanged.",
     importSourceLabel: "Import Source",
