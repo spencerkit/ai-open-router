@@ -68,7 +68,7 @@ pub async fn upload_with_dir(
     }
 
     let current = state.config_store.get();
-    let backup_payload = create_groups_backup_payload(&current.groups);
+    let backup_payload = create_groups_backup_payload(&current.groups, &current.providers);
     let json_text = serde_json::to_string_pretty(&backup_payload)
         .map_err(|e| AppError::internal(format!("serialize backup failed: {e}")))?;
     let local_updated_at = get_local_config_updated_at(state);

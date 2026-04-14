@@ -18,7 +18,7 @@ pub async fn export_groups_to_file(
     app: &AppHandle,
 ) -> AppResult<GroupBackupExportResult> {
     let current = state.config_store.get();
-    let backup_payload = create_groups_backup_payload(&current.groups);
+    let backup_payload = create_groups_backup_payload(&current.groups, &current.providers);
     let json_text = serde_json::to_string_pretty(&backup_payload)
         .map_err(|e| AppError::internal(format!("serialize backup failed: {e}")))?;
 
@@ -55,7 +55,7 @@ pub async fn export_groups_to_folder(
     app: &AppHandle,
 ) -> AppResult<GroupBackupExportResult> {
     let current = state.config_store.get();
-    let backup_payload = create_groups_backup_payload(&current.groups);
+    let backup_payload = create_groups_backup_payload(&current.groups, &current.providers);
     let json_text = serde_json::to_string_pretty(&backup_payload)
         .map_err(|e| AppError::internal(format!("serialize backup failed: {e}")))?;
 
@@ -91,7 +91,7 @@ pub async fn export_groups_to_clipboard(
     app: &AppHandle,
 ) -> AppResult<GroupBackupExportResult> {
     let current = state.config_store.get();
-    let backup_payload = create_groups_backup_payload(&current.groups);
+    let backup_payload = create_groups_backup_payload(&current.groups, &current.providers);
     let json_text = serde_json::to_string_pretty(&backup_payload)
         .map_err(|e| AppError::internal(format!("serialize backup failed: {e}")))?;
 
