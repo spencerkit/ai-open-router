@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.4 - 2026-04-14
+### Fixes
+- fix(backup): include global providers in backup/export payload (2188a18)
+- fix(backup): add extract_groups_and_providers_from_import_payload for parsing providers (2188a18)
+- fix(config_service): correctly restore global providers on import (2188a18)
+
+### Refactors
+- refactor(backup): unify export/import logic between local and remote backup (2188a18)
+
 ## v0.3.3 - 2026-04-13
 ### Features
 - feat(backend): switch routing match to fuzzy contains + longest-match (eb9c097)
