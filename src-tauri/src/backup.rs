@@ -89,8 +89,8 @@ pub fn backup_default_file_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        backup_default_file_name, create_groups_backup_payload, extract_groups_from_import_payload,
-        extract_groups_and_providers_from_import_payload,
+        backup_default_file_name, create_groups_backup_payload,
+        extract_groups_and_providers_from_import_payload, extract_groups_from_import_payload,
     };
     use crate::models::{
         default_rule_cost_config, default_rule_quota_config, Group, Rule, RuleProtocol,

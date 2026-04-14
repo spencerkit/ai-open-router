@@ -104,7 +104,10 @@ pub async fn import_groups_payload(
         for group in &next.groups {
             if let Some(providers) = &group.providers {
                 for provider in providers {
-                    if !all_providers.iter().any(|p: &crate::models::Rule| p.id == provider.id) {
+                    if !all_providers
+                        .iter()
+                        .any(|p: &crate::models::Rule| p.id == provider.id)
+                    {
                         all_providers.push(provider.clone());
                     }
                 }
@@ -427,10 +430,7 @@ mod tests {
         assert_eq!(saved.groups[0].providers.as_ref().unwrap()[0].name, "beta");
         assert_eq!(saved.providers.len(), 1);
         assert_eq!(saved.providers[0].name, "beta");
-        assert!(!saved
-            .providers
-            .iter()
-            .any(|p| p.name == "stale"));
+        assert!(!saved.providers.iter().any(|p| p.name == "stale"));
     }
 
     #[tokio::test]
@@ -440,11 +440,7 @@ mod tests {
         initial.server.host = "127.0.0.1".to_string();
         initial.server.port = 9999;
         initial.ui.theme = "dark".to_string();
-        initial.groups = vec![group(
-            "group-local",
-            "Local",
-            vec![],
-        )];
+        initial.groups = vec![group("group-local", "Local", vec![])];
         initial.providers = vec![
             provider("p1", "Provider 1", "model-1"),
             provider("p2", "Provider 2", "model-2"),
