@@ -605,4 +605,6 @@ pub struct GroupsBackupPayload {
     pub version: u8,
     pub exported_at: String,
     pub groups: Vec<Group>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub providers: Vec<Rule>,
 }

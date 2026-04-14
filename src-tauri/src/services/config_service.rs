@@ -3,7 +3,7 @@
 //! Coordinates validation, persistence, runtime sync, and structured results.
 
 use crate::app_state::{apply_launch_on_startup_setting, sync_runtime_config, SharedState};
-use crate::backup::extract_groups_from_import_payload;
+use crate::backup::extract_groups_and_providers_from_import_payload;
 use crate::models::{
     AuthSessionStatus, GroupBackupImportResult, GroupImportMode, ProxyConfig, ProxyStatus,
     SaveConfigResult,
@@ -86,15 +86,32 @@ pub async fn import_groups_payload(
     parsed: Value,
     _mode: Option<GroupImportMode>,
 ) -> AppResult<(usize, ProxyConfig, bool, ProxyStatus)> {
-    let imported_groups =
-        extract_groups_from_import_payload(&parsed).map_err(AppError::validation)?;
+    let (imported_groups, imported_providers) =
+        extract_groups_and_providers_from_import_payload(&parsed).map_err(AppError::validation)?;
     let imported_group_count = imported_groups.len();
     let prev = state.config_store.get();
     let mut next = prev.clone();
 
-    // 覆盖模式：直接替换 groups，清空 providers
+    // 覆盖模式：替换 groups 和 providers
+    // 如果导入的 payload 包含 providers，使用导入的 providers
+    // 否则从 groups 内嵌的 providers 提取（兼容旧格式）
     next.groups = imported_groups;
-    next.providers = vec![];
+    if !imported_providers.is_empty() {
+        next.providers = imported_providers;
+    } else {
+        // 从 groups 内嵌的 providers 中提取全局 providers
+        let mut all_providers = Vec::new();
+        for group in &next.groups {
+            if let Some(providers) = &group.providers {
+                for provider in providers {
+                    if !all_providers.iter().any(|p: &crate::models::Rule| p.id == provider.id) {
+                        all_providers.push(provider.clone());
+                    }
+                }
+            }
+        }
+        next.providers = all_providers;
+    }
 
     let saved = state.config_store.save_config(next)?;
     let (restarted, status) = sync_runtime_config(state, prev, saved.clone()).await?;
@@ -413,6 +430,80 @@ mod tests {
         assert!(!saved
             .providers
             .iter()
-            .any(|provider| provider.name == "stale"));
+            .any(|p| p.name == "stale"));
+    }
+
+    #[tokio::test]
+    async fn import_groups_with_global_providers_restores_them() {
+        let state = test_shared_state();
+        let mut initial = default_config();
+        initial.server.host = "127.0.0.1".to_string();
+        initial.server.port = 9999;
+        initial.ui.theme = "dark".to_string();
+        initial.groups = vec![group(
+            "group-local",
+            "Local",
+            vec![],
+        )];
+        initial.providers = vec![
+            provider("p1", "Provider 1", "model-1"),
+            provider("p2", "Provider 2", "model-2"),
+        ];
+        state
+            .config_store
+            .save_config(initial)
+            .expect("initial config should save");
+
+        let parsed = json!({
+            "groups": [
+                {
+                    "id": "group-imported",
+                    "name": "Imported",
+                    "routingTable": [
+                    {
+                        "requestModel": "default",
+                        "providerId": "p3",
+                        "targetModel": "model-3"
+                    }
+                ],
+                    "models": ["model-b"],
+                    "providers": []
+                }
+            ],
+            "providers": [
+                {
+                    "id": "p3",
+                    "name": "Provider 3",
+                    "protocol": "openai",
+                    "token": "token",
+                    "apiAddress": "https://example.com",
+                    "models": ["model-3"],
+                    "defaultModel": "model-3"
+                },
+                {
+                    "id": "p4",
+                    "name": "Provider 4",
+                    "protocol": "openai",
+                    "token": "token",
+                    "apiAddress": "https://example.com",
+                    "models": ["model-4"],
+                    "defaultModel": "model-4"
+                }
+            ]
+        });
+
+        let (_, saved, _, _) =
+            import_groups_payload(&state, parsed, Some(GroupImportMode::Overwrite))
+                .await
+                .expect("import with providers should succeed");
+
+        assert_eq!(saved.server.host, "127.0.0.1");
+        assert_eq!(saved.server.port, 9999);
+        assert_eq!(saved.ui.theme, "dark");
+        assert_eq!(saved.groups.len(), 1);
+        assert_eq!(saved.groups[0].id, "group-imported");
+        assert_eq!(saved.providers.len(), 2);
+        assert_eq!(saved.providers[0].id, "p3");
+        assert_eq!(saved.providers[1].id, "p4");
     }
 }

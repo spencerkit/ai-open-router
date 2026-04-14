@@ -752,7 +752,7 @@ async fn config_export_groups_json(
 ) -> ApiResult<GroupsExportJsonResult> {
     let shared = require_shared_state(&state)?;
     let current = shared.config_store.get();
-    let payload = create_groups_backup_payload(&current.groups);
+    let payload = create_groups_backup_payload(&current.groups, &current.providers);
     let json_text = serde_json::to_string_pretty(&payload)
         .map_err(|e| ApiError::internal(format!("serialize backup failed: {e}")))?;
     let char_count = json_text.len();
