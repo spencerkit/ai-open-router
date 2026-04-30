@@ -208,6 +208,28 @@ fn strip_management_prefix(path: &str) -> &str {
     path.strip_prefix("/management").unwrap_or(path)
 }
 
+fn is_management_auth_path(path: &str) -> bool {
+    path == "/management/auth" || path == "/management/auth/" || path.starts_with("/management/auth/")
+}
+
+fn management_auth_redirect(uri: &Uri) -> Result<Response, ApiError> {
+    let mut next = uri.path().to_string();
+    if let Some(query) = uri.query() {
+        next.push('?');
+        next.push_str(query);
+    }
+    let query = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("next", &next)
+        .finish();
+    let location = format!("/management/auth?{query}");
+
+    Response::builder()
+        .status(StatusCode::FOUND)
+        .header(header::LOCATION, location)
+        .body(axum::body::Body::empty())
+        .map_err(|e| ApiError::internal(format!("build management auth redirect failed: {e}")))
+}
+
 async fn management_handler(uri: Uri) -> Response {
     let raw = strip_management_prefix(uri.path());
     let trimmed = raw.trim_start_matches('/');
@@ -266,11 +288,19 @@ async fn asset_handler(AxumPath(path): AxumPath<String>) -> Response {
     }
 }
 
-fn management_router() -> Router<ServiceState> {
+fn management_page_router() -> Router<ServiceState> {
     Router::new()
         .route("/management", get(management_handler))
         .route("/management/*path", get(management_handler))
-        .route("/assets/*path", get(asset_handler))
+}
+
+fn management_router(service_state: ServiceState) -> Router<ServiceState> {
+    management_page_router()
+        .layer(middleware::from_fn_with_state(
+            service_state,
+            require_management_page_auth,
+        ))
+        .merge(Router::new().route("/assets/*path", get(asset_handler)))
 }
 
 fn public_api_router() -> Router<ServiceState> {
@@ -370,7 +400,7 @@ pub(crate) fn router(service_state: ServiceState) -> Router<ServiceState> {
             service_state.clone(),
             require_remote_admin_auth,
         )))
-        .merge(management_router())
+        .merge(management_router(service_state))
 }
 
 fn request_socket_addr(request: &Request<axum::body::Body>) -> Option<SocketAddr> {
@@ -443,6 +473,35 @@ async fn require_remote_admin_auth(
     {
         Ok(true) => next.run(request).await,
         Ok(false) => unauthorized_remote_admin().into_response(),
+        Err(message) => ApiError::internal(message).into_response(),
+    }
+}
+
+async fn require_management_page_auth(
+    State(state): State<ServiceState>,
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    if is_management_auth_path(request.uri().path()) {
+        return next.run(request).await;
+    }
+
+    let Ok(shared) = require_shared_state(&state) else {
+        return ApiError::internal("shared state unavailable").into_response();
+    };
+
+    if !request_is_remote(&request) || !shared.remote_admin_auth.password_configured() {
+        return next.run(request).await;
+    }
+
+    let request_uri = request.uri().clone();
+    match shared
+        .remote_admin_auth
+        .authenticate_request(request.headers())
+    {
+        Ok(true) => next.run(request).await,
+        Ok(false) => management_auth_redirect(&request_uri)
+            .unwrap_or_else(|error| error.into_response()),
         Err(message) => ApiError::internal(message).into_response(),
     }
 }
@@ -1252,6 +1311,7 @@ mod tests {
     use crate::proxy::headless_service_state_for_tests;
     use axum::body::{to_bytes, Body};
     use axum::http::{header, HeaderMap, HeaderValue, Request, StatusCode};
+    use std::net::SocketAddr;
     use tower::util::ServiceExt;
 
     #[test]
@@ -1296,6 +1356,116 @@ mod tests {
             resolve_request_base_url(&headers).as_deref(),
             Some("http://localhost:8899")
         );
+    }
+
+    #[tokio::test]
+    async fn remote_management_page_redirects_to_auth_when_password_is_configured() {
+        let service_state = headless_service_state_for_tests();
+        let shared = service_state
+            .shared_state
+            .clone()
+            .expect("shared state should exist");
+        shared
+            .remote_admin_auth
+            .set_password("Passw0rd!")
+            .expect("password should be configured");
+
+        let app = router(service_state.clone()).with_state(service_state);
+        let request = Request::builder()
+            .uri("/management/settings")
+            .header(header::HOST, "172.25.226.227:8899")
+            .extension(SocketAddr::from(([172, 25, 226, 10], 45678)))
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("router should respond");
+        assert_eq!(response.status(), StatusCode::FOUND);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("/management/auth?next=%2Fmanagement%2Fsettings")
+        );
+    }
+
+    #[tokio::test]
+    async fn local_management_page_bypasses_remote_auth_redirect() {
+        let service_state = headless_service_state_for_tests();
+        let shared = service_state
+            .shared_state
+            .clone()
+            .expect("shared state should exist");
+        shared
+            .remote_admin_auth
+            .set_password("Passw0rd!")
+            .expect("password should be configured");
+
+        let app = router(service_state.clone()).with_state(service_state);
+        let request = Request::builder()
+            .uri("/management")
+            .header(header::HOST, "127.0.0.1:8899")
+            .extension(SocketAddr::from(([127, 0, 0, 1], 45678)))
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("router should respond");
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn management_auth_route_stays_public_for_remote_sessions() {
+        let service_state = headless_service_state_for_tests();
+        let shared = service_state
+            .shared_state
+            .clone()
+            .expect("shared state should exist");
+        shared
+            .remote_admin_auth
+            .set_password("Passw0rd!")
+            .expect("password should be configured");
+
+        let app = router(service_state.clone()).with_state(service_state);
+        let request = Request::builder()
+            .uri("/management/auth")
+            .header(header::HOST, "172.25.226.227:8899")
+            .extension(SocketAddr::from(([172, 25, 226, 10], 45678)))
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("router should respond");
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn remote_management_api_still_returns_authentication_required_json() {
+        let service_state = headless_service_state_for_tests();
+        let shared = service_state
+            .shared_state
+            .clone()
+            .expect("shared state should exist");
+        shared
+            .remote_admin_auth
+            .set_password("Passw0rd!")
+            .expect("password should be configured");
+
+        let app = router(service_state.clone()).with_state(service_state);
+        let request = Request::builder()
+            .uri("/api/config")
+            .header(header::HOST, "172.25.226.227:8899")
+            .extension(SocketAddr::from(([172, 25, 226, 10], 45678)))
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("router should respond");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        let payload: serde_json::Value =
+            serde_json::from_slice(&body).expect("response should deserialize");
+        assert_eq!(payload["error"]["code"], "authentication_required");
     }
 
     #[tokio::test]
