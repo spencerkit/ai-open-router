@@ -891,11 +891,11 @@ test("RuleFormPage marks template attribution as modified after manual price edi
     template: {
       vendorId: "anthropic",
       vendorLabel: "Anthropic",
-      modelId: "claude-sonnet-4-5",
-      modelLabel: "Claude Sonnet 4.5",
-      sourceUrl: "https://platform.claude.com/docs/zh-CN/about-claude/pricing",
-      verifiedAt: "2026-03-29",
-      appliedAt: "2026-03-29T00:00:00.000Z",
+      modelId: "claude-sonnet-4-6",
+      modelLabel: "Claude Sonnet 4.6",
+      sourceUrl: "https://www.anthropic.com/news/claude-sonnet-4-6",
+      verifiedAt: "2026-05-01",
+      appliedAt: "2026-05-01T00:00:00.000Z",
       modifiedAfterApply: false,
     },
   }
@@ -903,14 +903,14 @@ test("RuleFormPage marks template attribution as modified after manual price edi
   const harness = createComponentHarness("edit")
   let tree = harness.renderReady()
   let markup = renderToStaticMarkup(tree as React.ReactElement)
-  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.5/)
+  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.6/)
 
   const outputInput = findInputById(tree, "cost-output")
   outputInput.props.onChange?.(createInputChangeEvent("16"))
 
   tree = harness.renderReady()
   markup = renderToStaticMarkup(tree as React.ReactElement)
-  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.5, modified after apply/)
+  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.6, modified after apply/)
 
   findInputById(tree, "name").props.onChange?.(createInputChangeEvent("Existing Provider Updated"))
   const form = findForm(tree)
@@ -925,7 +925,7 @@ test("RuleFormPage marks template attribution as modified after manual price edi
   const savedProvider = savedConfig.providers.find(provider => provider.id === "provider-1")
   assert.ok(savedProvider?.cost?.template)
   assert.equal(savedProvider.cost?.template?.modifiedAfterApply, true)
-  assert.equal(savedProvider.cost?.template?.modelId, "claude-sonnet-4-5")
+  assert.equal(savedProvider.cost?.template?.modelId, "claude-sonnet-4-6")
 })
 
 test("RuleFormPage keeps applied summary stable when stored template prices differ from current catalog", () => {
@@ -949,11 +949,11 @@ test("RuleFormPage keeps applied summary stable when stored template prices diff
     template: {
       vendorId: "anthropic",
       vendorLabel: "Anthropic",
-      modelId: "claude-sonnet-4-5",
-      modelLabel: "Claude Sonnet 4.5",
-      sourceUrl: "https://platform.claude.com/docs/zh-CN/about-claude/pricing",
-      verifiedAt: "2026-03-29",
-      appliedAt: "2026-03-29T00:00:00.000Z",
+      modelId: "claude-sonnet-4-6",
+      modelLabel: "Claude Sonnet 4.6",
+      sourceUrl: "https://www.anthropic.com/news/claude-sonnet-4-6",
+      verifiedAt: "2026-05-01",
+      appliedAt: "2026-05-01T00:00:00.000Z",
       modifiedAfterApply: false,
     },
   }
@@ -961,7 +961,7 @@ test("RuleFormPage keeps applied summary stable when stored template prices diff
   const harness = createComponentHarness("edit")
   let tree = harness.renderReady()
   let markup = renderToStaticMarkup(tree as React.ReactElement)
-  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.5/)
+  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.6/)
   assert.doesNotMatch(markup, /modified after apply/)
 
   const outputInput = findInputById(tree, "cost-output")
@@ -969,7 +969,7 @@ test("RuleFormPage keeps applied summary stable when stored template prices diff
 
   tree = harness.renderReady()
   markup = renderToStaticMarkup(tree as React.ReactElement)
-  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.5, modified after apply/)
+  assert.match(markup, /Applied Anthropic \/ Claude Sonnet 4.6, modified after apply/)
 })
 
 process.on("exit", () => {

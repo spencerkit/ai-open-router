@@ -12,7 +12,7 @@ test("parseProviderImport parses Codex TOML into a provider draft", () => {
     format: "codex",
     raw: `
 model_provider = "OpenAI"
-model = "gpt-5.4"
+model = "gpt-5.5"
 
 [model_providers.OpenAI]
 name = "OpenAI"
@@ -26,7 +26,7 @@ wire_api = "responses"
     name: "OpenAI",
     protocol: "openai",
     apiAddress: "https://supercodex.space/v1",
-    defaultModel: "gpt-5.4",
+    defaultModel: "gpt-5.5",
   })
 })
 
@@ -57,7 +57,7 @@ test("parseProviderImport parses AOR JSON payload with aliases", () => {
       protocol: "openai",
       base_url: "https://supercodex.space/v1",
       api_key: "sk-123",
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       website: "https://supercodex.space",
     }),
   })
@@ -67,7 +67,7 @@ test("parseProviderImport parses AOR JSON payload with aliases", () => {
     protocol: "openai",
     apiAddress: "https://supercodex.space/v1",
     token: "sk-123",
-    defaultModel: "gpt-5.4",
+    defaultModel: "gpt-5.5",
     website: "https://supercodex.space",
   })
 })
@@ -184,7 +184,7 @@ test("parseProviderImport auto-detects Codex payloads when model_provider and mo
     format: "auto",
     raw: `
 model_provider = "OpenAI"
-model = "gpt-5.4"
+model = "gpt-5.5"
 
 [model_providers.OpenAI]
 name = "OpenAI"
@@ -198,7 +198,7 @@ wire_api = "responses"
     name: "OpenAI",
     protocol: "openai",
     apiAddress: "https://supercodex.space/v1",
-    defaultModel: "gpt-5.4",
+    defaultModel: "gpt-5.5",
   })
 })
 
@@ -207,7 +207,7 @@ test("parseProviderImport auto-detects Codex payloads with quoted model_provider
     format: "auto",
     raw: `
 model_provider = "OpenAI"
-model = "gpt-5.4"
+model = "gpt-5.5"
 
 ["model_providers"."OpenAI"]
 name = "OpenAI"
@@ -221,7 +221,7 @@ wire_api = "responses"
     name: "OpenAI",
     protocol: "openai",
     apiAddress: "https://supercodex.space/v1",
-    defaultModel: "gpt-5.4",
+    defaultModel: "gpt-5.5",
   })
 })
 
@@ -309,7 +309,7 @@ test("applyProviderImportDraft preserves current values when parsed fields are m
     },
     {
       apiAddress: "https://supercodex.space/v1",
-      defaultModel: "gpt-5.4",
+      defaultModel: "gpt-5.5",
     }
   )
 
@@ -319,6 +319,6 @@ test("applyProviderImportDraft preserves current values when parsed fields are m
     token: "keep-me",
     apiAddress: "https://supercodex.space/v1",
     website: "https://existing.example",
-    defaultModel: "gpt-5.4",
+    defaultModel: "gpt-5.5",
   })
 })

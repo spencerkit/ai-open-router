@@ -35,6 +35,16 @@ test("searchBillingTemplates returns detached arrays and exposes a readonly cata
   assert.deepEqual(secondSearch, BILLING_TEMPLATES)
 })
 
+test("catalog includes the latest curated OpenAI and Anthropic flagship templates", () => {
+  const openAiTemplate = findBillingTemplate("openai", "gpt-5.5")
+  const anthropicTemplate = findBillingTemplate("anthropic", "claude-opus-4-7")
+
+  assert.ok(openAiTemplate)
+  assert.equal(openAiTemplate.modelLabel, "GPT-5.5")
+  assert.ok(anthropicTemplate)
+  assert.equal(anthropicTemplate.modelLabel, "Claude Opus 4.7")
+})
+
 test("applyBillingTemplateToCost fills missing official fields with zero for partial templates", () => {
   const template = findBillingTemplate("openai", "gpt-4o")
   assert.ok(template)
@@ -61,7 +71,7 @@ test("applyBillingTemplateToCost fills missing official fields with zero for par
 })
 
 test("applyBillingTemplateToCost overwrites all priced fields for full templates including Anthropic cache mapping", () => {
-  const template = findBillingTemplate("anthropic", "claude-sonnet-4-5")
+  const template = findBillingTemplate("anthropic", "claude-sonnet-4-6")
   assert.ok(template)
 
   const next = applyBillingTemplateToCost(
@@ -83,7 +93,7 @@ test("applyBillingTemplateToCost overwrites all priced fields for full templates
   assert.equal(next.cacheInputPricePerM, 0.3)
   assert.equal(next.cacheOutputPricePerM, 3.75)
   assert.equal(next.template?.vendorId, "anthropic")
-  assert.equal(next.template?.modelId, "claude-sonnet-4-5")
+  assert.equal(next.template?.modelId, "claude-sonnet-4-6")
 })
 
 test("canApplyBillingTemplate returns true for official models that default missing pricing to zero", () => {
@@ -119,7 +129,7 @@ test("applyBillingTemplateToCost applies zero-valued pricing for official placeh
 })
 
 test("doesCostMatchBillingTemplate detects modified pricing against the seeded template", () => {
-  const template = findBillingTemplate("anthropic", "claude-sonnet-4-5")
+  const template = findBillingTemplate("anthropic", "claude-sonnet-4-6")
   assert.ok(template)
 
   assert.equal(

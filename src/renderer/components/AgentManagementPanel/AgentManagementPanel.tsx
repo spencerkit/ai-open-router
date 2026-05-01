@@ -482,7 +482,7 @@ export const AgentManagementPanel: React.FC<Props> = ({ activeGroupId }) => {
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 setFormData({ ...formData, model: e.target.value })
               }
-              placeholder="claude-sonnet-4-5-20250929"
+              placeholder="claude-sonnet-4-6"
             />
           </div>
 
