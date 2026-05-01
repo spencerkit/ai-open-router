@@ -304,6 +304,43 @@ mod tests {
     }
 
     #[test]
+    fn rule_model_costs_defaults_to_empty_when_missing() {
+        let raw = json!({
+            "id": "provider-1",
+            "name": "OpenAI",
+            "protocol": "openai",
+            "token": "sk-test",
+            "apiAddress": "https://api.openai.com",
+            "models": ["gpt-5.5", "gpt-5.4"],
+            "quota": {
+                "enabled": false,
+                "provider": "custom",
+                "endpoint": "",
+                "method": "GET",
+                "useRuleToken": true,
+                "customToken": "",
+                "authHeader": "Authorization",
+                "authScheme": "Bearer",
+                "customHeaders": {},
+                "unitType": "percentage",
+                "lowThresholdPercent": 10,
+                "response": {}
+            },
+            "cost": {
+                "enabled": false,
+                "inputPricePerM": 0.0,
+                "outputPricePerM": 0.0,
+                "cacheInputPricePerM": 0.0,
+                "cacheOutputPricePerM": 0.0,
+                "currency": "USD"
+            }
+        });
+
+        let rule: Rule = serde_json::from_value(raw).expect("rule should deserialize");
+        assert!(rule.model_costs.is_empty());
+    }
+
+    #[test]
     /// Performs default config validates.
     fn default_config_validates() {
         let cfg = default_config();
