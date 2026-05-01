@@ -181,6 +181,75 @@ function createConfig(): ProxyConfig {
   }
 }
 
+function createDefaultEmptyCostConfig(): ProxyConfig {
+  return {
+    server: {
+      host: "0.0.0.0",
+      port: 8899,
+      authEnabled: false,
+      localBearerToken: "",
+    },
+    compat: {
+      strictMode: false,
+      textToolCallFallbackEnabled: true,
+      headerPassthroughEnabled: true,
+    },
+    logging: {
+      captureBody: false,
+    },
+    ui: {
+      theme: "light",
+      locale: "en-US",
+      localeMode: "auto",
+      launchOnStartup: false,
+      autoStartServer: true,
+      closeToTray: true,
+      quotaAutoRefreshMinutes: 5,
+      autoUpdateEnabled: true,
+    },
+    remoteGit: {
+      enabled: false,
+      repoUrl: "",
+      token: "",
+      branch: "main",
+    },
+    providers: [
+      {
+        id: "provider-default-empty-cost",
+        name: "Provider Default Empty Cost",
+        protocol: "openai",
+        token: "secret",
+        apiAddress: "https://example.com/v1",
+        models: ["gpt-4.1"],
+        quota: {
+          enabled: false,
+          provider: "",
+          endpoint: "",
+          method: "GET",
+          useRuleToken: false,
+          customToken: "",
+          authHeader: "Authorization",
+          authScheme: "Bearer",
+          customHeaders: {},
+          unitType: "percentage",
+          lowThresholdPercent: 20,
+          response: {},
+        },
+        cost: {
+          enabled: false,
+          inputPricePerM: 0,
+          outputPricePerM: 0,
+          cacheInputPricePerM: 0,
+          cacheOutputPricePerM: 0,
+          currency: "USD",
+          template: null,
+        },
+      },
+    ],
+    groups: [],
+  }
+}
+
 test("normalizeConfig migrates legacy provider cost and prunes stale modelCosts entries", () => {
   const { __testNormalizeConfig } = loadProxyActions()
   const normalized = __testNormalizeConfig(createConfig())
@@ -199,4 +268,11 @@ test("normalizeConfig migrates legacy provider cost and prunes stale modelCosts 
     }),
   })
   assert.ok(!(" claude-sonnet-4 " in (normalized.providers?.[1]?.modelCosts ?? {})))
+})
+
+test("normalizeConfig does not synthesize modelCosts for default empty legacy cost", () => {
+  const { __testNormalizeConfig } = loadProxyActions()
+  const normalized = __testNormalizeConfig(createDefaultEmptyCostConfig())
+
+  assert.equal(normalized.providers?.[0]?.modelCosts, undefined)
 })

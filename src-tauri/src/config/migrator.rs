@@ -197,6 +197,9 @@ fn migrate_legacy_provider_cost(provider: &mut Value) {
     let Some(cost) = provider_obj.get("cost").cloned() else {
         return;
     };
+    if !is_meaningfully_configured_legacy_cost(&cost) {
+        return;
+    }
 
     let Some(models) = provider_obj.get("models").and_then(Value::as_array) else {
         return;
@@ -228,6 +231,45 @@ fn migrate_legacy_provider_cost(provider: &mut Value) {
     for model in declared_models {
         model_costs_obj.entry(model).or_insert_with(|| cost.clone());
     }
+}
+
+fn is_meaningfully_configured_legacy_cost(cost: &Value) -> bool {
+    let Some(cost_obj) = cost.as_object() else {
+        return false;
+    };
+
+    cost_obj
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || cost_obj
+            .get("inputPricePerM")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+            != 0.0
+        || cost_obj
+            .get("outputPricePerM")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+            != 0.0
+        || cost_obj
+            .get("cacheInputPricePerM")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+            != 0.0
+        || cost_obj
+            .get("cacheOutputPricePerM")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+            != 0.0
+        || cost_obj
+            .get("currency")
+            .and_then(Value::as_str)
+            .unwrap_or("USD")
+            != "USD"
+        || cost_obj
+            .get("template")
+            .is_some_and(|template| !template.is_null())
 }
 
 #[cfg(test)]
@@ -451,5 +493,33 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    fn migrate_provider_cost_does_not_create_model_costs_for_default_empty_cost() {
+        let migrated = migrate_config(json!({
+            "configVersion": 4,
+            "providers": [
+                {
+                    "id": "provider-top-level",
+                    "name": "provider-top-level",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1", "gpt-4o-mini"],
+                    "cost": {
+                        "enabled": false,
+                        "inputPricePerM": 0.0,
+                        "outputPricePerM": 0.0,
+                        "cacheInputPricePerM": 0.0,
+                        "cacheOutputPricePerM": 0.0,
+                        "currency": "USD"
+                    }
+                }
+            ]
+        }))
+        .expect("migration should succeed");
+
+        assert!(migrated["providers"][0].get("modelCosts").is_none());
     }
 }

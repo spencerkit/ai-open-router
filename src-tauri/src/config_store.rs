@@ -6,6 +6,7 @@ use crate::config::migrator::migrate_config;
 use crate::config::schema::normalize_config;
 use crate::models::{
     default_config, default_group_failover_config, validate_config, Group, ProxyConfig, Rule,
+    RuleCostConfig,
 };
 use chrono::Utc;
 use rusqlite::{params, Connection};
@@ -414,7 +415,7 @@ fn normalize_provider_for_storage(mut provider: Rule) -> Rule {
             .entry(trimmed_model.to_string())
             .or_insert(cost);
     }
-    if normalized_model_costs.is_empty() {
+    if normalized_model_costs.is_empty() && is_meaningfully_configured_legacy_cost(&provider.cost) {
         for model in &provider.models {
             let trimmed_model = model.trim();
             if trimmed_model.is_empty() {
@@ -425,6 +426,16 @@ fn normalize_provider_for_storage(mut provider: Rule) -> Rule {
     }
     provider.model_costs = normalized_model_costs;
     provider
+}
+
+fn is_meaningfully_configured_legacy_cost(cost: &RuleCostConfig) -> bool {
+    cost.enabled
+        || cost.input_price_per_m != 0.0
+        || cost.output_price_per_m != 0.0
+        || cost.cache_input_price_per_m != 0.0
+        || cost.cache_output_price_per_m != 0.0
+        || cost.currency != "USD"
+        || cost.template.is_some()
 }
 
 /// Allocates a non-conflicting provider id for a conflicting provider payload.
@@ -1361,5 +1372,20 @@ mod tests {
         assert!(normalized.providers[0].model_costs.contains_key("gpt-4o-mini"));
         assert!(!normalized.providers[0].model_costs.contains_key(" gpt-4o-mini "));
         assert!(!normalized.providers[0].model_costs.contains_key(" stale-model "));
+    }
+
+    #[test]
+    fn normalize_config_for_storage_does_not_backfill_default_empty_legacy_cost() {
+        let mut provider = sample_provider("p-default-empty-cost");
+        provider.models = vec!["gpt-4o-mini".to_string()];
+        provider.cost = default_rule_cost_config();
+        provider.model_costs = HashMap::new();
+
+        let mut cfg = default_config();
+        cfg.providers = vec![provider];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert!(normalized.providers[0].model_costs.is_empty());
     }
 }

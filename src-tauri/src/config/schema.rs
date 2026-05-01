@@ -4,7 +4,8 @@
 
 use crate::config::migrator::CURRENT_CONFIG_VERSION;
 use crate::domain::entities::{
-    CompatConfig, LoggingConfig, ProxyConfig, ProxyMetrics, RemoteGitConfig, ServerConfig, UiConfig,
+    CompatConfig, LoggingConfig, ProxyConfig, ProxyMetrics, RemoteGitConfig, RuleCostConfig,
+    ServerConfig, UiConfig,
 };
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
@@ -361,7 +362,7 @@ fn normalize_provider_model_costs(
             .entry(trimmed_model.to_string())
             .or_insert(cost);
     }
-    if normalized_model_costs.is_empty() {
+    if normalized_model_costs.is_empty() && is_meaningfully_configured_legacy_cost(&provider.cost) {
         for model in &provider.models {
             let trimmed_model = model.trim();
             if trimmed_model.is_empty() {
@@ -372,6 +373,16 @@ fn normalize_provider_model_costs(
     }
     provider.model_costs = normalized_model_costs;
     provider
+}
+
+fn is_meaningfully_configured_legacy_cost(cost: &RuleCostConfig) -> bool {
+    cost.enabled
+        || cost.input_price_per_m != 0.0
+        || cost.output_price_per_m != 0.0
+        || cost.cache_input_price_per_m != 0.0
+        || cost.cache_output_price_per_m != 0.0
+        || cost.currency != "USD"
+        || cost.template.is_some()
 }
 
 #[cfg(test)]
@@ -514,5 +525,65 @@ mod tests {
         assert!(normalized.providers[0].model_costs.contains_key("gpt-4.1"));
         assert!(!normalized.providers[0].model_costs.contains_key(" gpt-4.1 "));
         assert!(!normalized.providers[0].model_costs.contains_key(" stale "));
+    }
+
+    #[test]
+    fn normalize_config_does_not_backfill_default_empty_legacy_cost() {
+        let normalized = normalize_config(json!({
+            "configVersion": CURRENT_CONFIG_VERSION,
+            "server": {
+                "host": "0.0.0.0",
+                "port": 8899,
+                "authEnabled": false,
+                "localBearerToken": ""
+            },
+            "compat": {
+                "strictMode": false,
+                "textToolCallFallbackEnabled": true,
+                "headerPassthroughEnabled": true
+            },
+            "logging": {
+                "captureBody": false
+            },
+            "ui": {
+                "theme": "light",
+                "locale": "en-US",
+                "localeMode": "auto",
+                "launchOnStartup": false,
+                "autoStartServer": true,
+                "closeToTray": true,
+                "quotaAutoRefreshMinutes": 5,
+                "autoUpdateEnabled": true
+            },
+            "remoteGit": {
+                "enabled": false,
+                "repoUrl": "",
+                "token": "",
+                "branch": "main"
+            },
+            "providers": [
+                {
+                    "id": "provider-1",
+                    "name": "provider-1",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1"],
+                    "cost": {
+                        "enabled": false,
+                        "inputPricePerM": 0.0,
+                        "outputPricePerM": 0.0,
+                        "cacheInputPricePerM": 0.0,
+                        "cacheOutputPricePerM": 0.0,
+                        "currency": "USD"
+                    }
+                }
+            ],
+            "groups": []
+        }))
+        .expect("normalize config should succeed");
+
+        assert_eq!(normalized.providers.len(), 1);
+        assert!(normalized.providers[0].model_costs.is_empty());
     }
 }

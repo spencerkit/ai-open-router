@@ -65,6 +65,22 @@ function trimAndDedupModels(models: string[] | null | undefined): string[] {
   return normalized
 }
 
+function isMeaningfullyConfiguredLegacyCost(
+  cost: Provider["cost"]
+): cost is NonNullable<Provider["cost"]> {
+  if (!cost) return false
+
+  return (
+    cost.enabled === true ||
+    cost.inputPricePerM !== 0 ||
+    cost.outputPricePerM !== 0 ||
+    cost.cacheInputPricePerM !== 0 ||
+    cost.cacheOutputPricePerM !== 0 ||
+    (cost.currency ?? "USD") !== "USD" ||
+    cost.template != null
+  )
+}
+
 function normalizeProvider(provider: Provider): Provider {
   const models = trimAndDedupModels(provider.models)
   const validModels = new Set(models)
@@ -80,10 +96,13 @@ function normalizeProvider(provider: Provider): Provider {
         []
       )
     : []
+  const legacyCost = isMeaningfullyConfiguredLegacyCost(provider.cost) ? provider.cost : undefined
   const normalizedModelCosts =
     normalizedModelCostsEntries.length > 0
       ? Object.fromEntries(normalizedModelCostsEntries)
-      : Object.fromEntries(models.map(model => [model, provider.cost]).filter(([, cost]) => cost))
+      : legacyCost
+        ? Object.fromEntries(models.map(model => [model, legacyCost]))
+        : {}
 
   return {
     ...provider,
