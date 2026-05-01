@@ -167,7 +167,7 @@ function createConfig(): ProxyConfig {
           cacheOutputPricePerM: 0,
         }),
         modelCosts: {
-          "claude-sonnet-4": createCost({
+          " claude-sonnet-4 ": createCost({
             inputPricePerM: 3,
             outputPricePerM: 15,
             cacheInputPricePerM: 0,
@@ -198,4 +198,5 @@ test("normalizeConfig migrates legacy provider cost and prunes stale modelCosts 
       cacheOutputPricePerM: 0,
     }),
   })
+  assert.ok(!(" claude-sonnet-4 " in (normalized.providers?.[1]?.modelCosts ?? {})))
 })

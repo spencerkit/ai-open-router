@@ -68,11 +68,22 @@ function trimAndDedupModels(models: string[] | null | undefined): string[] {
 function normalizeProvider(provider: Provider): Provider {
   const models = trimAndDedupModels(provider.models)
   const validModels = new Set(models)
-  const normalizedModelCosts = provider.modelCosts
-    ? Object.fromEntries(
-        Object.entries(provider.modelCosts).filter(([model]) => validModels.has(model.trim()))
+  const normalizedModelCostsEntries = provider.modelCosts
+    ? Object.entries(provider.modelCosts).reduce<Array<[string, NonNullable<Provider["cost"]>]>>(
+        (entries, [model, cost]) => {
+          const trimmedModel = model.trim()
+          if (!trimmedModel || !validModels.has(trimmedModel)) return entries
+          if (entries.some(([existingModel]) => existingModel === trimmedModel)) return entries
+          entries.push([trimmedModel, cost])
+          return entries
+        },
+        []
       )
-    : Object.fromEntries(models.map(model => [model, provider.cost]).filter(([, cost]) => cost))
+    : []
+  const normalizedModelCosts =
+    normalizedModelCostsEntries.length > 0
+      ? Object.fromEntries(normalizedModelCostsEntries)
+      : Object.fromEntries(models.map(model => [model, provider.cost]).filter(([, cost]) => cost))
 
   return {
     ...provider,

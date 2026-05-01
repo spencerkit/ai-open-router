@@ -404,9 +404,26 @@ fn normalize_provider_for_storage(mut provider: Rule) -> Rule {
         .map(|model| model.trim().to_string())
         .filter(|model| !model.is_empty())
         .collect();
-    provider
-        .model_costs
-        .retain(|model, _| valid_models.contains(model.trim()));
+    let mut normalized_model_costs = HashMap::new();
+    for (model, cost) in std::mem::take(&mut provider.model_costs) {
+        let trimmed_model = model.trim();
+        if trimmed_model.is_empty() || !valid_models.contains(trimmed_model) {
+            continue;
+        }
+        normalized_model_costs
+            .entry(trimmed_model.to_string())
+            .or_insert(cost);
+    }
+    if normalized_model_costs.is_empty() {
+        for model in &provider.models {
+            let trimmed_model = model.trim();
+            if trimmed_model.is_empty() {
+                continue;
+            }
+            normalized_model_costs.insert(trimmed_model.to_string(), provider.cost.clone());
+        }
+    }
+    provider.model_costs = normalized_model_costs;
     provider
 }
 
@@ -1324,5 +1341,25 @@ mod tests {
         assert_eq!(normalized.providers[0].model_costs.len(), 1);
         assert!(normalized.providers[0].model_costs.contains_key("gpt-4o-mini"));
         assert!(!normalized.providers[0].model_costs.contains_key("stale-model"));
+    }
+
+    #[test]
+    fn normalize_config_for_storage_canonicalizes_trimmed_model_cost_keys() {
+        let mut provider = sample_provider("p-with-whitespace-model-cost");
+        provider.models = vec!["gpt-4o-mini".to_string()];
+        provider.model_costs = HashMap::from([
+            (" gpt-4o-mini ".to_string(), default_rule_cost_config()),
+            (" stale-model ".to_string(), default_rule_cost_config()),
+        ]);
+
+        let mut cfg = default_config();
+        cfg.providers = vec![provider];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].model_costs.len(), 1);
+        assert!(normalized.providers[0].model_costs.contains_key("gpt-4o-mini"));
+        assert!(!normalized.providers[0].model_costs.contains_key(" gpt-4o-mini "));
+        assert!(!normalized.providers[0].model_costs.contains_key(" stale-model "));
     }
 }
