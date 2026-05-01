@@ -16,6 +16,10 @@ test("searchBillingTemplates matches vendor, model, and alias text", () => {
     true
   )
   assert.equal(
+    searchBillingTemplates("gpt-5.3-codex").some(item => item.modelId === "gpt-5.3-codex"),
+    true
+  )
+  assert.equal(
     searchBillingTemplates("claude sonnet").some(item => item.vendorId === "anthropic"),
     true
   )
@@ -37,10 +41,13 @@ test("searchBillingTemplates returns detached arrays and exposes a readonly cata
 
 test("catalog includes the latest curated OpenAI and Anthropic flagship templates", () => {
   const openAiTemplate = findBillingTemplate("openai", "gpt-5.5")
+  const openAiCodexTemplate = findBillingTemplate("openai", "gpt-5.3-codex")
   const anthropicTemplate = findBillingTemplate("anthropic", "claude-opus-4-7")
 
   assert.ok(openAiTemplate)
   assert.equal(openAiTemplate.modelLabel, "GPT-5.5")
+  assert.ok(openAiCodexTemplate)
+  assert.equal(openAiCodexTemplate.modelLabel, "GPT-5.3-Codex")
   assert.ok(anthropicTemplate)
   assert.equal(anthropicTemplate.modelLabel, "Claude Opus 4.7")
 })

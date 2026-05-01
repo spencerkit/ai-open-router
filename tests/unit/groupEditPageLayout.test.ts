@@ -607,7 +607,7 @@ test("applies template routes by appending missing request models", () => {
   assert.match(markup, /gpt-5\.4/)
   assert.match(markup, /gpt-5\.4-mini/)
   assert.match(markup, /gpt-5\.3-codex/)
-  assert.match(markup, /gpt-5\.3-codex-spark/)
+  assert.match(markup, /gpt-5\.2/)
 })
 
 test("rejects submission when routing table has no default route", async () => {

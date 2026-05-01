@@ -27,7 +27,7 @@ export const ROUTING_TEMPLATES: RoutingTemplate[] = [
       { requestModel: "gpt-5.4", targetModel: "gpt-5.4" },
       { requestModel: "gpt-5.4-mini", targetModel: "gpt-5.4-mini" },
       { requestModel: "gpt-5.3-codex", targetModel: "gpt-5.3-codex" },
-      { requestModel: "gpt-5.3-codex-spark", targetModel: "gpt-5.3-codex-spark" },
+      { requestModel: "gpt-5.2", targetModel: "gpt-5.2" },
     ],
   },
   {
