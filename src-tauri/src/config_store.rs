@@ -271,6 +271,7 @@ fn normalize_groups_and_providers(
     let mut provider_map: HashMap<String, Rule> = HashMap::new();
     let mut provider_order: Vec<String> = Vec::new();
     for provider in providers {
+        let provider = normalize_provider_for_storage(provider);
         let provider_id = provider.id.trim().to_string();
         if provider_id.is_empty() {
             continue;
@@ -310,6 +311,7 @@ fn normalize_groups_and_providers(
         let mut group_provider_id_remap: HashMap<String, String> = HashMap::new();
         if let Some(providers) = &group.providers {
             for provider in providers {
+                let provider = normalize_provider_for_storage(provider.clone());
                 let provider_id = provider.id.trim().to_string();
                 if provider_id.is_empty() {
                     continue;
@@ -320,7 +322,7 @@ fn normalize_groups_and_providers(
                 if let Some(existing_provider) = provider_map.get(&provider_id) {
                     let existing_json =
                         serde_json::to_string(existing_provider).unwrap_or_default();
-                    let incoming_json = serde_json::to_string(provider).unwrap_or_default();
+                    let incoming_json = serde_json::to_string(&provider).unwrap_or_default();
                     if existing_json != incoming_json {
                         let next_provider_id =
                             alloc_unique_provider_id(&provider_id, &provider_map);
@@ -393,6 +395,19 @@ fn normalize_groups_and_providers(
         .collect();
 
     (normalized_groups, normalized_providers)
+}
+
+fn normalize_provider_for_storage(mut provider: Rule) -> Rule {
+    let valid_models: HashSet<String> = provider
+        .models
+        .iter()
+        .map(|model| model.trim().to_string())
+        .filter(|model| !model.is_empty())
+        .collect();
+    provider
+        .model_costs
+        .retain(|model, _| valid_models.contains(model.trim()));
+    provider
 }
 
 /// Allocates a non-conflicting provider id for a conflicting provider payload.
@@ -1290,5 +1305,24 @@ mod tests {
         let normalized = normalize_config_for_storage(cfg).expect("normalize config");
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].id, "p-with-models");
+    }
+
+    #[test]
+    fn normalize_config_for_storage_prunes_model_costs_not_declared_in_provider_models() {
+        let mut provider = sample_provider("p-with-stale-model-cost");
+        provider.models = vec!["gpt-4o-mini".to_string()];
+        provider.model_costs = HashMap::from([
+            ("gpt-4o-mini".to_string(), default_rule_cost_config()),
+            ("stale-model".to_string(), default_rule_cost_config()),
+        ]);
+
+        let mut cfg = default_config();
+        cfg.providers = vec![provider];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].model_costs.len(), 1);
+        assert!(normalized.providers[0].model_costs.contains_key("gpt-4o-mini"));
+        assert!(!normalized.providers[0].model_costs.contains_key("stale-model"));
     }
 }

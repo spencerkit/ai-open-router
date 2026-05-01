@@ -53,6 +53,35 @@ let statusRefreshInFlight = false
 
 const quotaKey = (groupId: string, providerId: string) => `${groupId}:${providerId}`
 
+function trimAndDedupModels(models: string[] | null | undefined): string[] {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const model of models ?? []) {
+    const trimmed = model?.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  }
+  return normalized
+}
+
+function normalizeProvider(provider: Provider): Provider {
+  const models = trimAndDedupModels(provider.models)
+  const validModels = new Set(models)
+  const normalizedModelCosts = provider.modelCosts
+    ? Object.fromEntries(
+        Object.entries(provider.modelCosts).filter(([model]) => validModels.has(model.trim()))
+      )
+    : Object.fromEntries(models.map(model => [model, provider.cost]).filter(([, cost]) => cost))
+
+  return {
+    ...provider,
+    models,
+    ...(Object.keys(normalizedModelCosts).length > 0 ? { modelCosts: normalizedModelCosts } : {}),
+    ...(Object.keys(normalizedModelCosts).length === 0 ? { modelCosts: undefined } : {}),
+  }
+}
+
 function createDefaultConfig(): ProxyConfig {
   return {
     server: {
@@ -116,7 +145,7 @@ function normalizeConfig(config: ProxyConfig | null | undefined): ProxyConfig {
   const dedupedProviderMap = new Map<string, Provider>()
   for (const provider of safeConfig.providers ?? []) {
     if (!provider?.id?.trim()) continue
-    dedupedProviderMap.set(provider.id, { ...provider })
+    dedupedProviderMap.set(provider.id, normalizeProvider(provider))
   }
   const normalizedProviders = [...dedupedProviderMap.values()]
   return {
@@ -134,6 +163,8 @@ function normalizeConfig(config: ProxyConfig | null | undefined): ProxyConfig {
     groups: (safeConfig.groups ?? []).map(group => normalizeGroup(group)),
   }
 }
+
+export const __testNormalizeConfig = normalizeConfig
 
 function buildSaveConfigPayload(config: ProxyConfig): ProxyConfig {
   const globalProviderMap = new Map<string, Provider>()

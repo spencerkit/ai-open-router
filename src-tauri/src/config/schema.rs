@@ -7,6 +7,7 @@ use crate::domain::entities::{
     CompatConfig, LoggingConfig, ProxyConfig, ProxyMetrics, RemoteGitConfig, ServerConfig, UiConfig,
 };
 use serde::Deserialize;
+use std::collections::HashSet;
 
 /// Performs default config version.
 pub fn default_config_version() -> u32 {
@@ -166,6 +167,14 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
                 if g.routing_table.is_empty() && g.provider_ids.is_none() && g.providers.is_none() {
                     g.routing_table = Vec::new();
                 }
+                if let Some(providers) = g.providers.take() {
+                    g.providers = Some(
+                        providers
+                            .into_iter()
+                            .map(normalize_provider_model_costs)
+                            .collect(),
+                    );
+                }
                 g
             })
             .collect();
@@ -183,7 +192,7 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
                 if p.models.is_empty() {
                     p.models = Vec::new();
                 }
-                p
+                normalize_provider_model_costs(p)
             })
             .collect();
         normalized
@@ -331,4 +340,19 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
         providers,
         groups,
     })
+}
+
+fn normalize_provider_model_costs(
+    mut provider: crate::domain::entities::Rule,
+) -> crate::domain::entities::Rule {
+    let valid_models: HashSet<String> = provider
+        .models
+        .iter()
+        .map(|model| model.trim().to_string())
+        .filter(|model| !model.is_empty())
+        .collect();
+    provider
+        .model_costs
+        .retain(|model, _| valid_models.contains(model.trim()));
+    provider
 }

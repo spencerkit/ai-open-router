@@ -167,11 +167,63 @@ fn migrate_v4_to_v5(mut root: Value) -> Value {
 
     // Filter out providers that lack models.
     if let Some(providers) = obj.get_mut("providers").and_then(Value::as_array_mut) {
+        migrate_legacy_provider_costs(providers);
         providers.retain(|p| p.get("models").is_some());
+    }
+
+    if let Some(groups) = obj.get_mut("groups").and_then(Value::as_array_mut) {
+        for group in groups {
+            if let Some(providers) = group.get_mut("providers").and_then(Value::as_array_mut) {
+                migrate_legacy_provider_costs(providers);
+            }
+        }
     }
 
     obj.insert("configVersion".to_string(), Value::Number(4u64.into()));
     root
+}
+
+fn migrate_legacy_provider_costs(providers: &mut [Value]) {
+    for provider in providers {
+        migrate_legacy_provider_cost(provider);
+    }
+}
+
+fn migrate_legacy_provider_cost(provider: &mut Value) {
+    let Some(provider_obj) = provider.as_object_mut() else {
+        return;
+    };
+
+    let Some(cost) = provider_obj.get("cost").cloned() else {
+        return;
+    };
+
+    let Some(models) = provider_obj.get("models").and_then(Value::as_array) else {
+        return;
+    };
+
+    let declared_models: Vec<String> = models
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .map(ToOwned::to_owned)
+        .collect();
+    if declared_models.is_empty() {
+        return;
+    }
+
+    let model_costs = provider_obj
+        .entry("modelCosts".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Some(model_costs_obj) = model_costs.as_object_mut() else {
+        *model_costs = Value::Object(Map::new());
+        return migrate_legacy_provider_cost(provider);
+    };
+
+    for model in declared_models {
+        model_costs_obj.entry(model).or_insert_with(|| cost.clone());
+    }
 }
 
 #[cfg(test)]
@@ -249,5 +301,101 @@ mod tests {
         assert_eq!(migrated["configVersion"], 5);
         assert_eq!(migrated["ui"]["autoStartServer"], true);
         assert_eq!(migrated["ui"]["autoUpdateEnabled"], true);
+    }
+
+    #[test]
+    fn migrate_provider_cost_to_model_costs_for_all_models() {
+        let cost = json!({
+            "enabled": true,
+            "inputPricePerM": 1.25,
+            "outputPricePerM": 6.5,
+            "cacheInputPricePerM": 0.5,
+            "cacheOutputPricePerM": 0.25,
+            "currency": "USD"
+        });
+
+        let migrated = migrate_config(json!({
+            "configVersion": 4,
+            "providers": [
+                {
+                    "id": "provider-top-level",
+                    "name": "provider-top-level",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1", "gpt-4o-mini"],
+                    "cost": cost
+                }
+            ],
+            "groups": [
+                {
+                    "id": "group-1",
+                    "name": "Group 1",
+                    "routingTable": [],
+                    "providers": [
+                        {
+                            "id": "provider-embedded",
+                            "name": "provider-embedded",
+                            "protocol": "openai",
+                            "token": "secret",
+                            "apiAddress": "https://example.com/v1",
+                            "models": ["claude-sonnet-4", "claude-opus-4"],
+                            "cost": {
+                                "enabled": true,
+                                "inputPricePerM": 3.0,
+                                "outputPricePerM": 15.0,
+                                "cacheInputPricePerM": 0.0,
+                                "cacheOutputPricePerM": 0.0,
+                                "currency": "CNY"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }))
+        .expect("migration should succeed");
+
+        assert_eq!(
+            migrated["providers"][0]["modelCosts"],
+            json!({
+                "gpt-4.1": {
+                    "enabled": true,
+                    "inputPricePerM": 1.25,
+                    "outputPricePerM": 6.5,
+                    "cacheInputPricePerM": 0.5,
+                    "cacheOutputPricePerM": 0.25,
+                    "currency": "USD"
+                },
+                "gpt-4o-mini": {
+                    "enabled": true,
+                    "inputPricePerM": 1.25,
+                    "outputPricePerM": 6.5,
+                    "cacheInputPricePerM": 0.5,
+                    "cacheOutputPricePerM": 0.25,
+                    "currency": "USD"
+                }
+            })
+        );
+        assert_eq!(
+            migrated["groups"][0]["providers"][0]["modelCosts"],
+            json!({
+                "claude-sonnet-4": {
+                    "enabled": true,
+                    "inputPricePerM": 3.0,
+                    "outputPricePerM": 15.0,
+                    "cacheInputPricePerM": 0.0,
+                    "cacheOutputPricePerM": 0.0,
+                    "currency": "CNY"
+                },
+                "claude-opus-4": {
+                    "enabled": true,
+                    "inputPricePerM": 3.0,
+                    "outputPricePerM": 15.0,
+                    "cacheInputPricePerM": 0.0,
+                    "cacheOutputPricePerM": 0.0,
+                    "currency": "CNY"
+                }
+            })
+        );
     }
 }
