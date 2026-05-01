@@ -213,6 +213,10 @@ fn migrate_legacy_provider_cost(provider: &mut Value) {
         return;
     }
 
+    if provider_obj.get("modelCosts").is_some() {
+        return;
+    }
+
     let model_costs = provider_obj
         .entry("modelCosts".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
@@ -394,6 +398,56 @@ mod tests {
                     "cacheInputPricePerM": 0.0,
                     "cacheOutputPricePerM": 0.0,
                     "currency": "CNY"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn migrate_provider_cost_does_not_backfill_when_model_costs_already_exist() {
+        let migrated = migrate_config(json!({
+            "configVersion": 4,
+            "providers": [
+                {
+                    "id": "provider-top-level",
+                    "name": "provider-top-level",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1", "gpt-4o-mini"],
+                    "cost": {
+                        "enabled": true,
+                        "inputPricePerM": 1.25,
+                        "outputPricePerM": 6.5,
+                        "cacheInputPricePerM": 0.5,
+                        "cacheOutputPricePerM": 0.25,
+                        "currency": "USD"
+                    },
+                    "modelCosts": {
+                        "gpt-4.1": {
+                            "enabled": true,
+                            "inputPricePerM": 10.0,
+                            "outputPricePerM": 20.0,
+                            "cacheInputPricePerM": 1.0,
+                            "cacheOutputPricePerM": 2.0,
+                            "currency": "EUR"
+                        }
+                    }
+                }
+            ]
+        }))
+        .expect("migration should succeed");
+
+        assert_eq!(
+            migrated["providers"][0]["modelCosts"],
+            json!({
+                "gpt-4.1": {
+                    "enabled": true,
+                    "inputPricePerM": 10.0,
+                    "outputPricePerM": 20.0,
+                    "cacheInputPricePerM": 1.0,
+                    "cacheOutputPricePerM": 2.0,
+                    "currency": "EUR"
                 }
             })
         );
