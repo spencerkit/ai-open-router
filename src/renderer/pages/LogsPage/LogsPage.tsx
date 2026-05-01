@@ -143,6 +143,21 @@ function formatDelta(delta: number): string {
   return `${delta > 0 ? "+" : "-"}${text.replace(/\.0$/, "")}%`
 }
 
+function buildStatsRefreshPayload(input: {
+  hours: number
+  ruleKeys: string[]
+  enableComparison: boolean
+  selectedModel: string
+}) {
+  return {
+    hours: input.hours,
+    ruleKeys: input.ruleKeys,
+    dimension: "rule" as const,
+    enableComparison: input.enableComparison,
+    ...(input.selectedModel === "all" ? {} : { model: input.selectedModel }),
+  }
+}
+
 /**
  * LogsPage Component
  * Request log viewer page
@@ -160,6 +175,7 @@ export const LogsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<"all" | LogEntry["status"]>("all")
   const [selectedProviderId, setSelectedProviderId] = useState("all")
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
+  const [selectedModel, setSelectedModel] = useState("all")
   const [groupSearchValue, setGroupSearchValue] = useState("")
   const [groupDropdownOpen, setGroupDropdownOpen] = useState(false)
   const [hoursFilter, setHoursFilter] = useState<number>(24)
@@ -222,6 +238,14 @@ export const LogsPage: React.FC = () => {
     }
     return map
   }, [providerOptions])
+
+  const providerModels = useMemo(() => {
+    if (selectedProviderId === "all") return []
+    const provider = (config?.providers ?? []).find(item => item.id === selectedProviderId)
+    return [...new Set((provider?.models ?? []).map(model => model.trim()).filter(Boolean))].sort(
+      (a, b) => a.localeCompare(b)
+    )
+  }, [config?.providers, selectedProviderId])
 
   const groupOptions = useMemo(() => {
     return (config?.groups ?? []).map(group => ({
@@ -309,6 +333,16 @@ export const LogsPage: React.FC = () => {
   }, [providerOptionsById, selectedProviderId])
 
   useEffect(() => {
+    if (selectedProviderId === "all") {
+      if (selectedModel !== "all") setSelectedModel("all")
+      return
+    }
+    if (selectedModel !== "all" && !providerModels.includes(selectedModel)) {
+      setSelectedModel("all")
+    }
+  }, [providerModels, selectedModel, selectedProviderId])
+
+  useEffect(() => {
     const validIds = new Set(allGroupIds)
     setSelectedGroupIds(prev => {
       if (!config) {
@@ -328,13 +362,22 @@ export const LogsPage: React.FC = () => {
 
   useEffect(() => {
     if (!hasInitializedGroupSelectionRef.current || !refreshPlan.pollStats) return
-    void refreshLogsStats({
-      hours: hoursFilter,
-      ruleKeys: selectedRuleKeys,
-      dimension: "rule",
-      enableComparison,
-    })
-  }, [hoursFilter, refreshLogsStats, selectedRuleKeys, enableComparison, refreshPlan.pollStats])
+    void refreshLogsStats(
+      buildStatsRefreshPayload({
+        hours: hoursFilter,
+        ruleKeys: selectedRuleKeys,
+        enableComparison,
+        selectedModel,
+      })
+    )
+  }, [
+    hoursFilter,
+    refreshLogsStats,
+    selectedRuleKeys,
+    enableComparison,
+    refreshPlan.pollStats,
+    selectedModel,
+  ])
 
   useEffect(() => {
     if (!refreshPlan.pollLogs) return
@@ -352,15 +395,24 @@ export const LogsPage: React.FC = () => {
   useEffect(() => {
     if (!hasInitializedGroupSelectionRef.current || !refreshPlan.pollStats) return
     const timer = window.setInterval(() => {
-      void refreshLogsStats({
-        hours: hoursFilter,
-        ruleKeys: selectedRuleKeys,
-        dimension: "rule",
-        enableComparison,
-      })
+      void refreshLogsStats(
+        buildStatsRefreshPayload({
+          hours: hoursFilter,
+          ruleKeys: selectedRuleKeys,
+          enableComparison,
+          selectedModel,
+        })
+      )
     }, 3000)
     return () => window.clearInterval(timer)
-  }, [hoursFilter, refreshLogsStats, selectedRuleKeys, enableComparison, refreshPlan.pollStats])
+  }, [
+    hoursFilter,
+    refreshLogsStats,
+    selectedRuleKeys,
+    enableComparison,
+    refreshPlan.pollStats,
+    selectedModel,
+  ])
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -442,12 +494,14 @@ export const LogsPage: React.FC = () => {
     try {
       setResettingStats(true)
       await clearLogsStats({ beforeEpochMs })
-      await refreshLogsStats({
-        hours: hoursFilter,
-        ruleKeys: selectedRuleKeys,
-        dimension: "rule",
-        enableComparison,
-      })
+      await refreshLogsStats(
+        buildStatsRefreshPayload({
+          hours: hoursFilter,
+          ruleKeys: selectedRuleKeys,
+          enableComparison,
+          selectedModel,
+        })
+      )
       showToast(t("logs.resetStatsSuccess"), "success")
       setShowResetStatsConfirm(false)
     } catch (error) {
@@ -1163,6 +1217,22 @@ export const LogsPage: React.FC = () => {
                   ))}
                 </select>
               </div>
+              {selectedProviderId !== "all" && providerModels.length > 0 && (
+                <div className={styles.selectWrap}>
+                  <select
+                    className={styles.inlineSelect}
+                    value={selectedModel}
+                    onChange={e => setSelectedModel(e.target.value)}
+                  >
+                    <option value="all">{t("logs.statsModelAll")}</option>
+                    {providerModels.map(model => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className={styles.ruleCombobox} ref={groupComboboxRef}>
                 <input
                   className={styles.inlineInput}
@@ -1277,6 +1347,14 @@ export const LogsPage: React.FC = () => {
                     ? t("logs.statsProviderAll")
                     : providerOptionsById.get(selectedProviderId)?.label || selectedProviderId,
               })}
+              {selectedProviderId !== "all" && (
+                <>
+                  {" · "}
+                  {t("logs.statsModelSelected", {
+                    model: selectedModel === "all" ? t("logs.statsModelAll") : selectedModel,
+                  })}
+                </>
+              )}
               {" · "}
               {isAllGroupsSelected
                 ? t("logs.statsGroupAll")

@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 
 const DEFAULT_HOURS: u32 = 24;
 const MAX_HOURS: u32 = 24 * 90;
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Clone)]
 pub struct StatsStore {
@@ -146,10 +146,10 @@ impl StatsStore {
         let _ = conn.execute(
             "INSERT INTO request_events (
                 ts_epoch_ms, hour, group_id, group_name, rule_id, entry_protocol,
-                downstream_protocol, http_status, errors, input_tokens, output_tokens,
+                downstream_protocol, model, forwarded_model, http_status, errors, input_tokens, output_tokens,
                 cache_read_tokens, cache_write_tokens, duration_ms, total_cost, currency,
                 input_price_snapshot, output_price_snapshot, cache_input_price_snapshot, cache_output_price_snapshot
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
             params![
                 ts.timestamp_millis(),
                 hour,
@@ -158,6 +158,8 @@ impl StatsStore {
                 entry.rule_id,
                 entry.entry_protocol,
                 entry.downstream_protocol,
+                entry.model,
+                entry.forwarded_model,
                 entry.http_status.map(i64::from),
                 errors,
                 input_tokens,
@@ -183,6 +185,7 @@ impl StatsStore {
         rule_key: Option<String>,
         dimension: Option<String>,
         enable_comparison: Option<bool>,
+        model: Option<String>,
     ) -> StatsSummaryResult {
         let requested_hours = hours.unwrap_or(DEFAULT_HOURS).clamp(1, MAX_HOURS);
         let dimension = normalize_dimension(dimension.as_deref());
@@ -199,6 +202,7 @@ impl StatsStore {
         if matches!(selection, RuleSelection::Empty) {
             return empty_summary(dimension, requested_hours, rule_key, normalized_rule_keys);
         }
+        let normalized_model = normalize_model_filter(model.as_deref());
 
         let now = Utc::now();
         let window_start = now - Duration::hours(requested_hours as i64);
@@ -212,8 +216,15 @@ impl StatsStore {
         };
 
         let options = query_rule_options(&guard).unwrap_or_default();
-        let current =
-            aggregate_window(&guard, window_start, now, &selection, dimension).unwrap_or_default();
+        let current = aggregate_window(
+            &guard,
+            window_start,
+            now,
+            &selection,
+            dimension,
+            normalized_model.as_deref(),
+        )
+        .unwrap_or_default();
 
         let (peak_input_tps, peak_output_tps) = compute_peaks(&current.hourly);
         let current_duration_seconds =
@@ -223,28 +234,32 @@ impl StatsStore {
 
         let comparison = if enable_comparison {
             let previous_start = window_start - Duration::hours(requested_hours as i64);
-            aggregate_window(&guard, previous_start, window_start, &selection, dimension)
-                .ok()
-                .map(|previous| {
-                    let previous_duration_seconds =
-                        duration_seconds_metric(previous.total_duration_ms, previous.requests);
-                    ComparisonSummary {
-                        requests_delta_pct: pct_delta(
-                            current.requests as f64,
-                            previous.requests as f64,
-                        ),
-                        errors_delta_pct: pct_delta(current.errors as f64, previous.errors as f64),
-                        total_cost_delta_pct: pct_delta(current.total_cost, previous.total_cost),
-                        input_tps_delta_pct: pct_delta(
-                            input_tps,
-                            token_speed_metric(previous.input_tokens, previous_duration_seconds),
-                        ),
-                        output_tps_delta_pct: pct_delta(
-                            output_tps,
-                            token_speed_metric(previous.output_tokens, previous_duration_seconds),
-                        ),
-                    }
-                })
+            aggregate_window(
+                &guard,
+                previous_start,
+                window_start,
+                &selection,
+                dimension,
+                normalized_model.as_deref(),
+            )
+            .ok()
+            .map(|previous| {
+                let previous_duration_seconds =
+                    duration_seconds_metric(previous.total_duration_ms, previous.requests);
+                ComparisonSummary {
+                    requests_delta_pct: pct_delta(current.requests as f64, previous.requests as f64),
+                    errors_delta_pct: pct_delta(current.errors as f64, previous.errors as f64),
+                    total_cost_delta_pct: pct_delta(current.total_cost, previous.total_cost),
+                    input_tps_delta_pct: pct_delta(
+                        input_tps,
+                        token_speed_metric(previous.input_tokens, previous_duration_seconds),
+                    ),
+                    output_tps_delta_pct: pct_delta(
+                        output_tps,
+                        token_speed_metric(previous.output_tokens, previous_duration_seconds),
+                    ),
+                }
+            })
         } else {
             None
         };
@@ -446,6 +461,8 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
             rule_id TEXT,
             entry_protocol TEXT,
             downstream_protocol TEXT,
+            model TEXT,
+            forwarded_model TEXT,
             http_status INTEGER,
             errors INTEGER NOT NULL DEFAULT 0,
             input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -467,6 +484,9 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
     )
     .map_err(|e| format!("create stats sqlite schema failed: {e}"))?;
 
+    ensure_request_events_column(conn, "model", "TEXT")?;
+    ensure_request_events_column(conn, "forwarded_model", "TEXT")?;
+
     conn.execute(
         "INSERT INTO app_meta(key, value, updated_at)
          VALUES('stats_schema_version', ?1, ?2)
@@ -474,6 +494,29 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         params![SCHEMA_VERSION.to_string(), Utc::now().timestamp_millis()],
     )
     .map_err(|e| format!("upsert stats schema version failed: {e}"))?;
+    Ok(())
+}
+
+fn ensure_request_events_column(
+    conn: &Connection,
+    column_name: &str,
+    column_definition: &str,
+) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(request_events)")
+        .map_err(|e| format!("prepare request_events schema inspection failed: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| format!("inspect request_events schema failed: {e}"))?;
+    if rows.flatten().any(|existing| existing == column_name) {
+        return Ok(());
+    }
+
+    conn.execute(
+        &format!("ALTER TABLE request_events ADD COLUMN {column_name} {column_definition}"),
+        [],
+    )
+    .map_err(|e| format!("add request_events.{column_name} column failed: {e}"))?;
     Ok(())
 }
 
@@ -515,6 +558,7 @@ fn aggregate_window(
     end: DateTime<Utc>,
     selection: &RuleSelection,
     dimension: StatsDimension,
+    model: Option<&str>,
 ) -> Result<WindowAggregate, String> {
     if matches!(selection, RuleSelection::Empty) {
         return Ok(WindowAggregate::default());
@@ -524,7 +568,7 @@ fn aggregate_window(
     let start_ms = start.timestamp_millis();
     let end_ms = end.timestamp_millis();
 
-    let (filter_sql, mut params_values) = build_rule_filter(selection);
+    let (filter_sql, mut params_values) = build_filters(selection, model);
     let hourly_sql = format!(
         "SELECT hour,
                 COUNT(*) AS requests,
@@ -697,29 +741,51 @@ fn aggregate_window(
     Ok(aggregate)
 }
 
-/// Builds rule filter.
-fn build_rule_filter(selection: &RuleSelection) -> (String, Vec<SqlValue>) {
+/// Builds query filters.
+fn build_filters(selection: &RuleSelection, model: Option<&str>) -> (String, Vec<SqlValue>) {
+    let mut clauses: Vec<String> = Vec::new();
+    let mut values: Vec<SqlValue> = Vec::new();
+    let mut next_index = 3;
+
     match selection {
-        RuleSelection::All => (String::new(), vec![]),
-        RuleSelection::Empty => (" AND 1 = 0".to_string(), vec![]),
+        RuleSelection::All => {}
+        RuleSelection::Empty => clauses.push("1 = 0".to_string()),
         RuleSelection::Selected(set) => {
             let mut keys: Vec<String> = set.iter().cloned().collect();
             keys.sort();
             let mut placeholders = Vec::with_capacity(keys.len());
-            let mut values = Vec::with_capacity(keys.len());
-            for (index, key) in keys.iter().enumerate() {
-                placeholders.push(format!("?{}", index + 3));
-                values.push(SqlValue::Text(key.clone()));
+            for key in keys {
+                placeholders.push(format!("?{next_index}"));
+                values.push(SqlValue::Text(key));
+                next_index += 1;
             }
-            (
-                format!(
-                    " AND (COALESCE(group_id, '') || '::' || COALESCE(rule_id, '')) IN ({})",
-                    placeholders.join(", ")
-                ),
-                values,
-            )
+            clauses.push(format!(
+                "(COALESCE(group_id, '') || '::' || COALESCE(rule_id, '')) IN ({})",
+                placeholders.join(", ")
+            ));
         }
     }
+
+    if let Some(value) = model {
+        clauses.push(format!(
+            "COALESCE(NULLIF(TRIM(forwarded_model), ''), NULLIF(TRIM(model), '')) = ?{next_index}"
+        ));
+        values.push(SqlValue::Text(value.to_string()));
+    }
+
+    if clauses.is_empty() {
+        (String::new(), values)
+    } else {
+        (format!(" AND {}", clauses.join(" AND ")), values)
+    }
+}
+
+fn normalize_model_filter(model: Option<&str>) -> Option<String> {
+    let value = model?.trim();
+    if value.is_empty() || value == "all" {
+        return None;
+    }
+    Some(value.to_string())
 }
 
 /// Performs empty summary.
@@ -1019,6 +1085,8 @@ mod tests {
         hour: &str,
         group_id: &str,
         rule_id: &str,
+        model: Option<&str>,
+        forwarded_model: Option<&str>,
         errors: i64,
         input_tokens: i64,
         output_tokens: i64,
@@ -1029,15 +1097,17 @@ mod tests {
         let conn = store.conn.lock().expect("stats sqlite lock should succeed");
         conn.execute(
             "INSERT INTO request_events (
-                ts_epoch_ms, hour, group_id, group_name, rule_id, errors,
+                ts_epoch_ms, hour, group_id, group_name, rule_id, model, forwarded_model, errors,
                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_cost
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 ts_epoch_ms,
                 hour,
                 group_id,
                 "Group One",
                 rule_id,
+                model,
+                forwarded_model,
                 errors,
                 input_tokens,
                 output_tokens,
@@ -1060,6 +1130,8 @@ mod tests {
             &success_hour,
             "g1",
             "rule-a",
+            None,
+            None,
             0,
             120,
             80,
@@ -1076,6 +1148,8 @@ mod tests {
             &error_hour,
             "g1",
             "rule-a",
+            None,
+            None,
             1,
             999,
             999,
@@ -1100,5 +1174,80 @@ mod tests {
         assert_eq!(item.hourly.len(), 1);
         assert_eq!(item.hourly[0].requests, 1);
         assert_eq!(item.hourly[0].tokens, 200);
+    }
+
+    #[test]
+    fn summarize_filters_by_selected_model_using_forwarded_model_first() {
+        let store = new_test_store();
+
+        let direct_ts = Utc::now() - Duration::minutes(45);
+        let direct_hour = normalize_hour(&direct_ts.to_rfc3339()).expect("hour should normalize");
+        insert_event(
+            &store,
+            direct_ts.timestamp_millis(),
+            &direct_hour,
+            "g1",
+            "rule-a",
+            Some("gpt-5.5"),
+            None,
+            0,
+            120,
+            30,
+            0,
+            0,
+            1.2,
+        );
+
+        let forwarded_ts = Utc::now() - Duration::minutes(35);
+        let forwarded_hour =
+            normalize_hour(&forwarded_ts.to_rfc3339()).expect("hour should normalize");
+        insert_event(
+            &store,
+            forwarded_ts.timestamp_millis(),
+            &forwarded_hour,
+            "g1",
+            "rule-a",
+            Some("gpt-5.4"),
+            Some("gpt-5.5"),
+            0,
+            80,
+            20,
+            0,
+            0,
+            0.8,
+        );
+
+        let other_ts = Utc::now() - Duration::minutes(25);
+        let other_hour = normalize_hour(&other_ts.to_rfc3339()).expect("hour should normalize");
+        insert_event(
+            &store,
+            other_ts.timestamp_millis(),
+            &other_hour,
+            "g1",
+            "rule-a",
+            Some("claude-4.7"),
+            None,
+            0,
+            999,
+            111,
+            0,
+            0,
+            9.99,
+        );
+
+        let summary = store.summarize(
+            Some(24),
+            Some(vec!["g1::rule-a".to_string()]),
+            None,
+            Some("rule".to_string()),
+            Some(false),
+            Some("gpt-5.5".to_string()),
+        );
+
+        assert_eq!(summary.requests, 2);
+        assert_eq!(summary.errors, 0);
+        assert_eq!(summary.input_tokens, 200);
+        assert_eq!(summary.output_tokens, 50);
+        assert!((summary.total_cost - 2.0).abs() < f64::EPSILON);
     }
 }

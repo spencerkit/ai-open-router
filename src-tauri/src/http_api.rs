@@ -915,6 +915,7 @@ struct LogsStatsSummaryQuery {
     dimension: Option<String>,
     #[serde(rename = "enableComparison")]
     enable_comparison: Option<bool>,
+    model: Option<String>,
 }
 
 fn deserialize_rule_keys<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
@@ -955,6 +956,7 @@ async fn logs_stats_summary(
         query.rule_key,
         query.dimension,
         query.enable_comparison,
+        query.model,
     );
     Ok(Json(result))
 }

@@ -275,6 +275,7 @@ export const refreshLogsStatsAction = action<
     ruleKey?: string
     dimension?: StatsDimension
     enableComparison?: boolean
+    model?: string
   },
   Promise<void>
 >(async (store, payload) => {
@@ -285,7 +286,8 @@ export const refreshLogsStatsAction = action<
       request.ruleKeys,
       request.ruleKey,
       request.dimension,
-      request.enableComparison
+      request.enableComparison,
+      request.model
     )
     store.set(logsStatsState, logsStats)
     store.set(statsErrorState, null)

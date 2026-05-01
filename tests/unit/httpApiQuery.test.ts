@@ -72,7 +72,8 @@ test("httpApi.getLogsStatsSummary serializes ruleKeys as a single CSV query fiel
       ["group-a::provider-1", "group-b::provider-2"],
       undefined,
       "rule",
-      true
+      true,
+      "gpt-5.5"
     )
   } finally {
     restoreHttpHarness()
@@ -81,7 +82,7 @@ test("httpApi.getLogsStatsSummary serializes ruleKeys as a single CSV query fiel
   assert.equal(calls.length, 1)
   assert.equal(
     String(calls[0]?.input),
-    "http://example.test:8899/api/logs/stats/summary?hours=24&ruleKeys=group-a%3A%3Aprovider-1%2Cgroup-b%3A%3Aprovider-2&dimension=rule&enableComparison=true"
+    "http://example.test:8899/api/logs/stats/summary?hours=24&ruleKeys=group-a%3A%3Aprovider-1%2Cgroup-b%3A%3Aprovider-2&dimension=rule&enableComparison=true&model=gpt-5.5"
   )
   assert.equal(calls[0]?.init?.method, "GET")
 })

@@ -572,6 +572,8 @@ export const zhCN = {
     statsRuleFilterLabel: "按 Provider",
     statsProviderAll: "全部 Provider",
     statsProviderSelected: "Provider：{{provider}}",
+    statsModelAll: "全部模型",
+    statsModelSelected: "模型：{{model}}",
     dimensionRule: "Provider",
     dimensionProtocol: "协议",
     dimensionStatus: "状态码",

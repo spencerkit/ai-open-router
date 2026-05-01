@@ -498,7 +498,8 @@ export const httpApi = {
     ruleKeys?: string[],
     ruleKey?: string,
     dimension?: StatsDimension,
-    enableComparison?: boolean
+    enableComparison?: boolean,
+    model?: string
   ): Promise<StatsSummaryResult> {
     const query = buildQuery(
       {
@@ -507,6 +508,7 @@ export const httpApi = {
         ruleKey,
         dimension,
         enableComparison,
+        model,
       },
       {
         arrayFormatByKey: {

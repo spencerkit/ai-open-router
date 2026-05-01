@@ -601,6 +601,8 @@ export const enUS = {
     statsRuleFilterLabel: "Provider",
     statsProviderAll: "All Providers",
     statsProviderSelected: "Provider: {{provider}}",
+    statsModelAll: "All Models",
+    statsModelSelected: "Model: {{model}}",
     dimensionRule: "Provider",
     dimensionProtocol: "Protocol",
     dimensionStatus: "Status",

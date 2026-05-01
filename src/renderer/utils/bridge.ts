@@ -168,11 +168,13 @@ export const bridge = {
     ruleKeys?: string[],
     ruleKey?: string,
     dimension?: Parameters<typeof ipc.getLogsStatsSummary>[3],
-    enableComparison?: boolean
+    enableComparison?: boolean,
+    model?: string
   ) {
     return withBridge(
-      () => httpApi.getLogsStatsSummary(hours, ruleKeys, ruleKey, dimension, enableComparison),
-      () => ipc.getLogsStatsSummary(hours, ruleKeys, ruleKey, dimension, enableComparison)
+      () =>
+        httpApi.getLogsStatsSummary(hours, ruleKeys, ruleKey, dimension, enableComparison, model),
+      () => ipc.getLogsStatsSummary(hours, ruleKeys, ruleKey, dimension, enableComparison, model)
     )
   },
 
