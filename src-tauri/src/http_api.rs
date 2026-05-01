@@ -214,6 +214,10 @@ fn is_management_auth_path(path: &str) -> bool {
         || path.starts_with("/management/auth/")
 }
 
+fn is_management_asset_path(path: &str) -> bool {
+    path == "/management/assets" || path.starts_with("/management/assets/")
+}
+
 fn management_auth_redirect(uri: &Uri) -> Result<Response, ApiError> {
     let mut next = uri.path().to_string();
     if let Some(query) = uri.query() {
@@ -297,12 +301,15 @@ fn management_page_router() -> Router<ServiceState> {
 }
 
 fn management_router(service_state: ServiceState) -> Router<ServiceState> {
-    management_page_router()
-        .layer(middleware::from_fn_with_state(
-            service_state,
-            require_management_page_auth,
-        ))
-        .merge(Router::new().route("/assets/*path", get(asset_handler)))
+    Router::new()
+        .route("/assets/*path", get(asset_handler))
+        .route("/management/assets/*path", get(asset_handler))
+        .merge(
+            management_page_router().layer(middleware::from_fn_with_state(
+                service_state,
+                require_management_page_auth,
+            )),
+        )
 }
 
 fn public_api_router() -> Router<ServiceState> {
@@ -484,7 +491,9 @@ async fn require_management_page_auth(
     request: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    if is_management_auth_path(request.uri().path()) {
+    if is_management_auth_path(request.uri().path())
+        || is_management_asset_path(request.uri().path())
+    {
         return next.run(request).await;
     }
 
@@ -1317,7 +1326,10 @@ mod tests {
     use axum::body::{to_bytes, Body};
     use axum::http::{header, HeaderMap, HeaderValue, Request, StatusCode};
     use std::net::SocketAddr;
+    use std::sync::Mutex;
     use tower::util::ServiceExt;
+
+    static MANAGEMENT_ROOT_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn resolve_request_base_url_prefers_origin() {
@@ -1440,6 +1452,59 @@ mod tests {
 
         let response = app.oneshot(request).await.expect("router should respond");
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn management_auth_relative_asset_path_serves_javascript_module() {
+        let _guard = MANAGEMENT_ROOT_TEST_MUTEX
+            .lock()
+            .expect("management root test mutex should lock");
+        let unique_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time must move forward")
+            .as_nanos();
+        let management_root =
+            std::env::temp_dir().join(format!("oc-proxy-management-root-{unique_id}"));
+        let assets_dir = management_root.join("assets");
+        std::fs::create_dir_all(&assets_dir).expect("test assets dir should be created");
+        std::fs::write(assets_dir.join("app.js"), "console.log('ok');")
+            .expect("test asset should be written");
+        // SAFETY: guarded by a process-wide mutex so concurrent tests cannot race on this env var.
+        unsafe {
+            std::env::set_var("AOR_MANAGEMENT_ROOT", &management_root);
+        }
+
+        let service_state = headless_service_state_for_tests();
+        let shared = service_state
+            .shared_state
+            .clone()
+            .expect("shared state should exist");
+        shared
+            .remote_admin_auth
+            .set_password("Passw0rd!")
+            .expect("password should be configured");
+
+        let app = router(service_state.clone()).with_state(service_state);
+        let request = Request::builder()
+            .uri("/management/assets/app.js")
+            .header(header::HOST, "172.25.226.227:8899")
+            .extension(SocketAddr::from(([172, 25, 226, 10], 45678)))
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("router should respond");
+        // SAFETY: same mutex guard as set_var above.
+        unsafe {
+            std::env::remove_var("AOR_MANAGEMENT_ROOT");
+        }
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("text/javascript")
+        );
     }
 
     #[tokio::test]

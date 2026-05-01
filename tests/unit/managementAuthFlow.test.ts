@@ -144,6 +144,30 @@ test("RequireManagementAuth redirects locked management routes to /auth with nex
   assert.equal(renderedNavigateProps?.replace, true)
 })
 
+test("RequireManagementAuth waits for auth session before rendering protected content", () => {
+  resetHarness()
+  currentLocation = {
+    pathname: "/settings",
+    search: "",
+  }
+
+  const { RequireManagementAuth } = loadManagementAuthModule()
+
+  const markup = renderToStaticMarkup(
+    React.createElement(
+      RequireManagementAuth,
+      {
+        authSession: null,
+        isHeadlessRuntime: true,
+      },
+      React.createElement("div", null, "protected")
+    )
+  )
+
+  assert.equal(markup, "")
+  assert.equal(renderedNavigateProps, null)
+})
+
 test("ManagementAuthPage renders the login form for locked remote sessions", () => {
   resetHarness()
   currentLocation = {
@@ -162,6 +186,28 @@ test("ManagementAuthPage renders the login form for locked remote sessions", () 
   )
 
   assert.ok(renderedLoginProps)
+})
+
+test("ManagementAuthPage waits for auth session before redirecting away from /auth", () => {
+  resetHarness()
+  currentLocation = {
+    pathname: "/auth",
+    search: "?next=%2Fmanagement",
+  }
+
+  const { ManagementAuthPage } = loadManagementAuthModule()
+
+  const markup = renderToStaticMarkup(
+    React.createElement(ManagementAuthPage, {
+      authSession: null,
+      isHeadlessRuntime: true,
+      onSubmit: async () => undefined,
+    })
+  )
+
+  assert.equal(markup, "")
+  assert.equal(renderedNavigateProps, null)
+  assert.equal(renderedLoginProps, null)
 })
 
 test("ManagementAuthPage navigates to sanitized next target after successful login", async () => {

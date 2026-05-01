@@ -56,6 +56,7 @@
     "src/renderer/pages/RuleFormPage/ProviderImportCard.tsx",
     "src/renderer/pages/ServicePage/ProviderList.tsx",
     "src/renderer/pages/LogsPage/LogsPage.tsx",
+    "src/renderer/appViewGuards.ts",
     "src/renderer/utils/agentSourceFormat.ts",
     "src/renderer/utils/authSession.ts",
     "src/renderer/utils/groupFailover.ts",

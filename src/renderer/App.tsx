@@ -36,6 +36,7 @@ import {
   formatServerAddressForDisplay,
   resolveReachableServerBaseUrls,
 } from "@/utils/serverAddress"
+import { shouldShowBootstrapLoading } from "./appViewGuards"
 
 const APP_ACTIONS = [initAction, startServerAction, stopServerAction] as const
 
@@ -210,7 +211,15 @@ const App: React.FC = () => {
     )
   }
 
-  if (bootstrapping && !bootstrapError && !config && !status) {
+  if (
+    shouldShowBootstrapLoading({
+      bootstrapping,
+      bootstrapError,
+      hasConfig: Boolean(config),
+      hasStatus: Boolean(status),
+      canInitialize,
+    })
+  ) {
     console.log("[App] Showing loading screen")
     return (
       <div className="loading-screen">

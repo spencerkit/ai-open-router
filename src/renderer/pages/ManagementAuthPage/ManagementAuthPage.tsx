@@ -65,6 +65,10 @@ export const RequireManagementAuth: React.FC<RequireManagementAuthProps> = ({
 }) => {
   const location = useLocation()
 
+  if (isHeadlessRuntime && authSession === null) {
+    return null
+  }
+
   if (!isManagementLocked(authSession, isHeadlessRuntime)) {
     return <>{children}</>
   }
@@ -80,6 +84,10 @@ export const ManagementAuthPage: React.FC<ManagementAuthPageProps> = ({
 }) => {
   const location = useLocation()
   const navigate = useNavigate()
+
+  if (isHeadlessRuntime && authSession === null) {
+    return null
+  }
 
   if (!isManagementLocked(authSession, isHeadlessRuntime)) {
     const next = sanitizeManagementNextTarget(new URLSearchParams(location.search).get("next"))
