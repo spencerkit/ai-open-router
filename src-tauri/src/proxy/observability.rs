@@ -1096,8 +1096,8 @@ pub(super) fn proxy_error_response(
 mod tests {
     use super::build_cost_snapshot;
     use crate::domain::entities::{
-        default_rule_quota_config, BillingTemplateAttribution, Rule, RuleCostConfig, RuleProtocol,
-        TokenUsage,
+        default_model_costs, default_rule_quota_config, BillingTemplateAttribution, Rule,
+        RuleCostConfig, RuleProtocol, TokenUsage,
     };
     use std::collections::HashMap;
 
@@ -1125,6 +1125,7 @@ mod tests {
                 currency: "USD".to_string(),
                 template: None,
             },
+            model_costs: default_model_costs(),
         };
 
         let rule_with_template = Rule {

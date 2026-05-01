@@ -180,6 +180,7 @@ mod tests {
             header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
             cost: default_rule_cost_config(),
+            model_costs: HashMap::new(),
         }
     }
 

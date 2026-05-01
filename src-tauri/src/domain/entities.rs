@@ -224,6 +224,11 @@ pub fn default_rule_cost_config() -> RuleCostConfig {
     }
 }
 
+/// Performs default model costs.
+pub fn default_model_costs() -> HashMap<String, RuleCostConfig> {
+    HashMap::new()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Rule {
@@ -248,6 +253,8 @@ pub struct Rule {
     pub quota: RuleQuotaConfig,
     #[serde(default = "default_rule_cost_config")]
     pub cost: RuleCostConfig,
+    #[serde(default = "default_model_costs")]
+    pub model_costs: HashMap<String, RuleCostConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

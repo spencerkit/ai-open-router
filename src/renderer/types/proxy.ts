@@ -128,6 +128,7 @@ export interface Rule {
   headerPassthroughDeny?: string[]
   quota: RuleQuotaConfig
   cost?: RuleCostConfig
+  modelCosts?: Record<string, RuleCostConfig>
   // Legacy fields (kept for backward compatibility)
   defaultModel?: string
   modelMappings?: Record<string, string>

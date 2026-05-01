@@ -1634,6 +1634,7 @@ mod tests {
                 header_passthrough_deny: Vec::new(),
                 quota: crate::models::default_rule_quota_config(),
                 cost: crate::models::default_rule_cost_config(),
+                model_costs: std::collections::HashMap::new(),
             }]),
             failover: Some(crate::models::default_group_failover_config()),
         }];

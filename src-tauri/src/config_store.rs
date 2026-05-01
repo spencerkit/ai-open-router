@@ -742,7 +742,8 @@ fn select_records_with_soft_delete_filter(
 mod tests {
     use super::*;
     use crate::domain::entities::{
-        default_rule_cost_config, default_rule_quota_config, RouteEntry, Rule, RuleProtocol,
+        default_model_costs, default_rule_cost_config, default_rule_quota_config, RouteEntry,
+        Rule, RuleProtocol,
     };
     use std::collections::HashMap;
     use uuid::Uuid;
@@ -774,6 +775,7 @@ mod tests {
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
+                model_costs: default_model_costs(),
             }]),
             failover: Some(default_group_failover_config()),
         }
@@ -794,6 +796,7 @@ mod tests {
             header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
             cost: default_rule_cost_config(),
+            model_costs: default_model_costs(),
         }
     }
 
@@ -1279,6 +1282,7 @@ mod tests {
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
+                model_costs: default_model_costs(),
             },
             sample_provider("p-with-models"),
         ];
