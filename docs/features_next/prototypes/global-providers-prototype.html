@@ -683,7 +683,7 @@
               .join("")
           : "";
 
-        const empty = !activeGroup || !activeGroup.providerIds.length;
+        const empty = !activeGroup?.providerIds.length;
 
         document.getElementById("view-service").innerHTML = `
           <div class="service-layout">

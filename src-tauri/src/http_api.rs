@@ -209,7 +209,9 @@ fn strip_management_prefix(path: &str) -> &str {
 }
 
 fn is_management_auth_path(path: &str) -> bool {
-    path == "/management/auth" || path == "/management/auth/" || path.starts_with("/management/auth/")
+    path == "/management/auth"
+        || path == "/management/auth/"
+        || path.starts_with("/management/auth/")
 }
 
 fn management_auth_redirect(uri: &Uri) -> Result<Response, ApiError> {
@@ -500,8 +502,9 @@ async fn require_management_page_auth(
         .authenticate_request(request.headers())
     {
         Ok(true) => next.run(request).await,
-        Ok(false) => management_auth_redirect(&request_uri)
-            .unwrap_or_else(|error| error.into_response()),
+        Ok(false) => {
+            management_auth_redirect(&request_uri).unwrap_or_else(|error| error.into_response())
+        }
         Err(message) => ApiError::internal(message).into_response(),
     }
 }
