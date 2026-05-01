@@ -604,9 +604,10 @@ test("applies template routes by appending missing request models", () => {
   const markup = renderToStaticMarkup(tree as React.ReactElement)
 
   assert.match(markup, /gpt-5\.5/)
-  assert.match(markup, /gpt-5-codex/)
+  assert.match(markup, /gpt-5\.4/)
   assert.match(markup, /gpt-5\.4-mini/)
-  assert.match(markup, /gpt-5\.4-nano/)
+  assert.match(markup, /gpt-5\.3-codex/)
+  assert.match(markup, /gpt-5\.3-codex-spark/)
 })
 
 test("rejects submission when routing table has no default route", async () => {

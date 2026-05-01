@@ -24,9 +24,10 @@ export const ROUTING_TEMPLATES: RoutingTemplate[] = [
     name: "Codex",
     routes: [
       { requestModel: "gpt-5.5", targetModel: "gpt-5.5" },
-      { requestModel: "gpt-5-codex", targetModel: "gpt-5-codex" },
+      { requestModel: "gpt-5.4", targetModel: "gpt-5.4" },
       { requestModel: "gpt-5.4-mini", targetModel: "gpt-5.4-mini" },
-      { requestModel: "gpt-5.4-nano", targetModel: "gpt-5.4-nano" },
+      { requestModel: "gpt-5.3-codex", targetModel: "gpt-5.3-codex" },
+      { requestModel: "gpt-5.3-codex-spark", targetModel: "gpt-5.3-codex-spark" },
     ],
   },
   {
