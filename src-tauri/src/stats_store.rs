@@ -349,6 +349,38 @@ impl StatsStore {
             totals_map.insert(row.0, (row.1, row.2, row.3, row.4, row.5, row.6));
         }
 
+        let mut currencies_stmt = match guard.prepare(
+            "SELECT rule_id,
+                    COALESCE(NULLIF(TRIM(currency), ''), '') AS currency
+             FROM request_events
+             WHERE ts_epoch_ms >= ?1 AND ts_epoch_ms < ?2
+               AND group_id = ?3
+               AND rule_id IS NOT NULL
+               AND errors = 0
+               AND total_cost IS NOT NULL",
+        ) {
+            Ok(stmt) => stmt,
+            Err(_) => return vec![],
+        };
+
+        let mut currencies_by_rule: BTreeMap<String, HashSet<String>> = BTreeMap::new();
+        if let Ok(rows) =
+            currencies_stmt.query_map(params![start_ms, end_ms, normalized_group_id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+        {
+            for row in rows.flatten() {
+                let currency = row.1.trim();
+                if currency.is_empty() {
+                    continue;
+                }
+                currencies_by_rule
+                    .entry(row.0)
+                    .or_default()
+                    .insert(currency.to_string());
+            }
+        }
+
         let mut hourly_stmt = match guard.prepare(
             "SELECT rule_id, hour,
                     COUNT(*) AS requests,
@@ -412,6 +444,9 @@ impl StatsStore {
                         cache_write_tokens,
                         tokens: input_tokens + output_tokens,
                         total_cost,
+                        cost_currency: resolve_single_currency(
+                            &currencies_by_rule.remove(&rule_id).unwrap_or_default(),
+                        ),
                         hourly: points.remove(&rule_id).unwrap_or_default(),
                     }
                 },
@@ -1093,13 +1128,14 @@ mod tests {
         cache_read_tokens: i64,
         cache_write_tokens: i64,
         total_cost: f64,
+        currency: Option<&str>,
     ) {
         let conn = store.conn.lock().expect("stats sqlite lock should succeed");
         conn.execute(
             "INSERT INTO request_events (
                 ts_epoch_ms, hour, group_id, group_name, rule_id, model, forwarded_model, errors,
-                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_cost
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_cost, currency
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 ts_epoch_ms,
                 hour,
@@ -1114,6 +1150,7 @@ mod tests {
                 cache_read_tokens,
                 cache_write_tokens,
                 total_cost,
+                currency,
             ],
         )
         .expect("insert stats event should succeed");
@@ -1138,6 +1175,7 @@ mod tests {
             25,
             5,
             1.75,
+            Some("USD"),
         );
 
         let error_ts = Utc::now() - Duration::minutes(20);
@@ -1156,6 +1194,7 @@ mod tests {
             99,
             99,
             9.99,
+            Some("USD"),
         );
 
         let items = store.summarize_rule_cards("g1", Some(24));
@@ -1171,9 +1210,57 @@ mod tests {
         assert_eq!(item.cache_read_tokens, 25);
         assert_eq!(item.cache_write_tokens, 5);
         assert!((item.total_cost - 1.75).abs() < f64::EPSILON);
+        assert_eq!(item.cost_currency.as_deref(), Some("USD"));
         assert_eq!(item.hourly.len(), 1);
         assert_eq!(item.hourly[0].requests, 1);
         assert_eq!(item.hourly[0].tokens, 200);
+    }
+
+    #[test]
+    fn summarize_rule_cards_resolves_mixed_cost_currency() {
+        let store = new_test_store();
+
+        let usd_ts = Utc::now() - Duration::minutes(30);
+        let usd_hour = normalize_hour(&usd_ts.to_rfc3339()).expect("hour should normalize");
+        insert_event(
+            &store,
+            usd_ts.timestamp_millis(),
+            &usd_hour,
+            "g1",
+            "rule-a",
+            None,
+            None,
+            0,
+            120,
+            80,
+            0,
+            0,
+            1.75,
+            Some("USD"),
+        );
+
+        let eur_ts = Utc::now() - Duration::minutes(20);
+        let eur_hour = normalize_hour(&eur_ts.to_rfc3339()).expect("hour should normalize");
+        insert_event(
+            &store,
+            eur_ts.timestamp_millis(),
+            &eur_hour,
+            "g1",
+            "rule-a",
+            None,
+            None,
+            0,
+            60,
+            40,
+            0,
+            0,
+            0.88,
+            Some("EUR"),
+        );
+
+        let items = store.summarize_rule_cards("g1", Some(24));
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].cost_currency.as_deref(), Some("MIXED"));
     }
 
     #[test]
@@ -1196,6 +1283,7 @@ mod tests {
             0,
             0,
             1.2,
+            Some("USD"),
         );
 
         let forwarded_ts = Utc::now() - Duration::minutes(35);
@@ -1215,6 +1303,7 @@ mod tests {
             0,
             0,
             0.8,
+            Some("USD"),
         );
 
         let other_ts = Utc::now() - Duration::minutes(25);
@@ -1233,6 +1322,7 @@ mod tests {
             0,
             0,
             9.99,
+            Some("USD"),
         );
 
         let summary = store.summarize(

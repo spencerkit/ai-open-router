@@ -5,7 +5,11 @@ import { test } from "node:test"
 import React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 
-import type { Provider, ProviderModelHealthSnapshot } from "../../src/renderer/types"
+import type {
+  Provider,
+  ProviderModelHealthSnapshot,
+  RuleCardStatsItem,
+} from "../../src/renderer/types"
 
 const Module = require("node:module") as {
   _resolveFilename: (
@@ -51,6 +55,7 @@ const translations: Record<string, string> = {
   "servicePage.miniRequests": "Req",
   "servicePage.miniInputTokens": "Input",
   "servicePage.miniOutputTokens": "Output",
+  "logs.costMixedCurrency": "Mixed Currency",
   "providersPage.models": "Models",
   "providersPage.duplicateProvider": "Duplicate Provider",
   "providersPage.deleteProvider": "Delete Provider",
@@ -234,12 +239,14 @@ function renderProviderList(input: {
 function renderCatalogProviderList(input: {
   providers: Provider[]
   providerHealthByProviderId?: Record<string, ProviderModelHealthSnapshot | null | undefined>
+  cardStatsByProviderId?: Record<string, RuleCardStatsItem | undefined>
 }) {
   const { ProviderList } = loadCatalogProviderList()
   return renderToStaticMarkup(
     React.createElement(ProviderList, {
       providers: input.providers,
       providerHealthByProviderId: input.providerHealthByProviderId,
+      cardStatsByProviderId: input.cardStatsByProviderId,
       onDelete: () => {},
       onEdit: () => {},
       onAdd: () => {},
@@ -338,6 +345,48 @@ test("keeps provider name, protocol, status, default model, compact API address,
   assert.match(markup, />Models:/)
   assert.match(markup, />gpt-4\.1<\/span>/)
   assert.match(markup, />gpt-4o-mini<\/span>/)
+})
+
+test("catalog cards show mixed currency when aggregated request costs disagree", () => {
+  const markup = renderCatalogProviderList({
+    providers: [
+      createProvider({
+        id: "provider-a",
+        name: "Provider A",
+        protocol: "openai",
+        apiAddress: "https://api.openai.com/v1/responses?foo=bar",
+        defaultModel: "gpt-4.1-mini",
+        models: ["gpt-4.1-mini", "glm-4.5"],
+        cost: {
+          enabled: true,
+          inputPricePerM: 0,
+          outputPricePerM: 0,
+          cacheInputPricePerM: 0,
+          cacheOutputPricePerM: 0,
+          currency: "USD",
+          template: null,
+        },
+      }),
+    ],
+    cardStatsByProviderId: {
+      "provider-a": {
+        groupId: "dev",
+        ruleId: "provider-a",
+        requests: 2,
+        inputTokens: 100,
+        outputTokens: 200,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        tokens: 300,
+        totalCost: 12.34,
+        costCurrency: "MIXED",
+        hourly: [],
+      },
+    },
+  })
+
+  assert.match(markup, /Mixed Currency/)
+  assert.doesNotMatch(markup, /\$12\.34/)
 })
 
 test("shows testing badge while a provider test is in progress", () => {

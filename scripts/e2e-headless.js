@@ -414,6 +414,12 @@ async function run() {
     const providerName = "E2E Provider"
     const providerModel = "gpt-4o-mini"
     const providerExtraModel = "gpt-4.1-mini"
+    const providerModelInputPricePerM = 1000
+    const providerModelOutputPricePerM = 2000
+    const providerExtraModelInputPricePerM = 3000
+    const providerExtraModelOutputPricePerM = 4000
+    const totalCostBeforeFilterText = "$0.1920"
+    const totalCostAfterFilterText = "$0.1320"
     const remoteEntryUrl = `${remoteBaseUrl}/oc/${groupId}`
     const remoteEntryUrlV1 = `${remoteEntryUrl}/v1`
 
@@ -521,8 +527,14 @@ async function run() {
       await modelInput.waitFor({ timeout: 15000 })
       await modelInput.fill(providerModel)
       await page.locator('xpath=//button[normalize-space()="Add Model"]').click()
+      await page.locator(`xpath=//button[@aria-label="Remove ${providerModel}"]`).waitFor({
+        timeout: 15000,
+      })
       await modelInput.fill(providerExtraModel)
       await page.locator('xpath=//button[normalize-space()="Add Model"]').click()
+      await page.locator(`xpath=//button[@aria-label="Remove ${providerExtraModel}"]`).waitFor({
+        timeout: 15000,
+      })
 
       await safeClick(page, selectors.createProviderButton)
       await page.locator(providerNameSelector).waitFor({ timeout: 15000 })
@@ -530,6 +542,54 @@ async function run() {
       await page.locator(`xpath=//span[normalize-space()="${providerExtraModel}"]`).waitFor({
         timeout: 15000,
       })
+
+      const currentConfig = await requestJson("GET", `${baseUrl}/api/config`)
+      const nextProviders = (currentConfig?.providers ?? []).map(provider =>
+        provider.name === providerName
+          ? {
+              ...provider,
+              cost: {
+                enabled: true,
+                inputPricePerM: 0,
+                outputPricePerM: 0,
+                cacheInputPricePerM: 0,
+                cacheOutputPricePerM: 0,
+                currency: "USD",
+                template: null,
+              },
+              modelCosts: {
+                ...(provider.modelCosts ?? {}),
+                [providerModel]: {
+                  enabled: true,
+                  inputPricePerM: providerModelInputPricePerM,
+                  outputPricePerM: providerModelOutputPricePerM,
+                  cacheInputPricePerM: 0,
+                  cacheOutputPricePerM: 0,
+                  currency: "USD",
+                  template: null,
+                },
+                [providerExtraModel]: {
+                  enabled: true,
+                  inputPricePerM: providerExtraModelInputPricePerM,
+                  outputPricePerM: providerExtraModelOutputPricePerM,
+                  cacheInputPricePerM: 0,
+                  cacheOutputPricePerM: 0,
+                  currency: "USD",
+                  template: null,
+                },
+              },
+            }
+          : provider
+      )
+      await requestJson("PUT", `${baseUrl}/api/config`, {
+        nextConfig: {
+          ...currentConfig,
+          providers: nextProviders,
+        },
+      })
+      await page.reload({ waitUntil: "domcontentloaded" })
+      await page.locator('xpath=//h2[normalize-space()="Providers"]').waitFor({ timeout: 15000 })
+      await page.locator(providerNameSelector).waitFor({ timeout: 15000 })
     }
 
     lastStep = "service-routing"
@@ -631,6 +691,23 @@ async function run() {
     const savedProvider = savedConfig?.providers?.find(provider => provider.name === providerName)
     if (!savedProvider?.id) {
       throw new Error("saved config missing e2e provider")
+    }
+    if (!savedProvider?.cost?.enabled) {
+      throw new Error("saved provider should enable billing")
+    }
+    if (
+      savedProvider?.modelCosts?.[providerModel]?.inputPricePerM !== providerModelInputPricePerM ||
+      savedProvider?.modelCosts?.[providerModel]?.outputPricePerM !== providerModelOutputPricePerM
+    ) {
+      throw new Error(`saved provider missing billing for ${providerModel}`)
+    }
+    if (
+      savedProvider?.modelCosts?.[providerExtraModel]?.inputPricePerM !==
+        providerExtraModelInputPricePerM ||
+      savedProvider?.modelCosts?.[providerExtraModel]?.outputPricePerM !==
+        providerExtraModelOutputPricePerM
+    ) {
+      throw new Error(`saved provider missing billing for ${providerExtraModel}`)
     }
 
     lastStep = "verify-entry-url"
@@ -761,11 +838,18 @@ async function run() {
     await safeClick(page, selectors.logsNav)
     await page.locator(selectors.logsTitle).waitFor({ timeout: 15000 })
     await waitForMetricValue(page, "Total Requests", 2)
+    await waitForMetricValue(page, "Total Cost", totalCostBeforeFilterText)
 
     const totalRequestsBeforeFilter = await readMetricValue(page, "Total Requests")
     if (totalRequestsBeforeFilter !== "2") {
       throw new Error(
         `expected 2 total requests before stats filtering, got ${totalRequestsBeforeFilter}`
+      )
+    }
+    const totalCostBeforeFilter = await readMetricValue(page, "Total Cost")
+    if (totalCostBeforeFilter !== totalCostBeforeFilterText) {
+      throw new Error(
+        `expected ${totalCostBeforeFilterText} total cost before stats filtering, got ${totalCostBeforeFilter}`
       )
     }
 
@@ -803,12 +887,24 @@ async function run() {
         `stats summary should return exactly 1 request for ${providerExtraModel} (got: ${filteredSummary?.requests})`
       )
     }
+    if (Math.abs((filteredSummary?.totalCost ?? 0) - 0.132) > 0.000001) {
+      throw new Error(
+        `stats summary should return total cost 0.132 for ${providerExtraModel} (got: ${filteredSummary?.totalCost})`
+      )
+    }
     await waitForMetricValue(page, "Total Requests", 1)
+    await waitForMetricValue(page, "Total Cost", totalCostAfterFilterText)
 
     const totalRequestsAfterFilter = await readMetricValue(page, "Total Requests")
     if (totalRequestsAfterFilter !== "1") {
       throw new Error(
         `expected 1 total request after stats filtering, got ${totalRequestsAfterFilter}`
+      )
+    }
+    const totalCostAfterFilter = await readMetricValue(page, "Total Cost")
+    if (totalCostAfterFilter !== totalCostAfterFilterText) {
+      throw new Error(
+        `expected ${totalCostAfterFilterText} total cost after stats filtering, got ${totalCostAfterFilter}`
       )
     }
 

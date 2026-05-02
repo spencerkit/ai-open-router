@@ -100,6 +100,14 @@ function resolveCurrencyPrefix(currency?: string): string {
   return `${normalized} `
 }
 
+function formatCostNumber(value: number): string {
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0
+  if (safe === 0) return "0.00"
+  if (safe < 0.0001) return "<0.0001"
+  if (safe < 1) return safe.toFixed(4)
+  return safe.toFixed(2)
+}
+
 function areRuleCardStatsEqual(prev?: RuleCardStatsItem, next?: RuleCardStatsItem): boolean {
   if (prev === next) return true
   if (!prev || !next) return !prev && !next
@@ -110,7 +118,8 @@ function areRuleCardStatsEqual(prev?: RuleCardStatsItem, next?: RuleCardStatsIte
     prev.cacheReadTokens === next.cacheReadTokens &&
     prev.cacheWriteTokens === next.cacheWriteTokens &&
     prev.tokens === next.tokens &&
-    prev.totalCost === next.totalCost
+    prev.totalCost === next.totalCost &&
+    prev.costCurrency === next.costCurrency
   )
 }
 
@@ -135,10 +144,10 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
     const websiteHref = resolveProviderWebsiteHref(provider.website)
     const health = resolveProviderHealthPresentation(healthSnapshot, testing, t)
     const compactApiAddress = formatCompactUrlForDisplay(provider.apiAddress)
-    const formattedCostConsumed = formatCostConsumed(
-      cardStats?.totalCost ?? 0,
-      provider.cost?.currency || "USD"
-    )
+    const formattedCostConsumed =
+      cardStats?.costCurrency === "MIXED"
+        ? `${t("logs.costMixedCurrency")} ${formatCostNumber(cardStats?.totalCost ?? 0)}`
+        : formatCostConsumed(cardStats?.totalCost ?? 0, cardStats?.costCurrency || "USD")
     const aggregatedInputTokens = (cardStats?.inputTokens ?? 0) + (cardStats?.cacheReadTokens ?? 0)
     const aggregatedOutputTokens =
       (cardStats?.outputTokens ?? 0) + (cardStats?.cacheWriteTokens ?? 0)
@@ -325,7 +334,6 @@ const MemoCatalogProviderCard = memo<CatalogProviderCardProps>(
       prev.provider.models?.length === next.provider.models?.length &&
       prev.provider.website === next.provider.website &&
       Boolean(prev.provider.quota?.enabled) === Boolean(next.provider.quota?.enabled) &&
-      (prev.provider.cost?.currency || "USD") === (next.provider.cost?.currency || "USD") &&
       prev.testing === next.testing &&
       prev.quotaLoading === next.quotaLoading &&
       prev.healthSnapshot?.status === next.healthSnapshot?.status &&

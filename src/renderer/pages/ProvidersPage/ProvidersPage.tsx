@@ -41,6 +41,13 @@ const QUOTA_REFRESH_MINUTES_MAX = 1440
 const QUOTA_REFRESH_BATCH_SIZE = 4
 const COPY_SUFFIX = "copy"
 
+function resolveAggregatedCostCurrency(items: RuleCardStatsItem[]): string | null {
+  const currencies = [...new Set(items.map(item => item.costCurrency?.trim()).filter(Boolean))]
+  if (currencies.length === 0) return null
+  if (currencies.length === 1) return currencies[0] ?? null
+  return "MIXED"
+}
+
 function normalizeProviderName(value: string): string {
   return value.trim().toLowerCase()
 }
@@ -97,6 +104,7 @@ function mergeProviderCardStats(
   let cacheWriteTokens = 0
   let tokens = 0
   let totalCost = 0
+  const costCurrency = resolveAggregatedCostCurrency(statsItems)
 
   for (const item of statsItems) {
     requests += item.requests
@@ -137,6 +145,7 @@ function mergeProviderCardStats(
     cacheWriteTokens,
     tokens,
     totalCost,
+    costCurrency,
     hourly,
   }
 }

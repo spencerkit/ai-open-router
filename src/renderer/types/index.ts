@@ -240,6 +240,7 @@ export interface RuleCardStatsItem {
   cacheWriteTokens: number
   tokens: number
   totalCost: number
+  costCurrency?: string | null
   hourly: RuleCardHourlyPoint[]
 }
 

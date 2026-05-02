@@ -602,6 +602,7 @@ pub struct RuleCardStatsItem {
     pub cache_write_tokens: u64,
     pub tokens: u64,
     pub total_cost: f64,
+    pub cost_currency: Option<String>,
     pub hourly: Vec<RuleCardHourlyPoint>,
 }
 
