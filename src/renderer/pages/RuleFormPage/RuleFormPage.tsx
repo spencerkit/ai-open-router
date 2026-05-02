@@ -6,7 +6,7 @@ import { Button, Input, JsonTreeView, Modal, Switch } from "@/components"
 import { useLogs, useTranslation } from "@/hooks"
 import { configState, saveConfigAction, testRuleQuotaDraftAction } from "@/store"
 import type { Provider, ProxyConfig, RuleQuotaSnapshot, RuleQuotaTestResult } from "@/types"
-import type { BillingTemplateAttribution } from "@/types/proxy"
+import type { BillingTemplateAttribution, RuleCostConfig } from "@/types/proxy"
 import {
   applyBillingTemplateToCost,
   canApplyBillingTemplate,
@@ -114,7 +114,7 @@ const formatBillingTemplatePrice = (value: number | undefined, currency: string)
   return `${value} ${currency}`
 }
 
-const resolveAppliedCostFieldValue = (
+const _resolveAppliedCostFieldValue = (
   currentRawValue: string,
   templateValue: number | undefined
 ) => (templateValue === undefined ? currentRawValue : String(templateValue))
@@ -150,6 +150,125 @@ const doesCostMatchTemplateBaseline = (
   current.outputPricePerM === baseline.outputPricePerM &&
   current.cacheInputPricePerM === baseline.cacheInputPricePerM &&
   current.cacheOutputPricePerM === baseline.cacheOutputPricePerM
+
+const DEFAULT_COST_CURRENCY = "USD"
+
+const createDefaultCostDraft = (): RuleCostConfig => ({
+  enabled: true,
+  inputPricePerM: 0,
+  outputPricePerM: 0,
+  cacheInputPricePerM: 0,
+  cacheOutputPricePerM: 0,
+  currency: DEFAULT_COST_CURRENCY,
+  template: null,
+})
+
+const cloneBillingTemplateAttribution = (
+  template: BillingTemplateAttribution | null | undefined
+): BillingTemplateAttribution | null => (template ? { ...template } : null)
+
+const cloneCostDraft = (cost: RuleCostConfig): RuleCostConfig => ({
+  enabled: cost.enabled,
+  inputPricePerM: cost.inputPricePerM,
+  outputPricePerM: cost.outputPricePerM,
+  cacheInputPricePerM: cost.cacheInputPricePerM,
+  cacheOutputPricePerM: cost.cacheOutputPricePerM,
+  currency: cost.currency || DEFAULT_COST_CURRENCY,
+  template: cloneBillingTemplateAttribution(cost.template),
+})
+
+const normalizeModelList = (values: string[]): string[] => {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  }
+
+  return normalized
+}
+
+const isMeaningfullyConfiguredLegacyCost = (
+  cost: RuleCostConfig | undefined | null
+): cost is RuleCostConfig =>
+  !!cost &&
+  (cost.enabled ||
+    cost.inputPricePerM !== 0 ||
+    cost.outputPricePerM !== 0 ||
+    cost.cacheInputPricePerM !== 0 ||
+    cost.cacheOutputPricePerM !== 0 ||
+    (cost.currency || DEFAULT_COST_CURRENCY) !== DEFAULT_COST_CURRENCY ||
+    cost.template != null)
+
+const ensureModelCostDraft = (
+  modelCosts: Record<string, RuleCostConfig>,
+  model: string
+): RuleCostConfig => {
+  const current = modelCosts[model]
+  return current ? cloneCostDraft(current) : createDefaultCostDraft()
+}
+
+const buildEditableModelCosts = (
+  models: string[],
+  provider: Provider | null
+): Record<string, RuleCostConfig> => {
+  const validModels = new Set(models)
+  const normalizedModelCosts: Record<string, RuleCostConfig> = {}
+
+  for (const [rawModel, cost] of Object.entries(provider?.modelCosts ?? {})) {
+    const model = rawModel.trim()
+    if (!model || !validModels.has(model) || normalizedModelCosts[model]) continue
+    normalizedModelCosts[model] = cloneCostDraft(cost)
+  }
+
+  if (Object.keys(normalizedModelCosts).length > 0) {
+    return normalizedModelCosts
+  }
+
+  if (!isMeaningfullyConfiguredLegacyCost(provider?.cost)) {
+    return normalizedModelCosts
+  }
+
+  for (const model of models) {
+    normalizedModelCosts[model] = cloneCostDraft(provider.cost)
+  }
+
+  return normalizedModelCosts
+}
+
+const buildModelCostTemplateBaselines = (
+  modelCosts: Record<string, RuleCostConfig>
+): Record<string, CostTemplateBaseline | null> =>
+  Object.fromEntries(
+    Object.entries(modelCosts).map(([model, cost]) => [
+      model,
+      cost.template
+        ? buildCostTemplateBaseline({
+            currency: cost.currency || DEFAULT_COST_CURRENCY,
+            inputPricePerM: cost.inputPricePerM ?? 0,
+            outputPricePerM: cost.outputPricePerM ?? 0,
+            cacheInputPricePerM: cost.cacheInputPricePerM ?? 0,
+            cacheOutputPricePerM: cost.cacheOutputPricePerM ?? 0,
+          })
+        : null,
+    ])
+  )
+
+const markBillingTemplateModified = (
+  template: BillingTemplateAttribution | null | undefined
+): BillingTemplateAttribution | null => {
+  if (!template || template.modifiedAfterApply) {
+    return cloneBillingTemplateAttribution(template)
+  }
+
+  return {
+    ...template,
+    modifiedAfterApply: true,
+  }
+}
 
 const PROVIDER_IMPORT_ERROR_KEYS: Record<
   ProviderImportParseError["code"],
@@ -335,15 +454,11 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
   const [quotaTestResult, setQuotaTestResult] = useState<RuleQuotaTestResult | null>(null)
   const [quotaTestFingerprint, setQuotaTestFingerprint] = useState<string | null>(null)
   const [costEnabled, setCostEnabled] = useState(false)
-  const [inputPricePerM, setInputPricePerM] = useState("")
-  const [outputPricePerM, setOutputPricePerM] = useState("")
-  const [cacheInputPricePerM, setCacheInputPricePerM] = useState("")
-  const [cacheOutputPricePerM, setCacheOutputPricePerM] = useState("")
-  const [costCurrency, setCostCurrency] = useState("USD")
-  const [costTemplate, setCostTemplate] = useState<BillingTemplateAttribution | null>(null)
-  const [costTemplateBaseline, setCostTemplateBaseline] = useState<CostTemplateBaseline | null>(
-    null
-  )
+  const [selectedBillingModel, setSelectedBillingModel] = useState("")
+  const [modelCostsDraft, setModelCostsDraft] = useState<Record<string, RuleCostConfig>>({})
+  const [modelCostTemplateBaselines, setModelCostTemplateBaselines] = useState<
+    Record<string, CostTemplateBaseline | null>
+  >({})
 
   const [loading, setLoading] = useState(mode === "edit")
   const [errors, setErrors] = useState<{
@@ -387,32 +502,43 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       template =>
         template.vendorId === selectedBillingVendorId && template.modelId === selectedBillingModelId
     ) ?? null
+  const activeBillingModel =
+    selectedBillingModel && models.includes(selectedBillingModel)
+      ? selectedBillingModel
+      : models[0] || ""
+  const currentModelCost = activeBillingModel
+    ? ensureModelCostDraft(modelCostsDraft, activeBillingModel)
+    : createDefaultCostDraft()
   const currentCostBaseline = buildCostTemplateBaseline({
-    currency: costCurrency.trim() || "USD",
-    inputPricePerM: parseCostInputValue(inputPricePerM),
-    outputPricePerM: parseCostInputValue(outputPricePerM),
-    cacheInputPricePerM: parseCostInputValue(cacheInputPricePerM),
-    cacheOutputPricePerM: parseCostInputValue(cacheOutputPricePerM),
+    currency: currentModelCost.currency.trim() || DEFAULT_COST_CURRENCY,
+    inputPricePerM: currentModelCost.inputPricePerM,
+    outputPricePerM: currentModelCost.outputPricePerM,
+    cacheInputPricePerM: currentModelCost.cacheInputPricePerM,
+    cacheOutputPricePerM: currentModelCost.cacheOutputPricePerM,
   })
   const currentCostDraft = {
-    enabled: costEnabled,
-    ...currentCostBaseline,
-    template: costTemplate,
+    ...currentModelCost,
+    currency: currentModelCost.currency.trim() || DEFAULT_COST_CURRENCY,
+    template: cloneBillingTemplateAttribution(currentModelCost.template),
   }
+  const currentCostTemplate = currentCostDraft.template
+  const currentTemplateBaseline = activeBillingModel
+    ? (modelCostTemplateBaselines[activeBillingModel] ?? null)
+    : null
   const billingTemplateMarkedModified =
-    !!costTemplate &&
-    (costTemplate.modifiedAfterApply ||
-      (costTemplateBaseline
-        ? !doesCostMatchTemplateBaseline(currentCostBaseline, costTemplateBaseline)
+    !!currentCostTemplate &&
+    (currentCostTemplate.modifiedAfterApply ||
+      (currentTemplateBaseline
+        ? !doesCostMatchTemplateBaseline(currentCostBaseline, currentTemplateBaseline)
         : false))
-  const billingTemplateSummaryText = costTemplate
+  const billingTemplateSummaryText = currentCostTemplate
     ? t(
         billingTemplateMarkedModified
           ? "ruleForm.billingTemplateSummaryModified"
           : "ruleForm.billingTemplateSummaryApplied",
         {
-          vendor: costTemplate.vendorLabel,
-          model: costTemplate.modelLabel,
+          vendor: currentCostTemplate.vendorLabel,
+          model: currentCostTemplate.modelLabel,
         }
       )
     : t("ruleForm.billingTemplateSummaryNone")
@@ -443,7 +569,8 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setApiAddress(provider.apiAddress)
     setWebsite(provider.website || "")
     setModelMappings(provider.modelMappings || {})
-    setModels(provider.models ?? [])
+    const normalizedModels = normalizeModelList(provider.models ?? [])
+    setModels(normalizedModels)
     setHeaderPassthroughAllowText(formatHeaderPassthroughList(provider.headerPassthroughAllow))
     setHeaderPassthroughDenyText(formatHeaderPassthroughList(provider.headerPassthroughDeny))
 
@@ -462,24 +589,15 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setQuotaUnitPath(readMappingPath(quota?.response?.unit))
     setQuotaResetAtPath(readMappingPath(quota?.response?.resetAt))
     setQuotaLowThresholdPercent(String(quota?.lowThresholdPercent ?? 10))
-    setCostEnabled(!!provider.cost?.enabled)
-    setInputPricePerM(String(provider.cost?.inputPricePerM ?? ""))
-    setOutputPricePerM(String(provider.cost?.outputPricePerM ?? ""))
-    setCacheInputPricePerM(String(provider.cost?.cacheInputPricePerM ?? ""))
-    setCacheOutputPricePerM(String(provider.cost?.cacheOutputPricePerM ?? ""))
-    setCostCurrency(provider.cost?.currency || "USD")
-    setCostTemplate(provider.cost?.template ?? null)
-    setCostTemplateBaseline(
-      provider.cost?.template
-        ? buildCostTemplateBaseline({
-            currency: provider.cost.currency || "USD",
-            inputPricePerM: provider.cost.inputPricePerM ?? 0,
-            outputPricePerM: provider.cost.outputPricePerM ?? 0,
-            cacheInputPricePerM: provider.cost.cacheInputPricePerM ?? 0,
-            cacheOutputPricePerM: provider.cost.cacheOutputPricePerM ?? 0,
-          })
-        : null
+    const nextModelCosts = buildEditableModelCosts(normalizedModels, provider)
+    setCostEnabled(
+      Object.keys(nextModelCosts).length > 0
+        ? true
+        : isMeaningfullyConfiguredLegacyCost(provider.cost)
     )
+    setModelCostsDraft(nextModelCosts)
+    setModelCostTemplateBaselines(buildModelCostTemplateBaselines(nextModelCosts))
+    setSelectedBillingModel(normalizedModels[0] ?? "")
 
     setLoading(false)
   }, [config, group, isEditMode, isGlobalMode, navigate, provider, showToast, t])
@@ -501,6 +619,17 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     if (costEnabled) return
     setShowBillingTemplateModal(false)
   }, [costEnabled])
+
+  useEffect(() => {
+    if (!models.length) {
+      setSelectedBillingModel("")
+      return
+    }
+
+    if (!selectedBillingModel || !models.includes(selectedBillingModel)) {
+      setSelectedBillingModel(models[0])
+    }
+  }, [models, selectedBillingModel])
 
   const resetImportFeedback = () => {
     setImportResult(null)
@@ -570,31 +699,45 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
     setShowImportModal(false)
   }
 
-  const markCostTemplateModified = () => {
-    setCostTemplate((currentTemplate: BillingTemplateAttribution | null) => {
-      if (!currentTemplate || currentTemplate.modifiedAfterApply) {
-        return currentTemplate
-      }
-      return {
-        ...currentTemplate,
-        modifiedAfterApply: true,
-      }
-    })
+  const updateActiveModelCost = (updater: (current: RuleCostConfig) => RuleCostConfig) => {
+    if (!activeBillingModel) return
+
+    setModelCostsDraft(current => ({
+      ...current,
+      [activeBillingModel]: updater(ensureModelCostDraft(current, activeBillingModel)),
+    }))
   }
 
   const handleCostCurrencyChange = (value: string) => {
-    setCostCurrency(value)
-    markCostTemplateModified()
+    updateActiveModelCost(current => ({
+      ...current,
+      currency: value,
+      template: markBillingTemplateModified(current.template),
+    }))
   }
 
   const handleCostFieldChange =
-    (setter: (value: string) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
-      setter(normalizeNumericInput(event.target.value))
-      markCostTemplateModified()
+    (
+      field: keyof Pick<
+        RuleCostConfig,
+        "inputPricePerM" | "outputPricePerM" | "cacheInputPricePerM" | "cacheOutputPricePerM"
+      >
+    ) =>
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const nextValue = normalizeNumericInput(event.target.value)
+      updateActiveModelCost(current => ({
+        ...current,
+        [field]: parseCostInputValue(nextValue),
+        template: markBillingTemplateModified(current.template),
+      }))
     }
 
   const handleBillingTemplateApply = () => {
-    if (!selectedBillingTemplate || !canApplyBillingTemplate(selectedBillingTemplate)) {
+    if (
+      !activeBillingModel ||
+      !selectedBillingTemplate ||
+      !canApplyBillingTemplate(selectedBillingTemplate)
+    ) {
       return
     }
 
@@ -604,45 +747,70 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       new Date().toISOString()
     )
 
-    setCostCurrency(nextCost.currency)
-    setInputPricePerM(
-      resolveAppliedCostFieldValue(inputPricePerM, selectedBillingTemplate.inputPricePerM)
-    )
-    setOutputPricePerM(
-      resolveAppliedCostFieldValue(outputPricePerM, selectedBillingTemplate.outputPricePerM)
-    )
-    setCacheInputPricePerM(
-      resolveAppliedCostFieldValue(cacheInputPricePerM, selectedBillingTemplate.cacheInputPricePerM)
-    )
-    setCacheOutputPricePerM(
-      resolveAppliedCostFieldValue(
-        cacheOutputPricePerM,
-        selectedBillingTemplate.cacheOutputPricePerM
-      )
-    )
-    setCostTemplate(nextCost.template ?? null)
-    setCostTemplateBaseline(
-      buildCostTemplateBaseline({
+    setModelCostsDraft(current => ({
+      ...current,
+      [activeBillingModel]: cloneCostDraft(nextCost),
+    }))
+    setModelCostTemplateBaselines(current => ({
+      ...current,
+      [activeBillingModel]: buildCostTemplateBaseline({
         currency: nextCost.currency,
         inputPricePerM: nextCost.inputPricePerM,
         outputPricePerM: nextCost.outputPricePerM,
         cacheInputPricePerM: nextCost.cacheInputPricePerM,
         cacheOutputPricePerM: nextCost.cacheOutputPricePerM,
-      })
-    )
+      }),
+    }))
     setShowBillingTemplateModal(false)
   }
 
   const handleClearBillingTemplateAttribution = () => {
-    setCostTemplate(null)
-    setCostTemplateBaseline(null)
+    if (!activeBillingModel) return
+
+    updateActiveModelCost(current => ({
+      ...current,
+      template: null,
+    }))
+    setModelCostTemplateBaselines(current => ({
+      ...current,
+      [activeBillingModel]: null,
+    }))
   }
 
   const handleAddModel = () => {
     const trimmed = newModelName.trim()
     if (trimmed && !models.includes(trimmed)) {
-      setModels([...models, trimmed])
+      setModels(previous => [...previous, trimmed])
+      setModelCostsDraft(previous => ({
+        ...previous,
+        [trimmed]: previous[trimmed] ? cloneCostDraft(previous[trimmed]) : createDefaultCostDraft(),
+      }))
+      setModelCostTemplateBaselines(previous => ({
+        ...previous,
+        [trimmed]: previous[trimmed] ?? null,
+      }))
+      if (!selectedBillingModel) {
+        setSelectedBillingModel(trimmed)
+      }
       setNewModelName("")
+    }
+  }
+
+  const handleRemoveModel = (model: string) => {
+    setModels(previous => previous.filter(item => item !== model))
+    setModelCostsDraft(previous => {
+      const next = { ...previous }
+      delete next[model]
+      return next
+    })
+    setModelCostTemplateBaselines(previous => {
+      const next = { ...previous }
+      delete next[model]
+      return next
+    })
+    if (selectedBillingModel === model) {
+      const remainingModels = models.filter(item => item !== model)
+      setSelectedBillingModel(remainingModels[0] ?? "")
     }
   }
 
@@ -853,6 +1021,11 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       resetAtPath: quotaResetAtPath,
     })
 
+    const normalizedModels = normalizeModelList(models)
+    const sanitizedModelCosts = Object.fromEntries(
+      normalizedModels.map(model => [model, ensureModelCostDraft(modelCostsDraft, model)])
+    )
+
     const providerDraft: Provider = {
       ...(provider ?? {}),
       id: isEditMode ? providerId || createStableId() : createStableId(),
@@ -861,8 +1034,8 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       token,
       apiAddress,
       website: website.trim(),
-      defaultModel: models[0] ?? "",
-      models,
+      defaultModel: normalizedModels[0] ?? "",
+      models: normalizedModels,
       modelMappings: Object.fromEntries(
         Object.entries(modelMappings)
           .map(([key, value]) => [key.trim(), value.trim()])
@@ -873,13 +1046,14 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
       quota: quotaConfig,
       cost: {
         enabled: costEnabled,
-        inputPricePerM: parseCostInputValue(inputPricePerM),
-        outputPricePerM: parseCostInputValue(outputPricePerM),
-        cacheInputPricePerM: parseCostInputValue(cacheInputPricePerM),
-        cacheOutputPricePerM: parseCostInputValue(cacheOutputPricePerM),
-        currency: costCurrency.trim() || "USD",
-        template: costTemplate,
+        inputPricePerM: 0,
+        outputPricePerM: 0,
+        cacheInputPricePerM: 0,
+        cacheOutputPricePerM: 0,
+        currency: DEFAULT_COST_CURRENCY,
+        template: null,
       },
+      modelCosts: costEnabled ? sanitizedModelCosts : {},
     }
 
     const currentProviders = config.providers ?? []
@@ -1059,12 +1233,12 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
                 <label htmlFor="provider-models">{t("providersPage.models")}</label>
                 {models.length > 0 && (
                   <div className={styles.modelsTags}>
-                    {models.map((model, index) => (
+                    {models.map((model, _index) => (
                       <span key={model} className={styles.modelTag}>
                         {model}
                         <button
                           type="button"
-                          onClick={() => setModels(models.filter((_, i) => i !== index))}
+                          onClick={() => handleRemoveModel(model)}
                           className={styles.modelTagRemove}
                           aria-label={`Remove ${model}`}
                         >
@@ -1505,115 +1679,158 @@ export const RuleFormPage: React.FC<RuleFormPageProps> = ({ mode }) => {
                 </div>
                 <Switch id="cost-enabled" checked={costEnabled} onChange={setCostEnabled} />
               </div>
-              {costEnabled && (
-                <>
-                  <div className={styles.billingTemplateRow}>
-                    <div className={styles.billingTemplateSummary}>
-                      <strong>{billingTemplateSummaryText}</strong>
-                      {costTemplate?.sourceUrl ? (
-                        <a
-                          className={styles.billingTemplateSource}
-                          href={costTemplate.sourceUrl}
-                          target="_blank"
-                          rel="noreferrer"
+              {costEnabled && activeBillingModel ? (
+                <div className={styles.modelBillingLayout}>
+                  <aside className={styles.modelBillingSidebar}>
+                    {models.map(model => {
+                      const entry = ensureModelCostDraft(modelCostsDraft, model)
+                      const summary = entry.template
+                        ? entry.template.modifiedAfterApply
+                          ? t("ruleForm.billingTemplateSummaryModified", {
+                              vendor: entry.template.vendorLabel,
+                              model: entry.template.modelLabel,
+                            })
+                          : t("ruleForm.billingTemplateSummaryApplied", {
+                              vendor: entry.template.vendorLabel,
+                              model: entry.template.modelLabel,
+                            })
+                        : t("ruleForm.billingTemplateSummaryNone")
+
+                      return (
+                        <button
+                          key={model}
+                          type="button"
+                          className={
+                            model === activeBillingModel
+                              ? styles.modelBillingItemActive
+                              : styles.modelBillingItem
+                          }
+                          onClick={() => setSelectedBillingModel(model)}
                         >
-                          {t("ruleForm.billingTemplateSource")}
-                        </a>
-                      ) : null}
-                    </div>
-                    <div className={styles.billingTemplateActions}>
-                      {costTemplate ? (
+                          <strong>{model}</strong>
+                          <span>{summary}</span>
+                        </button>
+                      )
+                    })}
+                  </aside>
+
+                  <div className={styles.modelBillingDetail}>
+                    <div className={styles.billingTemplateRow}>
+                      <div className={styles.billingTemplateSummary}>
+                        <strong>{billingTemplateSummaryText}</strong>
+                        {currentCostTemplate?.sourceUrl ? (
+                          <a
+                            className={styles.billingTemplateSource}
+                            href={currentCostTemplate.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {t("ruleForm.billingTemplateSource")}
+                          </a>
+                        ) : null}
+                      </div>
+                      <div className={styles.billingTemplateActions}>
+                        {currentCostTemplate ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="small"
+                            onClick={handleClearBillingTemplateAttribution}
+                          >
+                            {t("ruleForm.billingTemplateClear")}
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="default"
                           size="small"
-                          onClick={handleClearBillingTemplateAttribution}
+                          onClick={() => setShowBillingTemplateModal(true)}
                         >
-                          {t("ruleForm.billingTemplateClear")}
+                          {t("ruleForm.billingTemplateOpen")}
                         </Button>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="small"
-                        onClick={() => setShowBillingTemplateModal(true)}
+                      </div>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label htmlFor="cost-currency">{t("ruleForm.costCurrency")}</label>
+                      <select
+                        id="cost-currency"
+                        className={styles.nativeSelect}
+                        value={currentCostDraft.currency}
+                        onChange={e => handleCostCurrencyChange(e.target.value)}
                       >
-                        {t("ruleForm.billingTemplateOpen")}
-                      </Button>
+                        {!COST_CURRENCY_OPTIONS.includes(
+                          currentCostDraft.currency as (typeof COST_CURRENCY_OPTIONS)[number]
+                        ) && (
+                          <option value={currentCostDraft.currency}>
+                            {currentCostDraft.currency}
+                          </option>
+                        )}
+                        {COST_CURRENCY_OPTIONS.map(currency => (
+                          <option key={currency} value={currency}>
+                            {currency}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={styles.dualColumnRow}>
+                      <div className={styles.formGroup}>
+                        <label htmlFor="cost-input">{t("ruleForm.costInputPerM")}</label>
+                        <Input
+                          id="cost-input"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.0001"
+                          value={String(currentCostDraft.inputPricePerM)}
+                          onChange={handleCostFieldChange("inputPricePerM")}
+                        />
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label htmlFor="cost-output">{t("ruleForm.costOutputPerM")}</label>
+                        <Input
+                          id="cost-output"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.0001"
+                          value={String(currentCostDraft.outputPricePerM)}
+                          onChange={handleCostFieldChange("outputPricePerM")}
+                        />
+                      </div>
+                    </div>
+                    <div className={styles.dualColumnRow}>
+                      <div className={styles.formGroup}>
+                        <label htmlFor="cost-cache-input">{t("ruleForm.costCacheInputPerM")}</label>
+                        <Input
+                          id="cost-cache-input"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.0001"
+                          value={String(currentCostDraft.cacheInputPricePerM)}
+                          onChange={handleCostFieldChange("cacheInputPricePerM")}
+                        />
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label htmlFor="cost-cache-output">
+                          {t("ruleForm.costCacheOutputPerM")}
+                        </label>
+                        <Input
+                          id="cost-cache-output"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.0001"
+                          value={String(currentCostDraft.cacheOutputPricePerM)}
+                          onChange={handleCostFieldChange("cacheOutputPricePerM")}
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className={styles.formGroup}>
-                    <label htmlFor="cost-currency">{t("ruleForm.costCurrency")}</label>
-                    <select
-                      id="cost-currency"
-                      className={styles.nativeSelect}
-                      value={costCurrency}
-                      onChange={e => handleCostCurrencyChange(e.target.value)}
-                    >
-                      {!COST_CURRENCY_OPTIONS.includes(
-                        costCurrency as (typeof COST_CURRENCY_OPTIONS)[number]
-                      ) && <option value={costCurrency}>{costCurrency}</option>}
-                      {COST_CURRENCY_OPTIONS.map(currency => (
-                        <option key={currency} value={currency}>
-                          {currency}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className={styles.dualColumnRow}>
-                    <div className={styles.formGroup}>
-                      <label htmlFor="cost-input">{t("ruleForm.costInputPerM")}</label>
-                      <Input
-                        id="cost-input"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.0001"
-                        value={inputPricePerM}
-                        onChange={handleCostFieldChange(setInputPricePerM)}
-                      />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label htmlFor="cost-output">{t("ruleForm.costOutputPerM")}</label>
-                      <Input
-                        id="cost-output"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.0001"
-                        value={outputPricePerM}
-                        onChange={handleCostFieldChange(setOutputPricePerM)}
-                      />
-                    </div>
-                  </div>
-                  <div className={styles.dualColumnRow}>
-                    <div className={styles.formGroup}>
-                      <label htmlFor="cost-cache-input">{t("ruleForm.costCacheInputPerM")}</label>
-                      <Input
-                        id="cost-cache-input"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.0001"
-                        value={cacheInputPricePerM}
-                        onChange={handleCostFieldChange(setCacheInputPricePerM)}
-                      />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label htmlFor="cost-cache-output">{t("ruleForm.costCacheOutputPerM")}</label>
-                      <Input
-                        id="cost-cache-output"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.0001"
-                        value={cacheOutputPricePerM}
-                        onChange={handleCostFieldChange(setCacheOutputPricePerM)}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
+                </div>
+              ) : costEnabled ? (
+                <p className={styles.fieldHint}>{t("ruleForm.billingTemplateNoModelsHint")}</p>
+              ) : null}
             </section>
 
             <div className={styles.formActions}>
