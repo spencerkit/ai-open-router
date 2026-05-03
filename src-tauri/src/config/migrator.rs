@@ -167,11 +167,109 @@ fn migrate_v4_to_v5(mut root: Value) -> Value {
 
     // Filter out providers that lack models.
     if let Some(providers) = obj.get_mut("providers").and_then(Value::as_array_mut) {
+        migrate_legacy_provider_costs(providers);
         providers.retain(|p| p.get("models").is_some());
+    }
+
+    if let Some(groups) = obj.get_mut("groups").and_then(Value::as_array_mut) {
+        for group in groups {
+            if let Some(providers) = group.get_mut("providers").and_then(Value::as_array_mut) {
+                migrate_legacy_provider_costs(providers);
+            }
+        }
     }
 
     obj.insert("configVersion".to_string(), Value::Number(4u64.into()));
     root
+}
+
+fn migrate_legacy_provider_costs(providers: &mut [Value]) {
+    for provider in providers {
+        migrate_legacy_provider_cost(provider);
+    }
+}
+
+fn migrate_legacy_provider_cost(provider: &mut Value) {
+    let Some(provider_obj) = provider.as_object_mut() else {
+        return;
+    };
+
+    let Some(cost) = provider_obj.get("cost").cloned() else {
+        return;
+    };
+    if !is_meaningfully_configured_legacy_cost(&cost) {
+        return;
+    }
+
+    let Some(models) = provider_obj.get("models").and_then(Value::as_array) else {
+        return;
+    };
+
+    let declared_models: Vec<String> = models
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .map(ToOwned::to_owned)
+        .collect();
+    if declared_models.is_empty() {
+        return;
+    }
+
+    if provider_obj.get("modelCosts").is_some() {
+        return;
+    }
+
+    let model_costs = provider_obj
+        .entry("modelCosts".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Some(model_costs_obj) = model_costs.as_object_mut() else {
+        *model_costs = Value::Object(Map::new());
+        return migrate_legacy_provider_cost(provider);
+    };
+
+    for model in declared_models {
+        model_costs_obj.entry(model).or_insert_with(|| cost.clone());
+    }
+}
+
+fn is_meaningfully_configured_legacy_cost(cost: &Value) -> bool {
+    let Some(cost_obj) = cost.as_object() else {
+        return false;
+    };
+
+    cost_obj
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || cost_obj
+            .get("inputPricePerM")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+            != 0.0
+        || cost_obj
+            .get("outputPricePerM")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+            != 0.0
+        || cost_obj
+            .get("cacheInputPricePerM")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+            != 0.0
+        || cost_obj
+            .get("cacheOutputPricePerM")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+            != 0.0
+        || cost_obj
+            .get("currency")
+            .and_then(Value::as_str)
+            .unwrap_or("USD")
+            != "USD"
+        || cost_obj
+            .get("template")
+            .is_some_and(|template| !template.is_null())
 }
 
 #[cfg(test)]
@@ -249,5 +347,179 @@ mod tests {
         assert_eq!(migrated["configVersion"], 5);
         assert_eq!(migrated["ui"]["autoStartServer"], true);
         assert_eq!(migrated["ui"]["autoUpdateEnabled"], true);
+    }
+
+    #[test]
+    fn migrate_provider_cost_to_model_costs_for_all_models() {
+        let cost = json!({
+            "enabled": true,
+            "inputPricePerM": 1.25,
+            "outputPricePerM": 6.5,
+            "cacheInputPricePerM": 0.5,
+            "cacheOutputPricePerM": 0.25,
+            "currency": "USD"
+        });
+
+        let migrated = migrate_config(json!({
+            "configVersion": 4,
+            "providers": [
+                {
+                    "id": "provider-top-level",
+                    "name": "provider-top-level",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1", "gpt-4o-mini"],
+                    "cost": cost
+                }
+            ],
+            "groups": [
+                {
+                    "id": "group-1",
+                    "name": "Group 1",
+                    "routingTable": [],
+                    "providers": [
+                        {
+                            "id": "provider-embedded",
+                            "name": "provider-embedded",
+                            "protocol": "openai",
+                            "token": "secret",
+                            "apiAddress": "https://example.com/v1",
+                            "models": ["claude-sonnet-4", "claude-opus-4"],
+                            "cost": {
+                                "enabled": true,
+                                "inputPricePerM": 3.0,
+                                "outputPricePerM": 15.0,
+                                "cacheInputPricePerM": 0.0,
+                                "cacheOutputPricePerM": 0.0,
+                                "currency": "CNY"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }))
+        .expect("migration should succeed");
+
+        assert_eq!(
+            migrated["providers"][0]["modelCosts"],
+            json!({
+                "gpt-4.1": {
+                    "enabled": true,
+                    "inputPricePerM": 1.25,
+                    "outputPricePerM": 6.5,
+                    "cacheInputPricePerM": 0.5,
+                    "cacheOutputPricePerM": 0.25,
+                    "currency": "USD"
+                },
+                "gpt-4o-mini": {
+                    "enabled": true,
+                    "inputPricePerM": 1.25,
+                    "outputPricePerM": 6.5,
+                    "cacheInputPricePerM": 0.5,
+                    "cacheOutputPricePerM": 0.25,
+                    "currency": "USD"
+                }
+            })
+        );
+        assert_eq!(
+            migrated["groups"][0]["providers"][0]["modelCosts"],
+            json!({
+                "claude-sonnet-4": {
+                    "enabled": true,
+                    "inputPricePerM": 3.0,
+                    "outputPricePerM": 15.0,
+                    "cacheInputPricePerM": 0.0,
+                    "cacheOutputPricePerM": 0.0,
+                    "currency": "CNY"
+                },
+                "claude-opus-4": {
+                    "enabled": true,
+                    "inputPricePerM": 3.0,
+                    "outputPricePerM": 15.0,
+                    "cacheInputPricePerM": 0.0,
+                    "cacheOutputPricePerM": 0.0,
+                    "currency": "CNY"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn migrate_provider_cost_does_not_backfill_when_model_costs_already_exist() {
+        let migrated = migrate_config(json!({
+            "configVersion": 4,
+            "providers": [
+                {
+                    "id": "provider-top-level",
+                    "name": "provider-top-level",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1", "gpt-4o-mini"],
+                    "cost": {
+                        "enabled": true,
+                        "inputPricePerM": 1.25,
+                        "outputPricePerM": 6.5,
+                        "cacheInputPricePerM": 0.5,
+                        "cacheOutputPricePerM": 0.25,
+                        "currency": "USD"
+                    },
+                    "modelCosts": {
+                        "gpt-4.1": {
+                            "enabled": true,
+                            "inputPricePerM": 10.0,
+                            "outputPricePerM": 20.0,
+                            "cacheInputPricePerM": 1.0,
+                            "cacheOutputPricePerM": 2.0,
+                            "currency": "EUR"
+                        }
+                    }
+                }
+            ]
+        }))
+        .expect("migration should succeed");
+
+        assert_eq!(
+            migrated["providers"][0]["modelCosts"],
+            json!({
+                "gpt-4.1": {
+                    "enabled": true,
+                    "inputPricePerM": 10.0,
+                    "outputPricePerM": 20.0,
+                    "cacheInputPricePerM": 1.0,
+                    "cacheOutputPricePerM": 2.0,
+                    "currency": "EUR"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn migrate_provider_cost_does_not_create_model_costs_for_default_empty_cost() {
+        let migrated = migrate_config(json!({
+            "configVersion": 4,
+            "providers": [
+                {
+                    "id": "provider-top-level",
+                    "name": "provider-top-level",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1", "gpt-4o-mini"],
+                    "cost": {
+                        "enabled": false,
+                        "inputPricePerM": 0.0,
+                        "outputPricePerM": 0.0,
+                        "cacheInputPricePerM": 0.0,
+                        "cacheOutputPricePerM": 0.0,
+                        "currency": "USD"
+                    }
+                }
+            ]
+        }))
+        .expect("migration should succeed");
+
+        assert!(migrated["providers"][0].get("modelCosts").is_none());
     }
 }

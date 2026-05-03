@@ -167,7 +167,8 @@ export const ipc = {
     ruleKeys?: string[],
     ruleKey?: string,
     dimension?: StatsDimension,
-    enableComparison?: boolean
+    enableComparison?: boolean,
+    model?: string
   ): Promise<StatsSummaryResult> {
     const args: Record<string, unknown> = {}
     if (typeof hours === "number") args.hours = hours
@@ -175,6 +176,7 @@ export const ipc = {
     if (typeof ruleKey === "string") args.ruleKey = ruleKey
     if (typeof dimension === "string") args.dimension = dimension
     if (typeof enableComparison === "boolean") args.enableComparison = enableComparison
+    if (typeof model === "string") args.model = model
     return getInvoke()<StatsSummaryResult>("logs_stats_summary", args)
   },
 

@@ -1,7 +1,7 @@
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
-import { Layout, RemoteManagementLogin } from "@/components"
+import { Layout } from "@/components"
 import { useLogs, useTranslation, useUpdater } from "@/hooks"
 import {
   AgentEditPage,
@@ -9,7 +9,9 @@ import {
   GroupEditPage,
   LogDetailPage,
   LogsPage,
+  ManagementAuthPage,
   ProvidersPage,
+  RequireManagementAuth,
   RuleCreatePage,
   RuleEditPage,
   ServicePage,
@@ -34,6 +36,7 @@ import {
   formatServerAddressForDisplay,
   resolveReachableServerBaseUrls,
 } from "@/utils/serverAddress"
+import { shouldShowBootstrapLoading } from "./appViewGuards"
 
 const APP_ACTIONS = [initAction, startServerAction, stopServerAction] as const
 
@@ -81,12 +84,6 @@ const App: React.FC = () => {
 
   const isRunning = status?.running ?? false
   const isHeadlessRuntime = isHeadlessHttpRuntime()
-  const managementLocked = Boolean(
-    isHeadlessRuntime &&
-      authSession?.remoteRequest &&
-      authSession.passwordConfigured &&
-      !authSession.authenticated
-  )
   const canInitialize =
     !isHeadlessRuntime ||
     Boolean(
@@ -214,11 +211,15 @@ const App: React.FC = () => {
     )
   }
 
-  if (managementLocked) {
-    return <RemoteManagementLogin onSubmit={handleRemoteAdminLogin} />
-  }
-
-  if (bootstrapping && !bootstrapError && !config && !status) {
+  if (
+    shouldShowBootstrapLoading({
+      bootstrapping,
+      bootstrapError,
+      hasConfig: Boolean(config),
+      hasStatus: Boolean(status),
+      canInitialize,
+    })
+  ) {
     console.log("[App] Showing loading screen")
     return (
       <div className="loading-screen">
@@ -247,18 +248,112 @@ const App: React.FC = () => {
       onStopServer={handleStopServer}
     >
       <Routes>
-        <Route path="/" element={<ServicePage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/logs" element={<LogsPage />} />
-        <Route path="/logs/:traceId" element={<LogDetailPage />} />
-        <Route path="/agents" element={<AgentListPage />} />
-        <Route path="/providers" element={<ProvidersPage />} />
-        <Route path="/providers/new" element={<RuleCreatePage />} />
-        <Route path="/providers/:providerId/edit" element={<RuleEditPage />} />
-        <Route path="/agents/:targetId/edit" element={<AgentEditPage />} />
-        <Route path="/groups/:groupId/edit" element={<GroupEditPage />} />
-        <Route path="/groups/:groupId/providers/new" element={<RuleCreatePage />} />
-        <Route path="/groups/:groupId/providers/:providerId/edit" element={<RuleEditPage />} />
+        <Route
+          path="/auth"
+          element={
+            <ManagementAuthPage
+              authSession={authSession}
+              isHeadlessRuntime={isHeadlessRuntime}
+              onSubmit={handleRemoteAdminLogin}
+            />
+          }
+        />
+        <Route
+          path="/"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <ServicePage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <SettingsPage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/logs"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <LogsPage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/logs/:traceId"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <LogDetailPage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/agents"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <AgentListPage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/providers"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <ProvidersPage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/providers/new"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <RuleCreatePage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/providers/:providerId/edit"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <RuleEditPage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/agents/:targetId/edit"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <AgentEditPage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/groups/:groupId/edit"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <GroupEditPage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/groups/:groupId/providers/new"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <RuleCreatePage />
+            </RequireManagementAuth>
+          }
+        />
+        <Route
+          path="/groups/:groupId/providers/:providerId/edit"
+          element={
+            <RequireManagementAuth authSession={authSession} isHeadlessRuntime={isHeadlessRuntime}>
+              <RuleEditPage />
+            </RequireManagementAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

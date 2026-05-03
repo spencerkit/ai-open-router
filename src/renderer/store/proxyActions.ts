@@ -53,6 +53,65 @@ let statusRefreshInFlight = false
 
 const quotaKey = (groupId: string, providerId: string) => `${groupId}:${providerId}`
 
+function trimAndDedupModels(models: string[] | null | undefined): string[] {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const model of models ?? []) {
+    const trimmed = model?.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  }
+  return normalized
+}
+
+function isMeaningfullyConfiguredLegacyCost(
+  cost: Provider["cost"]
+): cost is NonNullable<Provider["cost"]> {
+  if (!cost) return false
+
+  return (
+    cost.enabled === true ||
+    cost.inputPricePerM !== 0 ||
+    cost.outputPricePerM !== 0 ||
+    cost.cacheInputPricePerM !== 0 ||
+    cost.cacheOutputPricePerM !== 0 ||
+    (cost.currency ?? "USD") !== "USD" ||
+    cost.template != null
+  )
+}
+
+function normalizeProvider(provider: Provider): Provider {
+  const models = trimAndDedupModels(provider.models)
+  const validModels = new Set(models)
+  const normalizedModelCostsEntries = provider.modelCosts
+    ? Object.entries(provider.modelCosts).reduce<Array<[string, NonNullable<Provider["cost"]>]>>(
+        (entries, [model, cost]) => {
+          const trimmedModel = model.trim()
+          if (!trimmedModel || !validModels.has(trimmedModel)) return entries
+          if (entries.some(([existingModel]) => existingModel === trimmedModel)) return entries
+          entries.push([trimmedModel, cost])
+          return entries
+        },
+        []
+      )
+    : []
+  const legacyCost = isMeaningfullyConfiguredLegacyCost(provider.cost) ? provider.cost : undefined
+  const normalizedModelCosts =
+    normalizedModelCostsEntries.length > 0
+      ? Object.fromEntries(normalizedModelCostsEntries)
+      : legacyCost
+        ? Object.fromEntries(models.map(model => [model, legacyCost]))
+        : {}
+
+  return {
+    ...provider,
+    models,
+    ...(Object.keys(normalizedModelCosts).length > 0 ? { modelCosts: normalizedModelCosts } : {}),
+    ...(Object.keys(normalizedModelCosts).length === 0 ? { modelCosts: undefined } : {}),
+  }
+}
+
 function createDefaultConfig(): ProxyConfig {
   return {
     server: {
@@ -116,7 +175,7 @@ function normalizeConfig(config: ProxyConfig | null | undefined): ProxyConfig {
   const dedupedProviderMap = new Map<string, Provider>()
   for (const provider of safeConfig.providers ?? []) {
     if (!provider?.id?.trim()) continue
-    dedupedProviderMap.set(provider.id, { ...provider })
+    dedupedProviderMap.set(provider.id, normalizeProvider(provider))
   }
   const normalizedProviders = [...dedupedProviderMap.values()]
   return {
@@ -134,6 +193,8 @@ function normalizeConfig(config: ProxyConfig | null | undefined): ProxyConfig {
     groups: (safeConfig.groups ?? []).map(group => normalizeGroup(group)),
   }
 }
+
+export const __testNormalizeConfig = normalizeConfig
 
 function buildSaveConfigPayload(config: ProxyConfig): ProxyConfig {
   const globalProviderMap = new Map<string, Provider>()
@@ -275,6 +336,7 @@ export const refreshLogsStatsAction = action<
     ruleKey?: string
     dimension?: StatsDimension
     enableComparison?: boolean
+    model?: string
   },
   Promise<void>
 >(async (store, payload) => {
@@ -285,7 +347,8 @@ export const refreshLogsStatsAction = action<
       request.ruleKeys,
       request.ruleKey,
       request.dimension,
-      request.enableComparison
+      request.enableComparison,
+      request.model
     )
     store.set(logsStatsState, logsStats)
     store.set(statsErrorState, null)

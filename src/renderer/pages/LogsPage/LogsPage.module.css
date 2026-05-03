@@ -170,11 +170,6 @@
   font-weight: var(--weight-medium);
 }
 
-.ruleOptionActive .ruleOptionCheck {
-  border-color: color-mix(in oklab, var(--accent) 65%, transparent);
-  color: var(--accent);
-}
-
 .ruleOptionCheck {
   width: 14px;
   height: 14px;
@@ -184,6 +179,11 @@
   border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
   border-radius: 3px;
   background: var(--bg-base);
+}
+
+.ruleOptionActive .ruleOptionCheck {
+  border-color: color-mix(in oklab, var(--accent) 65%, transparent);
+  color: var(--accent);
 }
 
 .ruleDropdownActions {

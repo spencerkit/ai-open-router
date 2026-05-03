@@ -16,8 +16,14 @@ type CssModuleExports = Record<string, string>
 type UnknownProps = Record<string, unknown>
 type EffectCallback = () => undefined | (() => void)
 type LogsTab = "stats" | "logs"
-type MockProvider = { id: string; name?: string }
-type MockGroup = { id: string; name?: string; providers?: MockProvider[] }
+type MockProvider = { id: string; name?: string; models?: string[] }
+type MockRoute = { providerId?: string }
+type MockGroup = {
+  id: string
+  name?: string
+  providers?: MockProvider[]
+  routingTable?: MockRoute[]
+}
 
 type HarnessWindow = {
   addEventListener: (event: string, handler: (...args: unknown[]) => void) => void
@@ -54,10 +60,12 @@ let refreshLogsStatsCalls: Array<{
   ruleKeys: string[]
   dimension: string
   enableComparison: boolean
+  model?: string
 }> = []
 let intervalCalls: number[] = []
 let intervalId = 0
 let mockConfigGroups: MockGroup[] | null = []
+let mockConfigProviders: MockProvider[] | null = []
 
 function resolveCompiledAlias(request: string): string | null {
   const aliasPrefixes = [
@@ -245,6 +253,7 @@ require.cache["@/utils/relax"] = {
         ruleKeys: string[]
         dimension: string
         enableComparison: boolean
+        model?: string
       }) => {
         refreshLogsStatsCalls.push(payload)
         return Promise.resolve()
@@ -258,6 +267,7 @@ require.cache["@/utils/relax"] = {
           ? null
           : {
               groups: mockConfigGroups,
+              providers: mockConfigProviders ?? [],
             }
       }
       if (state?.key === "logsState") {
@@ -333,10 +343,12 @@ function mountLogsPage(input: {
   pathname: string
   activeTab: LogsTab
   groups?: MockGroup[] | null
+  providers?: MockProvider[] | null
 }) {
   currentPathname = input.pathname
   currentActiveTab = input.activeTab
   mockConfigGroups = input.groups === undefined ? [] : input.groups
+  mockConfigProviders = input.providers === undefined ? [] : input.providers
   stateIndex = 0
   stateValues = []
   stateSetters = []
@@ -398,6 +410,10 @@ test("LogsPage initializes all groups after config loads asynchronously", () => 
       providers: [{ id: "provider-b", name: "Provider B" }],
     },
   ]
+  mockConfigProviders = [
+    { id: "provider-a", name: "Provider A", models: ["gpt-5.5"] },
+    { id: "provider-b", name: "Provider B", models: ["claude-4.7"] },
+  ]
 
   stateIndex = 0
   refIndex = 0
@@ -431,6 +447,10 @@ test("LogsPage preserves explicit group selections when provider filtering chang
         name: "Group C",
         providers: [{ id: "provider-only-c", name: "Only C" }],
       },
+    ],
+    providers: [
+      { id: "provider-only-c", name: "Only C", models: ["claude-4.7"] },
+      { id: "provider-shared", name: "Shared", models: ["gpt-5.5", "gpt-5.4"] },
     ],
   })
 
@@ -473,6 +493,119 @@ test("LogsPage only starts stats refresh on the stats tab", () => {
     enableComparison: false,
   })
   assert.deepEqual(result.intervalCalls, [3000])
+})
+
+test("LogsPage forwards selected model into stats refresh payload", () => {
+  const result = mountLogsPage({
+    pathname: "/logs",
+    activeTab: "stats",
+    groups: [
+      {
+        id: "group-a",
+        name: "Group A",
+        providers: [{ id: "provider-a", name: "Provider A", models: ["gpt-5.5", "gpt-5.4"] }],
+        routingTable: [{ providerId: "provider-a" }],
+      },
+    ],
+    providers: [{ id: "provider-a", name: "Provider A", models: ["gpt-5.5", "gpt-5.4"] }],
+  })
+
+  const setSelectedProviderId = result.stateSetters[2] as
+    | ((value: string | ((previous: string) => string)) => void)
+    | undefined
+  const setSelectedGroupIds = result.stateSetters[3] as
+    | ((value: string[] | ((previous: string[]) => string[])) => void)
+    | undefined
+  const setSelectedModel = result.stateSetters[4] as
+    | ((value: string | ((previous: string) => string)) => void)
+    | undefined
+
+  assert.equal(typeof setSelectedProviderId, "function")
+  assert.equal(typeof setSelectedGroupIds, "function")
+  assert.equal(typeof setSelectedModel, "function")
+
+  setSelectedProviderId?.("provider-a")
+  setSelectedGroupIds?.(["group-a"])
+  setSelectedModel?.("gpt-5.5")
+
+  stateIndex = 0
+  refIndex = 0
+  effectCallbacks = []
+  refreshLogsStatsCalls = []
+  intervalCalls = []
+  const { LogsPage } = loadLogsPage()
+  LogsPage({})
+  for (const callback of effectCallbacks) {
+    callback()
+  }
+
+  assert.deepEqual(refreshLogsStatsCalls[0], {
+    hours: 24,
+    ruleKeys: ["group-a::provider-a"],
+    dimension: "rule",
+    enableComparison: false,
+    model: "gpt-5.5",
+  })
+})
+
+test("LogsPage resets selected model when provider no longer offers it", () => {
+  const result = mountLogsPage({
+    pathname: "/logs",
+    activeTab: "stats",
+    groups: [
+      {
+        id: "group-a",
+        name: "Group A",
+        providers: [{ id: "provider-a", name: "Provider A", models: ["gpt-5.5"] }],
+      },
+      {
+        id: "group-b",
+        name: "Group B",
+        providers: [{ id: "provider-b", name: "Provider B", models: ["claude-4.7"] }],
+      },
+    ],
+    providers: [
+      { id: "provider-a", name: "Provider A", models: ["gpt-5.5"] },
+      { id: "provider-b", name: "Provider B", models: ["claude-4.7"] },
+    ],
+  })
+
+  const setSelectedProviderId = result.stateSetters[2] as
+    | ((value: string | ((previous: string) => string)) => void)
+    | undefined
+  const setSelectedModel = result.stateSetters[4] as
+    | ((value: string | ((previous: string) => string)) => void)
+    | undefined
+
+  assert.equal(typeof setSelectedProviderId, "function")
+  assert.equal(typeof setSelectedModel, "function")
+
+  setSelectedProviderId?.("provider-a")
+  setSelectedModel?.("gpt-5.5")
+
+  stateIndex = 0
+  refIndex = 0
+  effectCallbacks = []
+  const { LogsPage } = loadLogsPage()
+  LogsPage({})
+  for (const callback of effectCallbacks) {
+    callback()
+  }
+
+  assert.equal(stateValues[4], "gpt-5.5")
+
+  setSelectedProviderId?.("provider-b")
+
+  stateIndex = 0
+  refIndex = 0
+  effectCallbacks = []
+  const nextLogsPage = loadLogsPage()
+  nextLogsPage.LogsPage({})
+  for (const callback of effectCallbacks) {
+    callback()
+  }
+
+  assert.equal(stateValues[4], "all")
 })
 
 test("LogsPage starts both log and stats refresh on the logs tab", () => {

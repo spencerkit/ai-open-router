@@ -26,8 +26,17 @@ import type {
   StatsSummaryResult,
   WriteAgentConfigResult,
 } from "@/types"
+import { emitAuthSessionChanged } from "./authSession"
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE"
+
+type ErrorPayload = {
+  error?: {
+    code?: unknown
+    message?: unknown
+  }
+  message?: unknown
+}
 
 const HTTP_PROTOCOLS = new Set(["http:", "https:"])
 
@@ -61,14 +70,30 @@ export function isHttpCandidate(): boolean {
   return resolveHttpBaseUrl() !== null
 }
 
-function buildQuery(params: Record<string, unknown>): string {
+type QueryArrayFormat = "repeat" | "csv"
+
+type BuildQueryOptions = {
+  arrayFormatByKey?: Record<string, QueryArrayFormat>
+}
+
+function buildQuery(params: Record<string, unknown>, options?: BuildQueryOptions): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null) continue
     if (Array.isArray(value)) {
-      for (const entry of value) {
-        if (entry === undefined || entry === null) continue
-        search.append(key, String(entry))
+      const entries = value
+        .filter(
+          (entry): entry is NonNullable<typeof entry> => entry !== undefined && entry !== null
+        )
+        .map(entry => String(entry))
+      if (entries.length === 0) continue
+      const arrayFormat = options?.arrayFormatByKey?.[key] ?? "repeat"
+      if (arrayFormat === "csv") {
+        search.set(key, entries.join(","))
+        continue
+      }
+      for (const entry of entries) {
+        search.append(key, entry)
       }
       continue
     }
@@ -87,21 +112,80 @@ async function parseJsonSafely(text: string): Promise<unknown> {
   }
 }
 
-async function resolveErrorMessage(response: Response, text: string): Promise<string> {
+type ParsedErrorDetails = {
+  message: string
+  code?: string
+  payload: unknown
+}
+
+export class HttpApiError extends Error {
+  readonly status: number
+  readonly code?: string
+  readonly payload: unknown
+
+  constructor(status: number, message: string, options?: { code?: string; payload?: unknown }) {
+    super(message)
+    this.name = "HttpApiError"
+    this.status = status
+    this.code = options?.code
+    this.payload = options?.payload
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
+export function isAuthenticationRequiredError(error: unknown): error is HttpApiError {
+  return (
+    error instanceof HttpApiError &&
+    error.status === 401 &&
+    error.code === "authentication_required"
+  )
+}
+
+async function resolveErrorDetails(response: Response, text: string): Promise<ParsedErrorDetails> {
   const payload = await parseJsonSafely(text)
+  let code: string | undefined
   if (payload && typeof payload === "object") {
     const maybeError =
       "error" in payload && typeof payload.error === "object" && payload.error
-        ? (payload.error as { message?: unknown }).message
+        ? (payload.error as ErrorPayload["error"])?.message
         : "message" in payload
-          ? (payload as { message?: unknown }).message
+          ? (payload as ErrorPayload).message
           : null
+    const maybeCode =
+      "error" in payload && typeof payload.error === "object" && payload.error
+        ? (payload.error as ErrorPayload["error"])?.code
+        : undefined
+    if (typeof maybeCode === "string" && maybeCode.trim()) {
+      code = maybeCode
+    }
     if (typeof maybeError === "string" && maybeError.trim()) {
-      return maybeError
+      return {
+        message: maybeError,
+        code,
+        payload,
+      }
     }
   }
-  if (text.trim()) return text
-  return response.statusText || `HTTP ${response.status}`
+  if (text.trim()) {
+    return {
+      message: text,
+      code,
+      payload,
+    }
+  }
+  return {
+    message: response.statusText || `HTTP ${response.status}`,
+    code,
+    payload,
+  }
+}
+
+function emitLockedRemoteAuthSession(): void {
+  emitAuthSessionChanged({
+    authenticated: false,
+    remoteRequest: true,
+    passwordConfigured: true,
+  })
 }
 
 async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
@@ -124,8 +208,12 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown): Pro
   })
   const text = await response.text()
   if (!response.ok) {
-    const message = await resolveErrorMessage(response, text)
-    throw new Error(message)
+    const { message, code, payload } = await resolveErrorDetails(response, text)
+    const error = new HttpApiError(response.status, message, { code, payload })
+    if (isAuthenticationRequiredError(error)) {
+      emitLockedRemoteAuthSession()
+    }
+    throw error
   }
   if (!text.trim()) {
     return undefined as T
@@ -410,15 +498,24 @@ export const httpApi = {
     ruleKeys?: string[],
     ruleKey?: string,
     dimension?: StatsDimension,
-    enableComparison?: boolean
+    enableComparison?: boolean,
+    model?: string
   ): Promise<StatsSummaryResult> {
-    const query = buildQuery({
-      hours,
-      ruleKeys,
-      ruleKey,
-      dimension,
-      enableComparison,
-    })
+    const query = buildQuery(
+      {
+        hours,
+        ruleKeys,
+        ruleKey,
+        dimension,
+        enableComparison,
+        model,
+      },
+      {
+        arrayFormatByKey: {
+          ruleKeys: "csv",
+        },
+      }
+    )
     return request<StatsSummaryResult>("GET", `/api/logs/stats/summary${query}`)
   },
 

@@ -14,19 +14,20 @@ export const ROUTING_TEMPLATES: RoutingTemplate[] = [
     id: "claude-code",
     name: "Claude Code",
     routes: [
-      { requestModel: "claude-opus-4-6", targetModel: "claude-opus-3-5" },
-      { requestModel: "claude-sonnet-4-6", targetModel: "claude-sonnet-4" },
-      { requestModel: "claude-haiku-4-5-20251001", targetModel: "claude-haiku-4" },
+      { requestModel: "claude-opus-4-7", targetModel: "claude-opus-4-7" },
+      { requestModel: "claude-sonnet-4-6", targetModel: "claude-sonnet-4-6" },
+      { requestModel: "claude-haiku-4-5", targetModel: "claude-haiku-4-5" },
     ],
   },
   {
     id: "codex",
     name: "Codex",
     routes: [
+      { requestModel: "gpt-5.5", targetModel: "gpt-5.5" },
       { requestModel: "gpt-5.4", targetModel: "gpt-5.4" },
+      { requestModel: "gpt-5.4-mini", targetModel: "gpt-5.4-mini" },
       { requestModel: "gpt-5.3-codex", targetModel: "gpt-5.3-codex" },
-      { requestModel: "gpt-5.2-codex", targetModel: "gpt-5.2-codex" },
-      { requestModel: "gpt-5.1-codex", targetModel: "gpt-5.1-codex" },
+      { requestModel: "gpt-5.2", targetModel: "gpt-5.2" },
     ],
   },
   {

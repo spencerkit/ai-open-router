@@ -4,9 +4,11 @@
 
 use crate::config::migrator::CURRENT_CONFIG_VERSION;
 use crate::domain::entities::{
-    CompatConfig, LoggingConfig, ProxyConfig, ProxyMetrics, RemoteGitConfig, ServerConfig, UiConfig,
+    CompatConfig, LoggingConfig, ProxyConfig, ProxyMetrics, RemoteGitConfig, RuleCostConfig,
+    ServerConfig, UiConfig,
 };
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 
 /// Performs default config version.
 pub fn default_config_version() -> u32 {
@@ -166,6 +168,14 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
                 if g.routing_table.is_empty() && g.provider_ids.is_none() && g.providers.is_none() {
                     g.routing_table = Vec::new();
                 }
+                if let Some(providers) = g.providers.take() {
+                    g.providers = Some(
+                        providers
+                            .into_iter()
+                            .map(normalize_provider_model_costs)
+                            .collect(),
+                    );
+                }
                 g
             })
             .collect();
@@ -183,7 +193,7 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
                 if p.models.is_empty() {
                     p.models = Vec::new();
                 }
-                p
+                normalize_provider_model_costs(p)
             })
             .collect();
         normalized
@@ -331,4 +341,253 @@ pub fn normalize_config(input: serde_json::Value) -> Result<ProxyConfig, String>
         providers,
         groups,
     })
+}
+
+fn normalize_provider_model_costs(
+    mut provider: crate::domain::entities::Rule,
+) -> crate::domain::entities::Rule {
+    let valid_models: HashSet<String> = provider
+        .models
+        .iter()
+        .map(|model| model.trim().to_string())
+        .filter(|model| !model.is_empty())
+        .collect();
+    let mut normalized_model_costs = HashMap::new();
+    for (model, cost) in std::mem::take(&mut provider.model_costs) {
+        let trimmed_model = model.trim();
+        if trimmed_model.is_empty() || !valid_models.contains(trimmed_model) {
+            continue;
+        }
+        normalized_model_costs
+            .entry(trimmed_model.to_string())
+            .or_insert(cost);
+    }
+    if normalized_model_costs.is_empty() && is_meaningfully_configured_legacy_cost(&provider.cost) {
+        for model in &provider.models {
+            let trimmed_model = model.trim();
+            if trimmed_model.is_empty() {
+                continue;
+            }
+            normalized_model_costs.insert(trimmed_model.to_string(), provider.cost.clone());
+        }
+    }
+    provider.model_costs = normalized_model_costs;
+    provider
+}
+
+fn is_meaningfully_configured_legacy_cost(cost: &RuleCostConfig) -> bool {
+    cost.enabled
+        || cost.input_price_per_m != 0.0
+        || cost.output_price_per_m != 0.0
+        || cost.cache_input_price_per_m != 0.0
+        || cost.cache_output_price_per_m != 0.0
+        || cost.currency != "USD"
+        || cost.template.is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_config;
+    use crate::config::migrator::CURRENT_CONFIG_VERSION;
+    use serde_json::json;
+
+    #[test]
+    fn normalize_config_backfills_model_costs_from_legacy_cost_for_current_version_payloads() {
+        let normalized = normalize_config(json!({
+            "configVersion": CURRENT_CONFIG_VERSION,
+            "server": {
+                "host": "0.0.0.0",
+                "port": 8899,
+                "authEnabled": false,
+                "localBearerToken": ""
+            },
+            "compat": {
+                "strictMode": false,
+                "textToolCallFallbackEnabled": true,
+                "headerPassthroughEnabled": true
+            },
+            "logging": {
+                "captureBody": false
+            },
+            "ui": {
+                "theme": "light",
+                "locale": "en-US",
+                "localeMode": "auto",
+                "launchOnStartup": false,
+                "autoStartServer": true,
+                "closeToTray": true,
+                "quotaAutoRefreshMinutes": 5,
+                "autoUpdateEnabled": true
+            },
+            "remoteGit": {
+                "enabled": false,
+                "repoUrl": "",
+                "token": "",
+                "branch": "main"
+            },
+            "providers": [
+                {
+                    "id": "provider-1",
+                    "name": "provider-1",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1", "gpt-4o-mini"],
+                    "cost": {
+                        "enabled": true,
+                        "inputPricePerM": 1.25,
+                        "outputPricePerM": 6.5,
+                        "cacheInputPricePerM": 0.5,
+                        "cacheOutputPricePerM": 0.25,
+                        "currency": "USD"
+                    }
+                }
+            ],
+            "groups": []
+        }))
+        .expect("normalize config should succeed");
+
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].model_costs.len(), 2);
+        assert!(normalized.providers[0].model_costs.contains_key("gpt-4.1"));
+        assert!(normalized.providers[0]
+            .model_costs
+            .contains_key("gpt-4o-mini"));
+        assert!(normalized.providers[0].model_costs["gpt-4.1"].enabled);
+    }
+
+    #[test]
+    fn normalize_config_canonicalizes_trimmed_model_cost_keys() {
+        let normalized = normalize_config(json!({
+            "configVersion": CURRENT_CONFIG_VERSION,
+            "server": {
+                "host": "0.0.0.0",
+                "port": 8899,
+                "authEnabled": false,
+                "localBearerToken": ""
+            },
+            "compat": {
+                "strictMode": false,
+                "textToolCallFallbackEnabled": true,
+                "headerPassthroughEnabled": true
+            },
+            "logging": {
+                "captureBody": false
+            },
+            "ui": {
+                "theme": "light",
+                "locale": "en-US",
+                "localeMode": "auto",
+                "launchOnStartup": false,
+                "autoStartServer": true,
+                "closeToTray": true,
+                "quotaAutoRefreshMinutes": 5,
+                "autoUpdateEnabled": true
+            },
+            "remoteGit": {
+                "enabled": false,
+                "repoUrl": "",
+                "token": "",
+                "branch": "main"
+            },
+            "providers": [
+                {
+                    "id": "provider-1",
+                    "name": "provider-1",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1"],
+                    "modelCosts": {
+                        " gpt-4.1 ": {
+                            "enabled": true,
+                            "inputPricePerM": 1.25,
+                            "outputPricePerM": 6.5,
+                            "cacheInputPricePerM": 0.5,
+                            "cacheOutputPricePerM": 0.25,
+                            "currency": "USD"
+                        },
+                        " stale ": {
+                            "enabled": true,
+                            "inputPricePerM": 9.0,
+                            "outputPricePerM": 9.0,
+                            "cacheInputPricePerM": 9.0,
+                            "cacheOutputPricePerM": 9.0,
+                            "currency": "USD"
+                        }
+                    }
+                }
+            ],
+            "groups": []
+        }))
+        .expect("normalize config should succeed");
+
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].model_costs.len(), 1);
+        assert!(normalized.providers[0].model_costs.contains_key("gpt-4.1"));
+        assert!(!normalized.providers[0]
+            .model_costs
+            .contains_key(" gpt-4.1 "));
+        assert!(!normalized.providers[0].model_costs.contains_key(" stale "));
+    }
+
+    #[test]
+    fn normalize_config_does_not_backfill_default_empty_legacy_cost() {
+        let normalized = normalize_config(json!({
+            "configVersion": CURRENT_CONFIG_VERSION,
+            "server": {
+                "host": "0.0.0.0",
+                "port": 8899,
+                "authEnabled": false,
+                "localBearerToken": ""
+            },
+            "compat": {
+                "strictMode": false,
+                "textToolCallFallbackEnabled": true,
+                "headerPassthroughEnabled": true
+            },
+            "logging": {
+                "captureBody": false
+            },
+            "ui": {
+                "theme": "light",
+                "locale": "en-US",
+                "localeMode": "auto",
+                "launchOnStartup": false,
+                "autoStartServer": true,
+                "closeToTray": true,
+                "quotaAutoRefreshMinutes": 5,
+                "autoUpdateEnabled": true
+            },
+            "remoteGit": {
+                "enabled": false,
+                "repoUrl": "",
+                "token": "",
+                "branch": "main"
+            },
+            "providers": [
+                {
+                    "id": "provider-1",
+                    "name": "provider-1",
+                    "protocol": "openai",
+                    "token": "secret",
+                    "apiAddress": "https://example.com/v1",
+                    "models": ["gpt-4.1"],
+                    "cost": {
+                        "enabled": false,
+                        "inputPricePerM": 0.0,
+                        "outputPricePerM": 0.0,
+                        "cacheInputPricePerM": 0.0,
+                        "cacheOutputPricePerM": 0.0,
+                        "currency": "USD"
+                    }
+                }
+            ],
+            "groups": []
+        }))
+        .expect("normalize config should succeed");
+
+        assert_eq!(normalized.providers.len(), 1);
+        assert!(normalized.providers[0].model_costs.is_empty());
+    }
 }

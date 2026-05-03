@@ -16,6 +16,10 @@ test("searchBillingTemplates matches vendor, model, and alias text", () => {
     true
   )
   assert.equal(
+    searchBillingTemplates("gpt-5.3-codex").some(item => item.modelId === "gpt-5.3-codex"),
+    true
+  )
+  assert.equal(
     searchBillingTemplates("claude sonnet").some(item => item.vendorId === "anthropic"),
     true
   )
@@ -33,6 +37,19 @@ test("searchBillingTemplates returns detached arrays and exposes a readonly cata
   assert.notEqual(allTemplates, secondSearch)
   assert.deepEqual(allTemplates, BILLING_TEMPLATES)
   assert.deepEqual(secondSearch, BILLING_TEMPLATES)
+})
+
+test("catalog includes the latest curated OpenAI and Anthropic flagship templates", () => {
+  const openAiTemplate = findBillingTemplate("openai", "gpt-5.5")
+  const openAiCodexTemplate = findBillingTemplate("openai", "gpt-5.3-codex")
+  const anthropicTemplate = findBillingTemplate("anthropic", "claude-opus-4-7")
+
+  assert.ok(openAiTemplate)
+  assert.equal(openAiTemplate.modelLabel, "GPT-5.5")
+  assert.ok(openAiCodexTemplate)
+  assert.equal(openAiCodexTemplate.modelLabel, "GPT-5.3-Codex")
+  assert.ok(anthropicTemplate)
+  assert.equal(anthropicTemplate.modelLabel, "Claude Opus 4.7")
 })
 
 test("applyBillingTemplateToCost fills missing official fields with zero for partial templates", () => {
@@ -61,7 +78,7 @@ test("applyBillingTemplateToCost fills missing official fields with zero for par
 })
 
 test("applyBillingTemplateToCost overwrites all priced fields for full templates including Anthropic cache mapping", () => {
-  const template = findBillingTemplate("anthropic", "claude-sonnet-4-5")
+  const template = findBillingTemplate("anthropic", "claude-sonnet-4-6")
   assert.ok(template)
 
   const next = applyBillingTemplateToCost(
@@ -83,7 +100,7 @@ test("applyBillingTemplateToCost overwrites all priced fields for full templates
   assert.equal(next.cacheInputPricePerM, 0.3)
   assert.equal(next.cacheOutputPricePerM, 3.75)
   assert.equal(next.template?.vendorId, "anthropic")
-  assert.equal(next.template?.modelId, "claude-sonnet-4-5")
+  assert.equal(next.template?.modelId, "claude-sonnet-4-6")
 })
 
 test("canApplyBillingTemplate returns true for official models that default missing pricing to zero", () => {
@@ -119,7 +136,7 @@ test("applyBillingTemplateToCost applies zero-valued pricing for official placeh
 })
 
 test("doesCostMatchBillingTemplate detects modified pricing against the seeded template", () => {
-  const template = findBillingTemplate("anthropic", "claude-sonnet-4-5")
+  const template = findBillingTemplate("anthropic", "claude-sonnet-4-6")
   assert.ok(template)
 
   assert.equal(

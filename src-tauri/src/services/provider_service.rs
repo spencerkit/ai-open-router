@@ -614,6 +614,7 @@ mod tests {
             header_passthrough_deny: Vec::new(),
             quota: crate::domain::entities::default_rule_quota_config(),
             cost: crate::domain::entities::default_rule_cost_config(),
+            model_costs: Default::default(),
         }
     }
 

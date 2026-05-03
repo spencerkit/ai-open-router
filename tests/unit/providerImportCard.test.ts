@@ -163,7 +163,7 @@ function createParseResult(
       name: "OpenAI",
       protocol: "openai",
       apiAddress: "https://supercodex.space/v1",
-      defaultModel: "gpt-5.4",
+      defaultModel: "gpt-5.5",
     },
     missingFields: overrides.missingFields ?? (["token", "website"] as ProviderImportField[]),
     warnings: overrides.warnings ?? [],

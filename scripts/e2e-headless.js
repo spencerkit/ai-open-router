@@ -140,6 +140,84 @@ async function waitForHidden(page, selector, timeout = 10000) {
   await page.locator(selector).first().waitFor({ state: "hidden", timeout })
 }
 
+async function listSelectOptionsByAnchorOption(page, anchorOptionText) {
+  return page.evaluate(anchorText => {
+    const select = [...document.querySelectorAll("select")].find(element =>
+      [...element.options].some(option => option.textContent?.trim() === anchorText)
+    )
+    if (!select) {
+      return null
+    }
+    return [...select.options]
+      .map(option => option.textContent?.trim())
+      .filter(value => Boolean(value))
+  }, anchorOptionText)
+}
+
+async function selectByAnchorOption(page, anchorOptionText, targetOptionText) {
+  await page.evaluate(
+    ({ anchorText, targetText }) => {
+      const select = [...document.querySelectorAll("select")].find(element =>
+        [...element.options].some(option => option.textContent?.trim() === anchorText)
+      )
+      if (!select) {
+        throw new Error(`select not found for anchor option: ${anchorText}`)
+      }
+
+      const option = [...select.options].find(item => item.textContent?.trim() === targetText)
+      if (!option) {
+        throw new Error(`option not found: ${targetText}`)
+      }
+
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLSelectElement.prototype,
+        "value"
+      )?.set
+      nativeSetter?.call(select, option.value)
+      select.dispatchEvent(new Event("input", { bubbles: true }))
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    },
+    { anchorText: anchorOptionText, targetText: targetOptionText }
+  )
+}
+
+async function waitForMetricValue(page, label, expected, timeout = 15000) {
+  await page.waitForFunction(
+    ({ metricLabel, metricValue }) => {
+      const labelNode = [...document.querySelectorAll("span")].find(
+        element => element.textContent?.trim() === metricLabel
+      )
+      if (!labelNode) return false
+      const card = labelNode.closest("div")
+      if (!card) return false
+      const valueNode = card.querySelector("strong")
+      return valueNode?.textContent?.trim() === String(metricValue)
+    },
+    { metricLabel: label, metricValue: expected },
+    { timeout }
+  )
+}
+
+async function readMetricValue(page, label) {
+  const value = await page.evaluate(metricLabel => {
+    const labelNode = [...document.querySelectorAll("span")].find(
+      element => element.textContent?.trim() === metricLabel
+    )
+    if (!labelNode) {
+      return null
+    }
+    const card = labelNode.closest("div")
+    const valueNode = card?.querySelector("strong")
+    return valueNode?.textContent?.trim() ?? null
+  }, label)
+
+  if (!value) {
+    throw new Error(`metric not found: ${label}`)
+  }
+
+  return value
+}
+
 async function readRoutingRows(page) {
   const rows = page.locator("tbody tr")
   const count = await rows.count()
@@ -312,12 +390,14 @@ async function run() {
       createModalButton: 'xpath=//div[@role="dialog"]//button[normalize-space()="Create"]',
       providersNav: 'xpath=//button[.//span[normalize-space()="Providers"]]',
       serviceNav: 'xpath=//button[.//span[normalize-space()="Service"]]',
+      logsNav: 'xpath=//button[.//span[normalize-space()="Logs"]]',
       settingsNav: 'xpath=//button[.//span[normalize-space()="Settings"]]',
       agentsNav: 'xpath=//button[.//span[normalize-space()="Agents"]]',
       addProviderButton: 'xpath=//button[normalize-space()="Add Provider"]',
       createProviderButton: 'xpath=//button[normalize-space()="Create Provider"]',
       addRouteButton: 'xpath=//button[contains(normalize-space(), "Add Route")]',
       saveButton: 'xpath=//button[normalize-space()="Save"]',
+      logsTitle: 'xpath=//h2[normalize-space()="Logs"]',
       integrationWriteButton: 'xpath=//button[@aria-label="Write current group address to client"]',
       writeNowButton: 'xpath=//button[normalize-space()="Write Now"]',
       agentAddConfigButton: 'xpath=//button[normalize-space()="Add Configuration Directory"]',
@@ -334,12 +414,29 @@ async function run() {
     const providerName = "E2E Provider"
     const providerModel = "gpt-4o-mini"
     const providerExtraModel = "gpt-4.1-mini"
+    const providerModelInputPricePerM = 1000
+    const providerModelOutputPricePerM = 2000
+    const providerExtraModelInputPricePerM = 3000
+    const providerExtraModelOutputPricePerM = 4000
+    const totalCostBeforeFilterText = "$0.1920"
+    const totalCostAfterFilterText = "$0.1320"
     const remoteEntryUrl = `${remoteBaseUrl}/oc/${groupId}`
     const remoteEntryUrlV1 = `${remoteEntryUrl}/v1`
 
     lastStep = "remote-login-gate"
     await page.goto(`${remoteBaseUrl}/management`, { waitUntil: "domcontentloaded" })
-    await page.locator(selectors.remoteGate).waitFor({ timeout: 15000 })
+    try {
+      await page.locator(selectors.remoteGate).waitFor({ timeout: 15000 })
+    } catch (_error) {
+      const currentUrl = page.url()
+      const bodyText = await page
+        .locator("body")
+        .innerText()
+        .catch(() => "")
+      throw new Error(
+        `remote login gate not visible at ${currentUrl}: ${(bodyText || "<empty>").slice(0, 500)}`
+      )
+    }
     await page.locator("#remote-management-password").fill(remotePassword)
     await safeClick(page, selectors.remoteUnlockButton)
 
@@ -430,8 +527,14 @@ async function run() {
       await modelInput.waitFor({ timeout: 15000 })
       await modelInput.fill(providerModel)
       await page.locator('xpath=//button[normalize-space()="Add Model"]').click()
+      await page.locator(`xpath=//button[@aria-label="Remove ${providerModel}"]`).waitFor({
+        timeout: 15000,
+      })
       await modelInput.fill(providerExtraModel)
       await page.locator('xpath=//button[normalize-space()="Add Model"]').click()
+      await page.locator(`xpath=//button[@aria-label="Remove ${providerExtraModel}"]`).waitFor({
+        timeout: 15000,
+      })
 
       await safeClick(page, selectors.createProviderButton)
       await page.locator(providerNameSelector).waitFor({ timeout: 15000 })
@@ -439,6 +542,54 @@ async function run() {
       await page.locator(`xpath=//span[normalize-space()="${providerExtraModel}"]`).waitFor({
         timeout: 15000,
       })
+
+      const currentConfig = await requestJson("GET", `${baseUrl}/api/config`)
+      const nextProviders = (currentConfig?.providers ?? []).map(provider =>
+        provider.name === providerName
+          ? {
+              ...provider,
+              cost: {
+                enabled: true,
+                inputPricePerM: 0,
+                outputPricePerM: 0,
+                cacheInputPricePerM: 0,
+                cacheOutputPricePerM: 0,
+                currency: "USD",
+                template: null,
+              },
+              modelCosts: {
+                ...(provider.modelCosts ?? {}),
+                [providerModel]: {
+                  enabled: true,
+                  inputPricePerM: providerModelInputPricePerM,
+                  outputPricePerM: providerModelOutputPricePerM,
+                  cacheInputPricePerM: 0,
+                  cacheOutputPricePerM: 0,
+                  currency: "USD",
+                  template: null,
+                },
+                [providerExtraModel]: {
+                  enabled: true,
+                  inputPricePerM: providerExtraModelInputPricePerM,
+                  outputPricePerM: providerExtraModelOutputPricePerM,
+                  cacheInputPricePerM: 0,
+                  cacheOutputPricePerM: 0,
+                  currency: "USD",
+                  template: null,
+                },
+              },
+            }
+          : provider
+      )
+      await requestJson("PUT", `${baseUrl}/api/config`, {
+        nextConfig: {
+          ...currentConfig,
+          providers: nextProviders,
+        },
+      })
+      await page.reload({ waitUntil: "domcontentloaded" })
+      await page.locator('xpath=//h2[normalize-space()="Providers"]').waitFor({ timeout: 15000 })
+      await page.locator(providerNameSelector).waitFor({ timeout: 15000 })
     }
 
     lastStep = "service-routing"
@@ -495,7 +646,7 @@ async function run() {
     await page.locator(selectors.groupInfoTitle).waitFor({ timeout: 15000 })
     await page.locator(selectors.routingTableTitle).waitFor({ timeout: 15000 })
 
-    const persistedRows = await readRoutingRows()
+    const persistedRows = await readRoutingRows(page)
     const defaultRow = persistedRows.find(row => row.requestModel === "default")
     const customRow = persistedRows.find(row => row.requestModel === "sonnet")
     if (!defaultRow) {
@@ -541,12 +692,52 @@ async function run() {
     if (!savedProvider?.id) {
       throw new Error("saved config missing e2e provider")
     }
+    if (!savedProvider?.cost?.enabled) {
+      throw new Error("saved provider should enable billing")
+    }
+    if (
+      savedProvider?.modelCosts?.[providerModel]?.inputPricePerM !== providerModelInputPricePerM ||
+      savedProvider?.modelCosts?.[providerModel]?.outputPricePerM !== providerModelOutputPricePerM
+    ) {
+      throw new Error(`saved provider missing billing for ${providerModel}`)
+    }
+    if (
+      savedProvider?.modelCosts?.[providerExtraModel]?.inputPricePerM !==
+        providerExtraModelInputPricePerM ||
+      savedProvider?.modelCosts?.[providerExtraModel]?.outputPricePerM !==
+        providerExtraModelOutputPricePerM
+    ) {
+      throw new Error(`saved provider missing billing for ${providerExtraModel}`)
+    }
 
     lastStep = "verify-entry-url"
     await page
       .locator(`xpath=//code[contains(., "${remoteEntryUrl}")]`)
       .first()
       .waitFor({ timeout: 15000 })
+
+    lastStep = "seed-log-stats"
+    await requestJson("DELETE", `${baseUrl}/api/logs/stats`)
+    const defaultProxyResponse = await requestJson("POST", `${baseUrl}/oc/${groupId}/v1/messages`, {
+      model: "default",
+      max_tokens: 16,
+      messages: [{ role: "user", content: "hello default route" }],
+    })
+    if (defaultProxyResponse?.model !== providerModel) {
+      throw new Error(
+        `default proxy request should forward to ${providerModel} (got: ${defaultProxyResponse?.model || "<empty>"})`
+      )
+    }
+    const customProxyResponse = await requestJson("POST", `${baseUrl}/oc/${groupId}/v1/messages`, {
+      model: "sonnet",
+      max_tokens: 16,
+      messages: [{ role: "user", content: "hello custom route" }],
+    })
+    if (customProxyResponse?.model !== providerExtraModel) {
+      throw new Error(
+        `custom proxy request should forward to ${providerExtraModel} (got: ${customProxyResponse?.model || "<empty>"})`
+      )
+    }
 
     lastStep = "service-batch-test"
     const providerTestResult = await requestJson("POST", `${baseUrl}/api/provider/test-model`, {
@@ -641,6 +832,80 @@ async function run() {
     const providerPageTextAfter = await page.locator("body").innerText()
     if (!/\b\d+(?:\.\d+)?\s(?:ms|s|min)\b/.test(providerPageTextAfter)) {
       throw new Error("provider catalog card missing latency after batch test")
+    }
+
+    lastStep = "logs-stats-model-filter"
+    await safeClick(page, selectors.logsNav)
+    await page.locator(selectors.logsTitle).waitFor({ timeout: 15000 })
+    await waitForMetricValue(page, "Total Requests", 2)
+    await waitForMetricValue(page, "Total Cost", totalCostBeforeFilterText)
+
+    const totalRequestsBeforeFilter = await readMetricValue(page, "Total Requests")
+    if (totalRequestsBeforeFilter !== "2") {
+      throw new Error(
+        `expected 2 total requests before stats filtering, got ${totalRequestsBeforeFilter}`
+      )
+    }
+    const totalCostBeforeFilter = await readMetricValue(page, "Total Cost")
+    if (totalCostBeforeFilter !== totalCostBeforeFilterText) {
+      throw new Error(
+        `expected ${totalCostBeforeFilterText} total cost before stats filtering, got ${totalCostBeforeFilter}`
+      )
+    }
+
+    await selectByAnchorOption(page, "All Providers", providerName)
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("select")].some(element =>
+        [...element.options].some(option => option.textContent?.trim() === "All Models")
+      )
+    )
+
+    const modelOptions = await listSelectOptionsByAnchorOption(page, "All Models")
+    const expectedModelOptions = ["All Models", providerModel, providerExtraModel].sort()
+    const actualModelOptions = [...(modelOptions || [])].sort()
+    if (!modelOptions || actualModelOptions.join("|") !== expectedModelOptions.join("|")) {
+      throw new Error(`unexpected stats model options: ${JSON.stringify(modelOptions)}`)
+    }
+
+    const filteredSummaryPromise = page.waitForResponse(response => {
+      if (response.status() !== 200) return false
+      try {
+        const url = new URL(response.url())
+        return (
+          url.pathname === "/api/logs/stats/summary" &&
+          url.searchParams.get("model") === providerExtraModel
+        )
+      } catch {
+        return false
+      }
+    })
+    await selectByAnchorOption(page, "All Models", providerExtraModel)
+    const filteredSummaryResponse = await filteredSummaryPromise
+    const filteredSummary = await filteredSummaryResponse.json()
+    if (filteredSummary?.requests !== 1) {
+      throw new Error(
+        `stats summary should return exactly 1 request for ${providerExtraModel} (got: ${filteredSummary?.requests})`
+      )
+    }
+    if (Math.abs((filteredSummary?.totalCost ?? 0) - 0.132) > 0.000001) {
+      throw new Error(
+        `stats summary should return total cost 0.132 for ${providerExtraModel} (got: ${filteredSummary?.totalCost})`
+      )
+    }
+    await waitForMetricValue(page, "Total Requests", 1)
+    await waitForMetricValue(page, "Total Cost", totalCostAfterFilterText)
+
+    const totalRequestsAfterFilter = await readMetricValue(page, "Total Requests")
+    if (totalRequestsAfterFilter !== "1") {
+      throw new Error(
+        `expected 1 total request after stats filtering, got ${totalRequestsAfterFilter}`
+      )
+    }
+    const totalCostAfterFilter = await readMetricValue(page, "Total Cost")
+    if (totalCostAfterFilter !== totalCostAfterFilterText) {
+      throw new Error(
+        `expected ${totalCostAfterFilterText} total cost after stats filtering, got ${totalCostAfterFilter}`
+      )
     }
 
     lastStep = "agents-edit"

@@ -4,8 +4,8 @@
 
 use crate::app_state::SharedState;
 use crate::models::{
-    default_rule_cost_config, Rule, RuleProtocol, RuleQuotaConfig, RuleQuotaSnapshot,
-    RuleQuotaTestResult,
+    default_model_costs, default_rule_cost_config, Rule, RuleProtocol, RuleQuotaConfig,
+    RuleQuotaSnapshot, RuleQuotaTestResult,
 };
 use crate::quota;
 use crate::services::{AppError, AppResult};
@@ -65,6 +65,7 @@ pub async fn test_draft(
         header_passthrough_deny: Vec::new(),
         quota,
         cost: default_rule_cost_config(),
+        model_costs: default_model_costs(),
     };
 
     Ok(quota::test_rule_quota_draft(group, &draft_rule).await)

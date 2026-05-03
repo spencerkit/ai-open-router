@@ -126,8 +126,8 @@ mod tests {
     use super::validate_config;
     use crate::config::schema::default_config;
     use crate::domain::entities::{
-        default_rule_cost_config, default_rule_quota_config, Group, Rule, RuleCostConfig,
-        RuleProtocol,
+        default_model_costs, default_rule_cost_config, default_rule_quota_config, Group, Rule,
+        RuleCostConfig, RuleProtocol,
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -238,6 +238,112 @@ mod tests {
     }
 
     #[test]
+    fn rule_model_costs_deserialize_when_present() {
+        let raw = json!({
+            "id": "provider-1",
+            "name": "OpenAI",
+            "protocol": "openai",
+            "token": "sk-test",
+            "apiAddress": "https://api.openai.com",
+            "models": ["gpt-5.5", "gpt-5.4"],
+            "quota": {
+                "enabled": false,
+                "provider": "custom",
+                "endpoint": "",
+                "method": "GET",
+                "useRuleToken": true,
+                "customToken": "",
+                "authHeader": "Authorization",
+                "authScheme": "Bearer",
+                "customHeaders": {},
+                "unitType": "percentage",
+                "lowThresholdPercent": 10,
+                "response": {}
+            },
+            "cost": {
+                "enabled": false,
+                "inputPricePerM": 0.0,
+                "outputPricePerM": 0.0,
+                "cacheInputPricePerM": 0.0,
+                "cacheOutputPricePerM": 0.0,
+                "currency": "USD"
+            },
+            "modelCosts": {
+                "gpt-5.5": {
+                    "enabled": true,
+                    "inputPricePerM": 5.0,
+                    "outputPricePerM": 30.0,
+                    "cacheInputPricePerM": 0.5,
+                    "cacheOutputPricePerM": 0.0,
+                    "currency": "USD",
+                    "template": {
+                        "vendorId": "openai",
+                        "vendorLabel": "OpenAI",
+                        "modelId": "gpt-5.5",
+                        "modelLabel": "GPT-5.5",
+                        "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.5",
+                        "verifiedAt": "2026-05-01",
+                        "appliedAt": "2026-05-02T00:00:00.000Z",
+                        "modifiedAfterApply": false
+                    }
+                }
+            }
+        });
+
+        let rule: Rule = serde_json::from_value(raw).expect("rule should deserialize");
+        let cost = rule
+            .model_costs
+            .get("gpt-5.5")
+            .expect("model cost should exist");
+        assert!(cost.enabled);
+        assert_eq!(cost.input_price_per_m, 5.0);
+        assert_eq!(
+            cost.template
+                .as_ref()
+                .expect("template should exist")
+                .model_id,
+            "gpt-5.5"
+        );
+    }
+
+    #[test]
+    fn rule_model_costs_defaults_to_empty_when_missing() {
+        let raw = json!({
+            "id": "provider-1",
+            "name": "OpenAI",
+            "protocol": "openai",
+            "token": "sk-test",
+            "apiAddress": "https://api.openai.com",
+            "models": ["gpt-5.5", "gpt-5.4"],
+            "quota": {
+                "enabled": false,
+                "provider": "custom",
+                "endpoint": "",
+                "method": "GET",
+                "useRuleToken": true,
+                "customToken": "",
+                "authHeader": "Authorization",
+                "authScheme": "Bearer",
+                "customHeaders": {},
+                "unitType": "percentage",
+                "lowThresholdPercent": 10,
+                "response": {}
+            },
+            "cost": {
+                "enabled": false,
+                "inputPricePerM": 0.0,
+                "outputPricePerM": 0.0,
+                "cacheInputPricePerM": 0.0,
+                "cacheOutputPricePerM": 0.0,
+                "currency": "USD"
+            }
+        });
+
+        let rule: Rule = serde_json::from_value(raw).expect("rule should deserialize");
+        assert!(rule.model_costs.is_empty());
+    }
+
+    #[test]
     /// Performs default config validates.
     fn default_config_validates() {
         let cfg = default_config();
@@ -281,6 +387,7 @@ mod tests {
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
+                model_costs: default_model_costs(),
             }]),
             failover: Some(crate::models::default_group_failover_config()),
         }];

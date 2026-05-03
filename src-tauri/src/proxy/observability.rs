@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 
 use crate::models::{
-    default_metrics, CostSnapshot, LogEntry, LogEntryError, ProxyMetrics, Rule, RuleProtocol,
-    TokenUsage,
+    default_metrics, CostSnapshot, LogEntry, LogEntryError, ProxyMetrics, Rule, RuleCostConfig,
+    RuleProtocol, TokenUsage,
 };
 
 pub(super) struct MetricsState {
@@ -726,9 +726,10 @@ pub(super) fn finalize_log_with_stream_debug(
     };
     let debug_response_body_for_dev = debug_response_body.or_else(|| response_body.clone());
 
-    let cost_snapshot = token_usage
-        .as_ref()
-        .map(|usage| build_cost_snapshot(rule, usage));
+    let cost_snapshot = match (token_usage.as_ref(), forwarded_model) {
+        (Some(usage), Some(target_model)) => build_cost_snapshot(rule, target_model, usage),
+        _ => None,
+    };
     let transform_debug = build_transform_debug(
         request_body.as_ref(),
         forward_request_body.as_ref(),
@@ -1021,19 +1022,23 @@ fn detect_stream_stop_reason(payload: &str) -> Option<&'static str> {
     None
 }
 
+fn resolve_model_cost_config<'a>(rule: &'a Rule, target_model: &str) -> Option<&'a RuleCostConfig> {
+    let normalized_model = target_model.trim();
+    if normalized_model.is_empty() {
+        return None;
+    }
+    rule.model_costs.get(normalized_model)
+}
+
 /// Builds cost snapshot.
-fn build_cost_snapshot(rule: &Rule, usage: &TokenUsage) -> CostSnapshot {
-    let cost = &rule.cost;
+fn build_cost_snapshot(
+    rule: &Rule,
+    target_model: &str,
+    usage: &TokenUsage,
+) -> Option<CostSnapshot> {
+    let cost = resolve_model_cost_config(rule, target_model)?;
     if !cost.enabled {
-        return CostSnapshot {
-            enabled: false,
-            currency: cost.currency.clone(),
-            input_price_per_m: cost.input_price_per_m,
-            output_price_per_m: cost.output_price_per_m,
-            cache_input_price_per_m: cost.cache_input_price_per_m,
-            cache_output_price_per_m: cost.cache_output_price_per_m,
-            total_cost: 0.0,
-        };
+        return None;
     }
 
     let input_cost = (usage.input_tokens as f64 / 1_000_000.0) * cost.input_price_per_m;
@@ -1043,7 +1048,7 @@ fn build_cost_snapshot(rule: &Rule, usage: &TokenUsage) -> CostSnapshot {
     let cache_output_cost =
         (usage.cache_write_tokens as f64 / 1_000_000.0) * cost.cache_output_price_per_m;
 
-    CostSnapshot {
+    Some(CostSnapshot {
         enabled: true,
         currency: cost.currency.clone(),
         input_price_per_m: cost.input_price_per_m,
@@ -1051,7 +1056,7 @@ fn build_cost_snapshot(rule: &Rule, usage: &TokenUsage) -> CostSnapshot {
         cache_input_price_per_m: cost.cache_input_price_per_m,
         cache_output_price_per_m: cost.cache_output_price_per_m,
         total_cost: input_cost + output_cost + cache_input_cost + cache_output_cost,
-    }
+    })
 }
 
 /// Performs should capture body.
@@ -1096,13 +1101,85 @@ pub(super) fn proxy_error_response(
 mod tests {
     use super::build_cost_snapshot;
     use crate::domain::entities::{
-        default_rule_quota_config, BillingTemplateAttribution, Rule, RuleCostConfig, RuleProtocol,
-        TokenUsage,
+        default_rule_cost_config, default_rule_quota_config, BillingTemplateAttribution, Rule,
+        RuleCostConfig, RuleProtocol, TokenUsage,
     };
     use std::collections::HashMap;
 
     #[test]
+    fn build_cost_snapshot_uses_routed_target_model_cost() {
+        let mut model_costs = HashMap::new();
+        model_costs.insert(
+            "gpt-5.5".to_string(),
+            RuleCostConfig {
+                enabled: true,
+                input_price_per_m: 5.0,
+                output_price_per_m: 30.0,
+                cache_input_price_per_m: 0.5,
+                cache_output_price_per_m: 0.0,
+                currency: "USD".to_string(),
+                template: None,
+            },
+        );
+        model_costs.insert(
+            "gpt-5.4".to_string(),
+            RuleCostConfig {
+                enabled: true,
+                input_price_per_m: 2.5,
+                output_price_per_m: 15.0,
+                cache_input_price_per_m: 0.25,
+                cache_output_price_per_m: 0.0,
+                currency: "USD".to_string(),
+                template: None,
+            },
+        );
+
+        let rule = Rule {
+            id: "provider-1".to_string(),
+            name: "OpenAI".to_string(),
+            protocol: RuleProtocol::Openai,
+            token: "secret".to_string(),
+            api_address: "https://api.example.com".to_string(),
+            website: String::new(),
+            models: vec!["gpt-5.5".to_string(), "gpt-5.4".to_string()],
+            default_model: Some("gpt-5.5".to_string()),
+            model_mappings: Some(HashMap::new()),
+            header_passthrough_allow: Vec::new(),
+            header_passthrough_deny: Vec::new(),
+            quota: default_rule_quota_config(),
+            cost: default_rule_cost_config(),
+            model_costs,
+        };
+
+        let usage = TokenUsage {
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+        };
+
+        let snapshot = build_cost_snapshot(&rule, "gpt-5.4", &usage).expect("snapshot");
+        assert_eq!(snapshot.input_price_per_m, 2.5);
+        assert_eq!(snapshot.output_price_per_m, 15.0);
+        assert_eq!(snapshot.total_cost, 17.5);
+    }
+
+    #[test]
     fn billing_template_metadata_does_not_change_cost_snapshot() {
+        let mut model_costs = HashMap::new();
+        model_costs.insert(
+            "claude-sonnet-4.5".to_string(),
+            RuleCostConfig {
+                enabled: true,
+                input_price_per_m: 3.0,
+                output_price_per_m: 15.0,
+                cache_input_price_per_m: 0.3,
+                cache_output_price_per_m: 3.75,
+                currency: "USD".to_string(),
+                template: None,
+            },
+        );
+
         let base_rule = Rule {
             id: "provider-1".to_string(),
             name: "Anthropic".to_string(),
@@ -1116,32 +1193,32 @@ mod tests {
             header_passthrough_allow: Vec::new(),
             header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
-            cost: RuleCostConfig {
-                enabled: true,
-                input_price_per_m: 3.0,
-                output_price_per_m: 15.0,
-                cache_input_price_per_m: 0.3,
-                cache_output_price_per_m: 3.75,
-                currency: "USD".to_string(),
-                template: None,
-            },
+            cost: default_rule_cost_config(),
+            model_costs,
         };
 
         let rule_with_template = Rule {
-            cost: RuleCostConfig {
-                template: Some(BillingTemplateAttribution {
-                    vendor_id: "anthropic".to_string(),
-                    vendor_label: "Anthropic".to_string(),
-                    model_id: "claude-sonnet-4-5".to_string(),
-                    model_label: "Claude Sonnet 4.5".to_string(),
-                    source_url: "https://platform.claude.com/docs/zh-CN/about-claude/pricing"
-                        .to_string(),
-                    verified_at: "2026-03-29".to_string(),
-                    applied_at: "2026-03-29T00:00:00.000Z".to_string(),
-                    modified_after_apply: true,
-                }),
-                ..base_rule.cost.clone()
-            },
+            model_costs: HashMap::from([(
+                "claude-sonnet-4.5".to_string(),
+                RuleCostConfig {
+                    template: Some(BillingTemplateAttribution {
+                        vendor_id: "anthropic".to_string(),
+                        vendor_label: "Anthropic".to_string(),
+                        model_id: "claude-sonnet-4-5".to_string(),
+                        model_label: "Claude Sonnet 4.5".to_string(),
+                        source_url: "https://platform.claude.com/docs/zh-CN/about-claude/pricing"
+                            .to_string(),
+                        verified_at: "2026-03-29".to_string(),
+                        applied_at: "2026-03-29T00:00:00.000Z".to_string(),
+                        modified_after_apply: true,
+                    }),
+                    ..base_rule
+                        .model_costs
+                        .get("claude-sonnet-4.5")
+                        .expect("base model cost should exist")
+                        .clone()
+                },
+            )]),
             ..base_rule.clone()
         };
 
@@ -1152,8 +1229,11 @@ mod tests {
             cache_write_tokens: 1_000_000,
         };
 
-        let snapshot_without_template = build_cost_snapshot(&base_rule, &usage);
-        let snapshot_with_template = build_cost_snapshot(&rule_with_template, &usage);
+        let snapshot_without_template =
+            build_cost_snapshot(&base_rule, "claude-sonnet-4.5", &usage).expect("snapshot");
+        let snapshot_with_template =
+            build_cost_snapshot(&rule_with_template, "claude-sonnet-4.5", &usage)
+                .expect("snapshot");
 
         assert_eq!(
             snapshot_with_template.enabled,

@@ -6,6 +6,7 @@ use crate::config::migrator::migrate_config;
 use crate::config::schema::normalize_config;
 use crate::models::{
     default_config, default_group_failover_config, validate_config, Group, ProxyConfig, Rule,
+    RuleCostConfig,
 };
 use chrono::Utc;
 use rusqlite::{params, Connection};
@@ -271,6 +272,7 @@ fn normalize_groups_and_providers(
     let mut provider_map: HashMap<String, Rule> = HashMap::new();
     let mut provider_order: Vec<String> = Vec::new();
     for provider in providers {
+        let provider = normalize_provider_for_storage(provider);
         let provider_id = provider.id.trim().to_string();
         if provider_id.is_empty() {
             continue;
@@ -310,6 +312,7 @@ fn normalize_groups_and_providers(
         let mut group_provider_id_remap: HashMap<String, String> = HashMap::new();
         if let Some(providers) = &group.providers {
             for provider in providers {
+                let provider = normalize_provider_for_storage(provider.clone());
                 let provider_id = provider.id.trim().to_string();
                 if provider_id.is_empty() {
                     continue;
@@ -320,7 +323,7 @@ fn normalize_groups_and_providers(
                 if let Some(existing_provider) = provider_map.get(&provider_id) {
                     let existing_json =
                         serde_json::to_string(existing_provider).unwrap_or_default();
-                    let incoming_json = serde_json::to_string(provider).unwrap_or_default();
+                    let incoming_json = serde_json::to_string(&provider).unwrap_or_default();
                     if existing_json != incoming_json {
                         let next_provider_id =
                             alloc_unique_provider_id(&provider_id, &provider_map);
@@ -393,6 +396,46 @@ fn normalize_groups_and_providers(
         .collect();
 
     (normalized_groups, normalized_providers)
+}
+
+fn normalize_provider_for_storage(mut provider: Rule) -> Rule {
+    let valid_models: HashSet<String> = provider
+        .models
+        .iter()
+        .map(|model| model.trim().to_string())
+        .filter(|model| !model.is_empty())
+        .collect();
+    let mut normalized_model_costs = HashMap::new();
+    for (model, cost) in std::mem::take(&mut provider.model_costs) {
+        let trimmed_model = model.trim();
+        if trimmed_model.is_empty() || !valid_models.contains(trimmed_model) {
+            continue;
+        }
+        normalized_model_costs
+            .entry(trimmed_model.to_string())
+            .or_insert(cost);
+    }
+    if normalized_model_costs.is_empty() && is_meaningfully_configured_legacy_cost(&provider.cost) {
+        for model in &provider.models {
+            let trimmed_model = model.trim();
+            if trimmed_model.is_empty() {
+                continue;
+            }
+            normalized_model_costs.insert(trimmed_model.to_string(), provider.cost.clone());
+        }
+    }
+    provider.model_costs = normalized_model_costs;
+    provider
+}
+
+fn is_meaningfully_configured_legacy_cost(cost: &RuleCostConfig) -> bool {
+    cost.enabled
+        || cost.input_price_per_m != 0.0
+        || cost.output_price_per_m != 0.0
+        || cost.cache_input_price_per_m != 0.0
+        || cost.cache_output_price_per_m != 0.0
+        || cost.currency != "USD"
+        || cost.template.is_some()
 }
 
 /// Allocates a non-conflicting provider id for a conflicting provider payload.
@@ -742,7 +785,8 @@ fn select_records_with_soft_delete_filter(
 mod tests {
     use super::*;
     use crate::domain::entities::{
-        default_rule_cost_config, default_rule_quota_config, RouteEntry, Rule, RuleProtocol,
+        default_model_costs, default_rule_cost_config, default_rule_quota_config, RouteEntry, Rule,
+        RuleProtocol,
     };
     use std::collections::HashMap;
     use uuid::Uuid;
@@ -774,6 +818,7 @@ mod tests {
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
+                model_costs: default_model_costs(),
             }]),
             failover: Some(default_group_failover_config()),
         }
@@ -794,6 +839,7 @@ mod tests {
             header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
             cost: default_rule_cost_config(),
+            model_costs: default_model_costs(),
         }
     }
 
@@ -1279,6 +1325,7 @@ mod tests {
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
+                model_costs: default_model_costs(),
             },
             sample_provider("p-with-models"),
         ];
@@ -1286,5 +1333,69 @@ mod tests {
         let normalized = normalize_config_for_storage(cfg).expect("normalize config");
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].id, "p-with-models");
+    }
+
+    #[test]
+    fn normalize_config_for_storage_prunes_model_costs_not_declared_in_provider_models() {
+        let mut provider = sample_provider("p-with-stale-model-cost");
+        provider.models = vec!["gpt-4o-mini".to_string()];
+        provider.model_costs = HashMap::from([
+            ("gpt-4o-mini".to_string(), default_rule_cost_config()),
+            ("stale-model".to_string(), default_rule_cost_config()),
+        ]);
+
+        let mut cfg = default_config();
+        cfg.providers = vec![provider];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].model_costs.len(), 1);
+        assert!(normalized.providers[0]
+            .model_costs
+            .contains_key("gpt-4o-mini"));
+        assert!(!normalized.providers[0]
+            .model_costs
+            .contains_key("stale-model"));
+    }
+
+    #[test]
+    fn normalize_config_for_storage_canonicalizes_trimmed_model_cost_keys() {
+        let mut provider = sample_provider("p-with-whitespace-model-cost");
+        provider.models = vec!["gpt-4o-mini".to_string()];
+        provider.model_costs = HashMap::from([
+            (" gpt-4o-mini ".to_string(), default_rule_cost_config()),
+            (" stale-model ".to_string(), default_rule_cost_config()),
+        ]);
+
+        let mut cfg = default_config();
+        cfg.providers = vec![provider];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert_eq!(normalized.providers[0].model_costs.len(), 1);
+        assert!(normalized.providers[0]
+            .model_costs
+            .contains_key("gpt-4o-mini"));
+        assert!(!normalized.providers[0]
+            .model_costs
+            .contains_key(" gpt-4o-mini "));
+        assert!(!normalized.providers[0]
+            .model_costs
+            .contains_key(" stale-model "));
+    }
+
+    #[test]
+    fn normalize_config_for_storage_does_not_backfill_default_empty_legacy_cost() {
+        let mut provider = sample_provider("p-default-empty-cost");
+        provider.models = vec!["gpt-4o-mini".to_string()];
+        provider.cost = default_rule_cost_config();
+        provider.model_costs = HashMap::new();
+
+        let mut cfg = default_config();
+        cfg.providers = vec![provider];
+
+        let normalized = normalize_config_for_storage(cfg).expect("normalize config");
+        assert_eq!(normalized.providers.len(), 1);
+        assert!(normalized.providers[0].model_costs.is_empty());
     }
 }

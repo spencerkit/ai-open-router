@@ -93,7 +93,8 @@ mod tests {
         extract_groups_and_providers_from_import_payload, extract_groups_from_import_payload,
     };
     use crate::models::{
-        default_rule_cost_config, default_rule_quota_config, Group, Rule, RuleProtocol,
+        default_model_costs, default_rule_cost_config, default_rule_quota_config, Group, Rule,
+        RuleProtocol,
     };
     use chrono::DateTime;
     use serde_json::json;
@@ -122,6 +123,7 @@ mod tests {
                 header_passthrough_deny: Vec::new(),
                 quota: default_rule_quota_config(),
                 cost: default_rule_cost_config(),
+                model_costs: default_model_costs(),
             }]),
             failover: Some(crate::models::default_group_failover_config()),
         }
@@ -142,6 +144,7 @@ mod tests {
             header_passthrough_deny: Vec::new(),
             quota: default_rule_quota_config(),
             cost: default_rule_cost_config(),
+            model_costs: default_model_costs(),
         }
     }
 

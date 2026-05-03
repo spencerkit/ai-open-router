@@ -511,6 +511,7 @@ mod tests {
             header_passthrough_deny: Vec::new(),
             quota,
             cost: default_rule_cost_config(),
+            model_costs: HashMap::new(),
         }
     }
 

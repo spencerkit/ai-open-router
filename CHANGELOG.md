@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.5 - 2026-05-03
+### Features
+- feat(billing): add model-scoped billing editor (c64ff69)
+- feat(billing): resolve request cost by target model (2d8af64)
+- feat(billing): migrate legacy provider cost to model costs (20de303)
+- feat(billing): add provider model cost schema (fb1957c)
+- feat(logs): add real stats model filtering (fd3045c)
+### Fixes
+- fix: format rust files for ci (107ccff)
+- fix(billing): avoid empty legacy cost churn (7e20c0d)
+- fix(billing): canonicalize and backfill model costs (a165df6)
+- fix(billing): avoid backfilling existing model costs (38b6ce8)
+- fix(billing): omit empty model cost schema fields (fa30d49)
+- fix(auth): unblock remote management headless e2e (777d7df)
+- fix(models): correct codex preset template (7e867bd)
+- fix: restore ci checks (a0a1b7e)
+- fix: tighten web auth flow and logs filters (097eb87)
+### Maintenance
+- test(billing): cover model-scoped provider costs (e502438)
+- docs: add model billing template design (7391315)
+- chore(models): align codex templates and pricing (3673662)
+- chore(models): refresh curated presets (9c08def)
+
 ## v0.3.4 - 2026-04-14
 ### Fixes
 - fix(backup): include global providers in backup/export payload (2188a18)
