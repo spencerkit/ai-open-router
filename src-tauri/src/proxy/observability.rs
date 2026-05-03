@@ -1031,7 +1031,11 @@ fn resolve_model_cost_config<'a>(rule: &'a Rule, target_model: &str) -> Option<&
 }
 
 /// Builds cost snapshot.
-fn build_cost_snapshot(rule: &Rule, target_model: &str, usage: &TokenUsage) -> Option<CostSnapshot> {
+fn build_cost_snapshot(
+    rule: &Rule,
+    target_model: &str,
+    usage: &TokenUsage,
+) -> Option<CostSnapshot> {
     let cost = resolve_model_cost_config(rule, target_model)?;
     if !cost.enabled {
         return None;

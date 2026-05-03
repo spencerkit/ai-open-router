@@ -450,7 +450,9 @@ mod tests {
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].model_costs.len(), 2);
         assert!(normalized.providers[0].model_costs.contains_key("gpt-4.1"));
-        assert!(normalized.providers[0].model_costs.contains_key("gpt-4o-mini"));
+        assert!(normalized.providers[0]
+            .model_costs
+            .contains_key("gpt-4o-mini"));
         assert!(normalized.providers[0].model_costs["gpt-4.1"].enabled);
     }
 
@@ -523,7 +525,9 @@ mod tests {
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].model_costs.len(), 1);
         assert!(normalized.providers[0].model_costs.contains_key("gpt-4.1"));
-        assert!(!normalized.providers[0].model_costs.contains_key(" gpt-4.1 "));
+        assert!(!normalized.providers[0]
+            .model_costs
+            .contains_key(" gpt-4.1 "));
         assert!(!normalized.providers[0].model_costs.contains_key(" stale "));
     }
 

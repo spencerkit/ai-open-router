@@ -298,7 +298,10 @@ mod tests {
         assert!(cost.enabled);
         assert_eq!(cost.input_price_per_m, 5.0);
         assert_eq!(
-            cost.template.as_ref().expect("template should exist").model_id,
+            cost.template
+                .as_ref()
+                .expect("template should exist")
+                .model_id,
             "gpt-5.5"
         );
     }

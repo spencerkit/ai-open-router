@@ -253,7 +253,10 @@ pub struct Rule {
     pub quota: RuleQuotaConfig,
     #[serde(default = "default_rule_cost_config")]
     pub cost: RuleCostConfig,
-    #[serde(default = "default_model_costs", skip_serializing_if = "HashMap::is_empty")]
+    #[serde(
+        default = "default_model_costs",
+        skip_serializing_if = "HashMap::is_empty"
+    )]
     pub model_costs: HashMap<String, RuleCostConfig>,
 }
 

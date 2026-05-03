@@ -247,7 +247,10 @@ impl StatsStore {
                 let previous_duration_seconds =
                     duration_seconds_metric(previous.total_duration_ms, previous.requests);
                 ComparisonSummary {
-                    requests_delta_pct: pct_delta(current.requests as f64, previous.requests as f64),
+                    requests_delta_pct: pct_delta(
+                        current.requests as f64,
+                        previous.requests as f64,
+                    ),
                     errors_delta_pct: pct_delta(current.errors as f64, previous.errors as f64),
                     total_cost_delta_pct: pct_delta(current.total_cost, previous.total_cost),
                     input_tps_delta_pct: pct_delta(
@@ -364,8 +367,8 @@ impl StatsStore {
         };
 
         let mut currencies_by_rule: BTreeMap<String, HashSet<String>> = BTreeMap::new();
-        if let Ok(rows) =
-            currencies_stmt.query_map(params![start_ms, end_ms, normalized_group_id], |row| {
+        if let Ok(rows) = currencies_stmt
+            .query_map(params![start_ms, end_ms, normalized_group_id], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })
         {

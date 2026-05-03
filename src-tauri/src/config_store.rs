@@ -785,8 +785,8 @@ fn select_records_with_soft_delete_filter(
 mod tests {
     use super::*;
     use crate::domain::entities::{
-        default_model_costs, default_rule_cost_config, default_rule_quota_config, RouteEntry,
-        Rule, RuleProtocol,
+        default_model_costs, default_rule_cost_config, default_rule_quota_config, RouteEntry, Rule,
+        RuleProtocol,
     };
     use std::collections::HashMap;
     use uuid::Uuid;
@@ -1350,8 +1350,12 @@ mod tests {
         let normalized = normalize_config_for_storage(cfg).expect("normalize config");
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].model_costs.len(), 1);
-        assert!(normalized.providers[0].model_costs.contains_key("gpt-4o-mini"));
-        assert!(!normalized.providers[0].model_costs.contains_key("stale-model"));
+        assert!(normalized.providers[0]
+            .model_costs
+            .contains_key("gpt-4o-mini"));
+        assert!(!normalized.providers[0]
+            .model_costs
+            .contains_key("stale-model"));
     }
 
     #[test]
@@ -1369,9 +1373,15 @@ mod tests {
         let normalized = normalize_config_for_storage(cfg).expect("normalize config");
         assert_eq!(normalized.providers.len(), 1);
         assert_eq!(normalized.providers[0].model_costs.len(), 1);
-        assert!(normalized.providers[0].model_costs.contains_key("gpt-4o-mini"));
-        assert!(!normalized.providers[0].model_costs.contains_key(" gpt-4o-mini "));
-        assert!(!normalized.providers[0].model_costs.contains_key(" stale-model "));
+        assert!(normalized.providers[0]
+            .model_costs
+            .contains_key("gpt-4o-mini"));
+        assert!(!normalized.providers[0]
+            .model_costs
+            .contains_key(" gpt-4o-mini "));
+        assert!(!normalized.providers[0]
+            .model_costs
+            .contains_key(" stale-model "));
     }
 
     #[test]

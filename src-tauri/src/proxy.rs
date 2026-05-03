@@ -291,9 +291,14 @@ impl ProxyRuntime {
         enable_comparison: Option<bool>,
         model: Option<String>,
     ) -> crate::models::StatsSummaryResult {
-        self.inner
-            .stats_store
-            .summarize(hours, rule_keys, rule_key, dimension, enable_comparison, model)
+        self.inner.stats_store.summarize(
+            hours,
+            rule_keys,
+            rule_key,
+            dimension,
+            enable_comparison,
+            model,
+        )
     }
 
     /// Query compact rule-card stats for one group.

@@ -5,8 +5,7 @@
 use crate::app_state::SharedState;
 use crate::models::{
     default_model_costs, default_rule_cost_config, Rule, RuleProtocol, RuleQuotaConfig,
-    RuleQuotaSnapshot,
-    RuleQuotaTestResult,
+    RuleQuotaSnapshot, RuleQuotaTestResult,
 };
 use crate::quota;
 use crate::services::{AppError, AppResult};

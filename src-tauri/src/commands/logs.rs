@@ -34,16 +34,14 @@ pub async fn logs_stats_summary(
     enable_comparison: Option<bool>,
     model: Option<String>,
 ) -> Result<StatsSummaryResult, String> {
-    Ok(state
-        .runtime
-        .stats_summary(
-            hours,
-            rule_keys,
-            rule_key,
-            dimension,
-            enable_comparison,
-            model,
-        ))
+    Ok(state.runtime.stats_summary(
+        hours,
+        rule_keys,
+        rule_key,
+        dimension,
+        enable_comparison,
+        model,
+    ))
 }
 
 #[tauri::command]
